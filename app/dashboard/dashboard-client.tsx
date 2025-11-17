@@ -125,32 +125,51 @@ export function DashboardClient() {
   
   return (
     <div className="space-y-8">
-      <div className="flex items-start justify-between">
+      {/* Banner de Suscripción */}
+      {currentPlan?.slug === 'free' && (
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-xl font-bold mb-2">🚀 Potencia tu Negocio</h3>
+              <p className="text-blue-100">
+                Estás en el Plan Gratuito. Actualiza para gestionar más clientes y préstamos.
+              </p>
+            </div>
+            <Link href="/dashboard/subscription">
+              <button className="bg-white text-blue-600 px-6 py-3 rounded-lg font-bold hover:bg-blue-50 transition-colors">
+                Ver Planes
+              </button>
+            </Link>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-gray-500 mt-1">
             Vista general de tu gestión de créditos
           </p>
         </div>
-        {currentPlan && (
-          <Link href="/dashboard/subscription">
-            <div className={`flex items-center gap-2 px-4 py-2 rounded-lg cursor-pointer transition-all hover:shadow-md ${
-              currentPlan.slug === 'free' 
-                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' 
-                : currentPlan.slug === 'pro'
-                ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                : currentPlan.slug === 'business'
-                ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
-                : 'bg-gradient-to-r from-yellow-400 to-orange-500 text-white hover:from-yellow-500 hover:to-orange-600'
-            }`}>
-              <Crown className="h-5 w-5" />
-              <div>
-                <p className="text-xs font-medium opacity-80">Plan Actual</p>
-                <p className="font-bold">{currentPlan.nombre}</p>
-              </div>
+        <Link href="/dashboard/subscription">
+          <div className={`flex items-center gap-3 px-5 py-3 rounded-lg cursor-pointer transition-all hover:shadow-lg border-2 ${
+            !currentPlan 
+              ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-300' 
+              : currentPlan.slug === 'free' 
+              ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-300' 
+              : currentPlan.slug === 'pro'
+              ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-300'
+              : currentPlan.slug === 'business'
+              ? 'bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-300'
+              : 'bg-gradient-to-r from-yellow-400 to-orange-500 text-white hover:from-yellow-500 hover:to-orange-600 border-yellow-500'
+          }`}>
+            <Crown className="h-6 w-6" />
+            <div>
+              <p className="text-xs font-medium opacity-80">Plan Actual</p>
+              <p className="font-bold text-lg">{currentPlan?.nombre || 'Cargando...'}</p>
             </div>
-          </Link>
-        )}
+          </div>
+        </Link>
       </div>
       
       {/* Indicador de uso del plan */}
