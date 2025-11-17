@@ -1,0 +1,321 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { useToast } from '@/components/ui/use-toast'
+import { 
+  Check, 
+  TrendingUp, 
+  Users, 
+  CreditCard, 
+  Zap,
+  Crown,
+  Rocket,
+  Star
+} from 'lucide-react'
+import { useSubscriptionStore } from '@/lib/subscription-store'
+import { loadPlans, loadUserSubscription, loadUsageLimits, getPlanBenefits } from '@/lib/subscription-helpers'
+import type { Plan } from '@/lib/subscription-store'
+
+export default function SubscriptionPage() {
+  const [loading, setLoading] = useState(true)
+  const [selectedPeriod, setSelectedPeriod] = useState<'monthly' | 'yearly'>('monthly')
+  const router = useRouter()
+  const { toast } = useToast()
+  const {
+    plans,
+    userSubscription,
+    usageLimits,
+    setPlans,
+    setUserSubscription,
+    setUsageLimits,
+    getCurrentPlan,
+  } = useSubscriptionStore()
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const loadData = async () => {
+    setLoading(true)
+    const [plansData, subscriptionData, limitsData] = await Promise.all([
+      loadPlans(),
+      loadUserSubscription(),
+      loadUsageLimits(),
+    ])
+
+    setPlans(plansData)
+    if (subscriptionData) setUserSubscription(subscriptionData)
+    if (limitsData) setUsageLimits(limitsData)
+    setLoading(false)
+  }
+
+  const currentPlan = getCurrentPlan()
+
+  const handleSelectPlan = async (plan: Plan) => {
+    if (plan.slug === 'free') {
+      toast({
+        title: 'Plan Gratuito',
+        description: 'Ya estás en el plan gratuito o puedes contactarnos para volver a él',
+      })
+      return
+    }
+
+    // Redirigir a PayPal o mostrar modal de pago
+    router.push(`/dashboard/subscription/checkout?plan=${plan.id}&period=${selectedPeriod}`)
+  }
+
+  const getPlanIcon = (slug: string) => {
+    const icons = {
+      free: Zap,
+      pro: TrendingUp,
+      business: Users,
+      enterprise: Crown,
+    }
+    const Icon = icons[slug as keyof typeof icons] || Star
+    return <Icon className="w-6 h-6" />
+  }
+
+  const getPlanColor = (slug: string) => {
+    const colors = {
+      free: 'from-gray-500 to-gray-700',
+      pro: 'from-blue-500 to-blue-700',
+      business: 'from-purple-500 to-purple-700',
+      enterprise: 'from-amber-500 to-amber-700',
+    }
+    return colors[slug as keyof typeof colors] || 'from-gray-500 to-gray-700'
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Planes y Precios</h1>
+          <p className="text-gray-500 mt-1">Cargando...</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-8 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="text-center space-y-4">
+        <h1 className="text-4xl font-bold text-gray-900">
+          Elige el Plan Perfecto para Tu Negocio
+        </h1>
+        <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+          Gestiona tus préstamos de forma profesional. Sin compromisos, cancela cuando quieras.
+        </p>
+        
+        {/* Plan Actual */}
+        {currentPlan && (
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-full">
+            <CreditCard className="w-4 h-4 text-blue-600" />
+            <span className="text-sm font-medium text-blue-900">
+              Plan Actual: <span className="font-bold">{currentPlan.nombre}</span>
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Toggle Period */}
+      <div className="flex items-center justify-center gap-4">
+        <button
+          onClick={() => setSelectedPeriod('monthly')}
+          className={`px-6 py-2 rounded-lg font-medium transition-all ${
+            selectedPeriod === 'monthly'
+              ? 'bg-blue-600 text-white shadow-lg'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          Mensual
+        </button>
+        <button
+          onClick={() => setSelectedPeriod('yearly')}
+          className={`px-6 py-2 rounded-lg font-medium transition-all relative ${
+            selectedPeriod === 'yearly'
+              ? 'bg-blue-600 text-white shadow-lg'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          Anual
+          <Badge className="absolute -top-2 -right-2 bg-green-500 text-white text-xs">
+            -20%
+          </Badge>
+        </button>
+      </div>
+
+      {/* Usage Stats */}
+      {usageLimits && currentPlan && (
+        <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+          <CardHeader>
+            <CardTitle className="text-lg">Tu Uso Actual</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white p-4 rounded-lg shadow-sm">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-gray-600">Clientes</span>
+                  <Users className="w-4 h-4 text-blue-600" />
+                </div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {usageLimits.clientes.current}
+                  {usageLimits.clientes.limit > 0 && (
+                    <span className="text-sm text-gray-500 font-normal"> / {usageLimits.clientes.limit}</span>
+                  )}
+                </div>
+                {usageLimits.clientes.limit > 0 && (
+                  <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-600 transition-all"
+                      style={{
+                        width: `${(usageLimits.clientes.current / usageLimits.clientes.limit) * 100}%`,
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white p-4 rounded-lg shadow-sm">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-gray-600">Préstamos Activos</span>
+                  <TrendingUp className="w-4 h-4 text-purple-600" />
+                </div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {usageLimits.prestamos.current}
+                  {usageLimits.prestamos.limit > 0 && (
+                    <span className="text-sm text-gray-500 font-normal"> / {usageLimits.prestamos.limit}</span>
+                  )}
+                </div>
+                {usageLimits.prestamos.limit > 0 && (
+                  <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-purple-600 transition-all"
+                      style={{
+                        width: `${(usageLimits.prestamos.current / usageLimits.prestamos.limit) * 100}%`,
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white p-4 rounded-lg shadow-sm">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-gray-600">Plan</span>
+                  <Rocket className="w-4 h-4 text-green-600" />
+                </div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {currentPlan.nombre}
+                </div>
+                <p className="text-sm text-gray-500 mt-1">
+                  {currentPlan.slug === 'free' ? 'Gratis para siempre' : 'Suscripción activa'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Plans Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {plans.map((plan) => {
+          const isCurrentPlan = currentPlan?.id === plan.id
+          const benefits = getPlanBenefits(plan.slug)
+          const precio = selectedPeriod === 'monthly' ? plan.precio_mensual : plan.precio_anual
+
+          return (
+            <Card
+              key={plan.id}
+              className={`relative overflow-hidden transition-all hover:shadow-xl ${
+                isCurrentPlan ? 'ring-2 ring-blue-500 shadow-lg' : ''
+              } ${plan.slug === 'pro' ? 'md:scale-105 z-10' : ''}`}
+            >
+              {plan.slug === 'pro' && (
+                <div className="absolute top-0 right-0">
+                  <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
+                    MÁS POPULAR
+                  </div>
+                </div>
+              )}
+
+              {isCurrentPlan && (
+                <div className="absolute top-0 left-0">
+                  <div className="bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-br-lg">
+                    ACTUAL
+                  </div>
+                </div>
+              )}
+
+              <CardHeader>
+                <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${getPlanColor(plan.slug)} flex items-center justify-center text-white mb-4`}>
+                  {getPlanIcon(plan.slug)}
+                </div>
+                <CardTitle className="text-2xl">{plan.nombre}</CardTitle>
+                <div className="flex items-baseline gap-1 mt-4">
+                  <span className="text-4xl font-bold">
+                    ${precio.toFixed(0)}
+                  </span>
+                  <span className="text-gray-500">
+                    /{selectedPeriod === 'monthly' ? 'mes' : 'año'}
+                  </span>
+                </div>
+                {selectedPeriod === 'yearly' && precio > 0 && (
+                  <p className="text-sm text-green-600 font-medium mt-1">
+                    Ahorras ${(plan.precio_mensual * 12 - plan.precio_anual).toFixed(0)} al año
+                  </p>
+                )}
+              </CardHeader>
+
+              <CardContent className="space-y-4">
+                <ul className="space-y-3">
+                  {benefits.map((benefit, index) => (
+                    <li key={index} className="flex items-start gap-2">
+                      <Check className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      <span className="text-sm text-gray-600">{benefit}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <Button
+                  className="w-full"
+                  variant={isCurrentPlan ? 'outline' : plan.slug === 'pro' ? 'default' : 'outline'}
+                  onClick={() => handleSelectPlan(plan)}
+                  disabled={isCurrentPlan}
+                >
+                  {isCurrentPlan
+                    ? 'Plan Actual'
+                    : plan.slug === 'free'
+                    ? 'Contactar'
+                    : 'Seleccionar Plan'}
+                </Button>
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+
+      {/* Garantía */}
+      <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-center gap-4">
+            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
+              <Check className="w-8 h-8 text-green-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                Garantía de 30 Días
+              </h3>
+              <p className="text-gray-600">
+                Si no estás satisfecho, te devolvemos tu dinero. Sin preguntas.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

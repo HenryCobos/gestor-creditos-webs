@@ -1,0 +1,29 @@
+# ⚡ COMANDOS RÁPIDOS PARA DEPLOY
+
+## Solo copia y pega estos comandos en orden:
+
+## PASO 1: Preparar el proyecto
+git init
+git add .
+git commit -m "Deploy inicial a produccion"
+
+## PASO 2: Subir a GitHub
+## ⚠️ REEMPLAZA "TU-USUARIO" con tu usuario de GitHub
+git remote add origin https://github.com/TU-USUARIO/gestor-creditos-webs.git
+git branch -M main
+git push -u origin main
+
+## PASO 3: Ahora ve a Vercel
+## Ve a: https://vercel.com/new
+## Importa tu repositorio de GitHub
+## Agrega estas variables de entorno:
+
+NEXT_PUBLIC_SUPABASE_URL = [tu_url_de_supabase]
+NEXT_PUBLIC_SUPABASE_ANON_KEY = [tu_anon_key]
+NEXT_PUBLIC_PAYPAL_CLIENT_ID = [tu_client_id_produccion]
+NEXT_PUBLIC_APP_URL = https://gestor-creditos-webs.vercel.app
+
+## Haz clic en Deploy y espera 2-3 minutos
+
+## ✅ LISTO! Tendrás tu URL de producción
+
