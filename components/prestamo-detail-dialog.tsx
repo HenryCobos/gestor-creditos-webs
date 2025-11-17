@@ -162,7 +162,7 @@ export function PrestamoDetailDialog({
     if (esPagoCompleto) {
       const { data: cuotasPrestamo } = await supabase
         .from('cuotas')
-        .select('estado')
+        .select('id, estado')
         .eq('prestamo_id', prestamo.id)
 
       const todasPagadas = cuotasPrestamo?.every(
