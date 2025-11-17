@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Gestor de Créditos Web - SaaS
 
 Sistema profesional de gestión de préstamos, clientes y cuotas con suscripción mensual.
@@ -202,3 +203,6 @@ Este proyecto es privado y propietario.
 ---
 
 Desarrollado con ❤️ para gestionar préstamos de forma profesional
+=======
+# gestor-creditos-webs
+>>>>>>> 6a297ed5e244ae82e92682080748948cb576b5dd
