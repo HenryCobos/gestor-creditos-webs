@@ -63,6 +63,9 @@ export async function loadUsageLimits(): Promise<UsageLimits | null> {
 
   if (!limitsData) return null
 
+  // Cast explícito del tipo de datos
+  const limits = limitsData as any
+
   // Contar clientes actuales
   const { count: clientesCount } = await supabase
     .from('clientes')
@@ -76,8 +79,8 @@ export async function loadUsageLimits(): Promise<UsageLimits | null> {
     .eq('user_id', user.id)
     .eq('estado', 'activo')
 
-  const limiteClientes = limitsData.limite_clientes || 0
-  const limitePrestamos = limitsData.limite_prestamos || 0
+  const limiteClientes = limits.limite_clientes || 0
+  const limitePrestamos = limits.limite_prestamos || 0
 
   return {
     clientes: {
@@ -92,7 +95,7 @@ export async function loadUsageLimits(): Promise<UsageLimits | null> {
     },
     usuarios: {
       current: 1,
-      limit: limitsData.limite_usuarios || 1,
+      limit: limits.limite_usuarios || 1,
       canAdd: false, // Por ahora solo soportamos 1 usuario
     },
   }
