@@ -96,7 +96,7 @@ export default async function LandingPage() {
             <div className="flex flex-col sm:flex-row gap-4">
               <Link href="/register">
                 <Button size="lg" className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-base px-8 py-6">
-                  Probar 30 Días Gratis
+                  Comenzar Gratis Ahora
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </Link>
@@ -804,7 +804,7 @@ export default async function LandingPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-green-600" />
-                  <span>Garantía 30 días</span>
+                  <span>7 días de prueba gratis</span>
                 </div>
               </div>
             </CardContent>

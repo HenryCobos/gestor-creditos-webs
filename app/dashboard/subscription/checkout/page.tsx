@@ -283,7 +283,7 @@ function CheckoutContent() {
 
             <div className="mt-6 space-y-2 text-xs text-gray-500">
               <p>✓ Pago seguro con encriptación SSL</p>
-              <p>✓ Garantía de devolución de 30 días</p>
+              <p>✓ 7 días de prueba gratis</p>
               <p>✓ Cancela cuando quieras</p>
             </div>
           </CardContent>
