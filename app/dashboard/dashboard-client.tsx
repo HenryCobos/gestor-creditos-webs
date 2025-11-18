@@ -54,8 +54,20 @@ export function DashboardClient() {
         loadUserSubscription(),
         loadUsageLimits(),
       ])
-      if (subscription) setUserSubscription(subscription)
-      if (limits) setUsageLimits(limits)
+      
+      if (subscription) {
+        console.log('Suscripción cargada:', subscription)
+        setUserSubscription(subscription)
+      } else {
+        console.error('No se pudo cargar la suscripción del usuario')
+      }
+      
+      if (limits) {
+        console.log('Límites cargados:', limits)
+        setUsageLimits(limits)
+      } else {
+        console.log('No se pudieron cargar los límites')
+      }
     } catch (error) {
       console.error('Error al cargar suscripción:', error)
     }

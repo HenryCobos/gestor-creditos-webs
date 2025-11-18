@@ -90,6 +90,13 @@ export const useSubscriptionStore = create<SubscriptionStore>((set, get) => ({
   getCurrentPlan: () => {
     const { userSubscription, plans } = get()
     if (!userSubscription) return null
+    
+    // Si el plan está en userSubscription.plan, usarlo directamente
+    if (userSubscription.plan) {
+      return userSubscription.plan
+    }
+    
+    // Si no, buscarlo en el array de planes
     return plans.find(p => p.id === userSubscription.plan_id) || null
   },
   

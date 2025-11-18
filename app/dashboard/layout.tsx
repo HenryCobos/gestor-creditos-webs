@@ -22,7 +22,7 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
     redirect('/login')
   }
 
-  const { data: profile } = await supabase
+  let { data: profile } = await supabase
     .from('profiles')
     .select(`
       *,
@@ -30,6 +30,53 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
     `)
     .eq('id', user.id)
     .single()
+
+  // Si el perfil no existe o no tiene plan, crearlo/actualizarlo con plan gratuito
+  if (!profile || !profile.plan_id) {
+    console.log('Usuario sin perfil o sin plan, asignando plan gratuito...')
+    
+    const { data: freePlan } = await supabase
+      .from('planes')
+      .select('id')
+      .eq('slug', 'free')
+      .single()
+
+    if (freePlan) {
+      if (!profile) {
+        // Crear perfil nuevo
+        await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            email: user.email,
+            full_name: user.user_metadata?.full_name || user.email,
+            plan_id: freePlan.id,
+            subscription_status: 'active',
+          })
+      } else {
+        // Actualizar perfil existente
+        await supabase
+          .from('profiles')
+          .update({
+            plan_id: freePlan.id,
+            subscription_status: 'active',
+          })
+          .eq('id', user.id)
+      }
+
+      // Recargar el perfil
+      const { data: updatedProfile } = await supabase
+        .from('profiles')
+        .select(`
+          *,
+          plan:planes(id, nombre, slug)
+        `)
+        .eq('id', user.id)
+        .single()
+
+      profile = updatedProfile
+    }
+  }
 
   const handleSignOut = async () => {
     'use server'

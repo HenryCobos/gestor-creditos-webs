@@ -9,7 +9,7 @@ export async function loadUserSubscription(): Promise<UserSubscription | null> {
   
   if (!user) return null
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select(`
       plan_id,
@@ -24,8 +24,117 @@ export async function loadUserSubscription(): Promise<UserSubscription | null> {
     .eq('id', user.id)
     .single()
 
-  if (!profile) return null
+  // Si no existe el perfil, intentar crearlo con plan gratuito
+  if (profileError || !profile) {
+    console.log('Perfil no encontrado, creando con plan gratuito...')
+    
+    // Obtener el plan gratuito
+    const { data: freePlan } = await supabase
+      .from('planes')
+      .select('id')
+      .eq('slug', 'free')
+      .single()
 
+    if (freePlan) {
+      // Crear el perfil con plan gratuito
+      const { error: insertError } = await supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          email: user.email,
+          full_name: user.user_metadata?.full_name || user.email,
+          plan_id: freePlan.id,
+          subscription_status: 'active',
+        })
+
+      if (!insertError) {
+        // Recargar el perfil
+        const { data: newProfile } = await supabase
+          .from('profiles')
+          .select(`
+            plan_id,
+            subscription_status,
+            subscription_period,
+            subscription_start_date,
+            subscription_end_date,
+            paypal_subscription_id,
+            payment_method,
+            plan:planes(*)
+          `)
+          .eq('id', user.id)
+          .single()
+
+        if (newProfile) {
+          return {
+            plan_id: newProfile.plan_id,
+            plan: newProfile.plan as any,
+            subscription_status: newProfile.subscription_status || 'active',
+            subscription_period: newProfile.subscription_period || 'monthly',
+            subscription_start_date: newProfile.subscription_start_date,
+            subscription_end_date: newProfile.subscription_end_date,
+            paypal_subscription_id: newProfile.paypal_subscription_id,
+            payment_method: newProfile.payment_method,
+          }
+        }
+      }
+    }
+    
+    return null
+  }
+
+  // Si el perfil existe pero no tiene plan asignado, asignarle el plan gratuito
+  if (!profile.plan_id || !profile.plan) {
+    console.log('Perfil sin plan, asignando plan gratuito...')
+    
+    const { data: freePlan } = await supabase
+      .from('planes')
+      .select('id')
+      .eq('slug', 'free')
+      .single()
+
+    if (freePlan) {
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          plan_id: freePlan.id,
+          subscription_status: 'active',
+        })
+        .eq('id', user.id)
+
+      if (!updateError) {
+        // Recargar el perfil actualizado
+        const { data: updatedProfile } = await supabase
+          .from('profiles')
+          .select(`
+            plan_id,
+            subscription_status,
+            subscription_period,
+            subscription_start_date,
+            subscription_end_date,
+            paypal_subscription_id,
+            payment_method,
+            plan:planes(*)
+          `)
+          .eq('id', user.id)
+          .single()
+
+        if (updatedProfile) {
+          return {
+            plan_id: updatedProfile.plan_id,
+            plan: updatedProfile.plan as any,
+            subscription_status: updatedProfile.subscription_status || 'active',
+            subscription_period: updatedProfile.subscription_period || 'monthly',
+            subscription_start_date: updatedProfile.subscription_start_date,
+            subscription_end_date: updatedProfile.subscription_end_date,
+            paypal_subscription_id: updatedProfile.paypal_subscription_id,
+            payment_method: updatedProfile.payment_method,
+          }
+        }
+      }
+    }
+  }
+
+  // Retornar el perfil normal si todo está bien
   return {
     plan_id: profile.plan_id,
     plan: profile.plan as any,
