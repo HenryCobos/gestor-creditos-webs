@@ -101,7 +101,11 @@ export async function loadUsageLimits(): Promise<UsageLimits | null> {
   }
 }
 
-export async function upgradePlan(planId: string, period: 'monthly' | 'yearly'): Promise<{ success: boolean; error?: string }> {
+export async function upgradePlan(
+  planId: string, 
+  period: 'monthly' | 'yearly', 
+  paypalSubscriptionId?: string
+): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   
@@ -109,14 +113,22 @@ export async function upgradePlan(planId: string, period: 'monthly' | 'yearly'):
     return { success: false, error: 'Usuario no autenticado' }
   }
 
+  const updateData: any = {
+    plan_id: planId,
+    subscription_period: period,
+    subscription_status: 'active',
+    subscription_start_date: new Date().toISOString(),
+    payment_method: 'paypal',
+  }
+
+  // Agregar subscription_id si está disponible
+  if (paypalSubscriptionId) {
+    updateData.paypal_subscription_id = paypalSubscriptionId
+  }
+
   const { error } = await supabase
     .from('profiles')
-    .update({
-      plan_id: planId,
-      subscription_period: period,
-      subscription_status: 'active',
-      subscription_start_date: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq('id', user.id)
 
   if (error) {

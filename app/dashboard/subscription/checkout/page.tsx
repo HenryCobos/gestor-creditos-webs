@@ -171,7 +171,8 @@ function CheckoutContent() {
                 options={{ 
                   clientId: process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || "",
                   currency: "USD",
-                  intent: "capture",
+                  intent: "subscription",
+                  vault: true,
                 }}
               >
                 <PayPalButtons
@@ -179,24 +180,31 @@ function CheckoutContent() {
                     layout: "vertical",
                     color: "gold",
                     shape: "rect",
-                    label: "paypal",
+                    label: "subscribe",
                     height: 55
                   }}
-                  forceReRender={[precio, selectedPlan.nombre]}
-                  createOrder={(data, actions) => {
-                    return actions.order.create({
-                      intent: "CAPTURE",
-                      purchase_units: [
-                        {
-                          amount: {
-                            currency_code: "USD",
-                            value: precio?.toFixed(2) || "0",
-                          },
-                          description: `${selectedPlan.nombre} - ${period === 'monthly' ? 'Mensual' : 'Anual'}`,
-                        },
-                      ],
+                  forceReRender={[precio, selectedPlan.nombre, period]}
+                  createSubscription={(data, actions) => {
+                    // Obtener el Plan ID de PayPal según el período
+                    const paypalPlanId = period === 'monthly' 
+                      ? selectedPlan.caracteristicas?.paypal_plan_id_monthly 
+                      : selectedPlan.caracteristicas?.paypal_plan_id_yearly
+                    
+                    if (!paypalPlanId) {
+                      toast({
+                        title: 'Error de Configuración',
+                        description: 'Plan ID de PayPal no configurado. Contacta soporte.',
+                        variant: 'destructive',
+                      })
+                      throw new Error('Plan ID not configured')
+                    }
+
+                    return actions.subscription.create({
+                      plan_id: paypalPlanId,
                       application_context: {
-                        shipping_preference: "NO_SHIPPING"
+                        shipping_preference: "NO_SHIPPING",
+                        return_url: `${window.location.origin}/dashboard`,
+                        cancel_url: `${window.location.origin}/dashboard/subscription`,
                       }
                     })
                   }}
@@ -204,12 +212,15 @@ function CheckoutContent() {
                     setProcessing(true)
                     
                     try {
-                      const result = await upgradePlan(planId!, period)
+                      // Guardar subscription_id de PayPal
+                      const subscriptionId = data.subscriptionID || undefined
+                      
+                      const result = await upgradePlan(planId!, period, subscriptionId)
                       
                       if (result.success) {
                         toast({
-                          title: '¡Pago Exitoso!',
-                          description: `Has actualizado tu plan a ${selectedPlan.nombre}`,
+                          title: '¡Suscripción Exitosa!',
+                          description: `Has activado el plan ${selectedPlan.nombre}`,
                           duration: 5000,
                         })
                         
@@ -221,8 +232,8 @@ function CheckoutContent() {
                       }
                     } catch (error: any) {
                       toast({
-                        title: 'Error al Actualizar Plan',
-                        description: error?.message || 'No se pudo actualizar tu suscripción',
+                        title: 'Error al Activar Suscripción',
+                        description: error?.message || 'No se pudo activar tu suscripción',
                         variant: 'destructive',
                       })
                     } finally {
@@ -231,14 +242,15 @@ function CheckoutContent() {
                   }}
                   onCancel={() => {
                     toast({
-                      title: 'Pago Cancelado',
-                      description: 'Has cancelado el proceso de pago. Puedes intentarlo nuevamente cuando quieras.',
+                      title: 'Suscripción Cancelada',
+                      description: 'Has cancelado el proceso de suscripción. Puedes intentarlo nuevamente cuando quieras.',
                     })
                   }}
                   onError={(err) => {
+                    console.error('PayPal Error:', err)
                     toast({
                       title: 'Error de PayPal',
-                      description: 'Hubo un problema al procesar el pago. Por favor intenta nuevamente.',
+                      description: 'Hubo un problema al procesar la suscripción. Por favor intenta nuevamente.',
                       variant: 'destructive',
                     })
                   }}

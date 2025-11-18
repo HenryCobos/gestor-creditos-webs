@@ -20,6 +20,8 @@ export interface Plan {
     marca_blanca?: boolean
     soporte: string
     historial_dias: number
+    paypal_plan_id_monthly?: string
+    paypal_plan_id_yearly?: string
   }
   activo: boolean
   orden: number
