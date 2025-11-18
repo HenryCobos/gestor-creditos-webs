@@ -23,32 +23,47 @@ export default function RegisterPage() {
     e.preventDefault()
     setLoading(true)
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
+    try {
+      // Registrar usuario
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
+          emailRedirectTo: `${window.location.origin}/dashboard`,
         },
-      },
-    })
+      })
 
-    if (error) {
+      if (authError) {
+        throw authError
+      }
+
+      if (!authData.user) {
+        throw new Error('No se pudo crear el usuario')
+      }
+
       toast({
-        title: 'Error',
-        description: error.message,
+        title: '¡Registro exitoso!',
+        description: 'Tu cuenta ha sido creada. Puedes iniciar sesión ahora.',
+      })
+
+      // Redirigir directamente al login
+      setTimeout(() => {
+        router.push('/login')
+      }, 1500)
+
+    } catch (error: any) {
+      console.error('Error al registrar:', error)
+      toast({
+        title: 'Error al crear cuenta',
+        description: error.message || 'Ocurrió un error. Por favor intenta de nuevo.',
         variant: 'destructive',
       })
+    } finally {
       setLoading(false)
-      return
     }
-
-    toast({
-      title: 'Registro exitoso',
-      description: 'Tu cuenta ha sido creada. Revisa tu email para confirmar.',
-    })
-
-    router.push('/login')
   }
 
   return (
