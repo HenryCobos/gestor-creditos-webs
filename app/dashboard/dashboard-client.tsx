@@ -41,43 +41,46 @@ export function DashboardClient() {
   const supabase = createClient()
 
   useEffect(() => {
-    loadData()
-    loadSubscriptionData()
+    // Cargar datos de suscripción primero (más rápido)
+    loadSubscriptionData().then(() => {
+      // Luego cargar métricas
+      loadData()
+    })
   }, [])
   
   const loadSubscriptionData = async () => {
-    const [subscription, limits] = await Promise.all([
-      loadUserSubscription(),
-      loadUsageLimits(),
-    ])
-    if (subscription) setUserSubscription(subscription)
-    if (limits) setUsageLimits(limits)
+    try {
+      const [subscription, limits] = await Promise.all([
+        loadUserSubscription(),
+        loadUsageLimits(),
+      ])
+      if (subscription) setUserSubscription(subscription)
+      if (limits) setUsageLimits(limits)
+    } catch (error) {
+      console.error('Error al cargar suscripción:', error)
+    }
   }
 
   const loadData = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
 
-    // Obtener métricas
-    const { data: prestamosData } = await supabase
-      .from('prestamos')
-      .select('*')
-      .eq('user_id', user.id)
+      // Obtener métricas en paralelo para mayor velocidad
+      const [prestamosData, clientesData, cuotasData] = await Promise.all([
+        supabase.from('prestamos').select('*').eq('user_id', user.id),
+        supabase.from('clientes').select('*').eq('user_id', user.id),
+        supabase.from('cuotas').select('*').eq('user_id', user.id),
+      ])
 
-    const { data: clientesData } = await supabase
-      .from('clientes')
-      .select('*')
-      .eq('user_id', user.id)
-
-    const { data: cuotasData } = await supabase
-      .from('cuotas')
-      .select('*')
-      .eq('user_id', user.id)
-
-    setPrestamos(prestamosData || [])
-    setClientes(clientesData || [])
-    setCuotas(cuotasData || [])
-    setLoading(false)
+      setPrestamos(prestamosData.data || [])
+      setClientes(clientesData.data || [])
+      setCuotas(cuotasData.data || [])
+    } catch (error) {
+      console.error('Error al cargar datos:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   // Calcular métricas
@@ -151,25 +154,25 @@ export function DashboardClient() {
             Vista general de tu gestión de créditos
           </p>
         </div>
-        <Link href="/dashboard/subscription">
-          <div className={`flex items-center gap-3 px-5 py-3 rounded-lg cursor-pointer transition-all hover:shadow-lg border-2 ${
-            !currentPlan 
-              ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-300' 
-              : currentPlan.slug === 'free' 
-              ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-300' 
-              : currentPlan.slug === 'pro'
-              ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-300'
-              : currentPlan.slug === 'business'
-              ? 'bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-300'
-              : 'bg-gradient-to-r from-yellow-400 to-orange-500 text-white hover:from-yellow-500 hover:to-orange-600 border-yellow-500'
-          }`}>
-            <Crown className="h-6 w-6" />
-            <div>
-              <p className="text-xs font-medium opacity-80">Plan Actual</p>
-              <p className="font-bold text-lg">{currentPlan?.nombre || 'Cargando...'}</p>
+        {currentPlan && (
+          <Link href="/dashboard/subscription">
+            <div className={`flex items-center gap-3 px-5 py-3 rounded-lg cursor-pointer transition-all hover:shadow-lg border-2 ${
+              currentPlan.slug === 'free' 
+                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-300' 
+                : currentPlan.slug === 'pro'
+                ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-300'
+                : currentPlan.slug === 'business'
+                ? 'bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-300'
+                : 'bg-gradient-to-r from-yellow-400 to-orange-500 text-white hover:from-yellow-500 hover:to-orange-600 border-yellow-500'
+            }`}>
+              <Crown className="h-6 w-6" />
+              <div>
+                <p className="text-xs font-medium opacity-80">Plan Actual</p>
+                <p className="font-bold text-lg">{currentPlan.nombre}</p>
+              </div>
             </div>
-          </div>
-        </Link>
+          </Link>
+        )}
       </div>
       
       {/* Indicador de uso del plan */}

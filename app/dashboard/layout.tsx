@@ -24,7 +24,10 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('*')
+    .select(`
+      *,
+      plan:planes(id, nombre, slug)
+    `)
     .eq('id', user.id)
     .single()
 
@@ -45,6 +48,14 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
             <p className="text-sm text-gray-500 mt-2">
               {profile?.full_name || user.email}
             </p>
+            {profile?.plan && (
+              <Link href="/dashboard/subscription">
+                <div className="mt-3 px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 hover:shadow-md transition-all cursor-pointer">
+                  <p className="text-xs text-blue-600 font-medium">Plan Actual</p>
+                  <p className="text-sm font-bold text-blue-900">{profile.plan.nombre}</p>
+                </div>
+              </Link>
+            )}
           </div>
 
           <nav className="flex-1 p-4 space-y-1">

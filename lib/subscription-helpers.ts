@@ -178,7 +178,6 @@ export function getPlanBenefits(slug: string): string[] {
     free: [
       'Hasta 5 clientes',
       'Hasta 5 préstamos activos',
-      'Historial de 30 días',
       'Reportes básicos',
       'Soporte por email',
     ],
@@ -187,7 +186,6 @@ export function getPlanBenefits(slug: string): string[] {
       'Hasta 50 préstamos activos',
       'Historial ilimitado',
       'Exportación PDF ilimitada',
-      'Sin marca de agua',
       'Reportes avanzados',
       'Soporte prioritario (24h)',
     ],
@@ -195,10 +193,9 @@ export function getPlanBenefits(slug: string): string[] {
       'Hasta 200 clientes',
       'Hasta 200 préstamos activos',
       'Hasta 3 usuarios',
-      'Todo del plan Pro',
+      'Todo del plan Profesional',
       'Recordatorios automáticos',
       'Roles y permisos',
-      'API básica',
       'Soporte prioritario (12h)',
     ],
     enterprise: [
@@ -206,11 +203,9 @@ export function getPlanBenefits(slug: string): string[] {
       'Préstamos ILIMITADOS',
       'Usuarios ILIMITADOS',
       'Todo del plan Business',
-      'Marca blanca',
-      'API completa',
-      'Scoring de crédito',
-      'Soporte 24/7',
-      'Gerente dedicado',
+      'Reportes personalizados',
+      'Soporte prioritario 24/7',
+      'Capacitación personalizada',
     ],
   }
 
