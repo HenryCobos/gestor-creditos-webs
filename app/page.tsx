@@ -125,15 +125,11 @@ export default async function LandingPage() {
           {/* Right Column - Video/Screenshot */}
           <div className="relative">
             <div className="relative rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white p-2">
-              <div className="aspect-video bg-gradient-to-br from-blue-50 to-slate-100 rounded-lg flex items-center justify-center">
-                {/* Aquí irá el video o screenshot real */}
-                <div className="text-center space-y-4">
-                  <div className="w-20 h-20 mx-auto rounded-full bg-blue-600 flex items-center justify-center">
-                    <Play className="w-10 h-10 text-white ml-1" />
-                  </div>
-                  <p className="text-sm text-slate-600">Video Demo del Dashboard</p>
-                </div>
-              </div>
+              <img 
+                src="/dashboard-screenshot.png" 
+                alt="Dashboard de GestorPro - Vista general de gestión de créditos"
+                className="w-full h-auto rounded-lg"
+              />
             </div>
             
             {/* Floating Stats Cards */}
@@ -351,13 +347,52 @@ export default async function LandingPage() {
           <h2 className="text-3xl md:text-4xl font-bold text-slate-900">
             Interfaz Simple y Poderosa
           </h2>
+          <p className="text-xl text-slate-600 max-w-2xl mx-auto">
+            Dashboard completo con métricas en tiempo real, control de préstamos y análisis de cartera
+          </p>
         </div>
 
         <div className="max-w-6xl mx-auto">
           <div className="rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white p-4">
-            <div className="aspect-video bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg flex items-center justify-center">
-              {/* Aquí irá el screenshot real del dashboard */}
-              <p className="text-slate-400">Screenshot del Dashboard Real</p>
+            <img 
+              src="/dashboard-screenshot.png" 
+              alt="Dashboard completo de GestorPro mostrando métricas de préstamos, clientes y reportes"
+              className="w-full h-auto rounded-lg"
+            />
+          </div>
+          
+          {/* Features destacadas del dashboard */}
+          <div className="grid md:grid-cols-4 gap-6 mt-12">
+            <div className="text-center">
+              <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center mx-auto mb-3">
+                <BarChart3 className="w-6 h-6 text-blue-600" />
+              </div>
+              <h4 className="font-semibold text-slate-900 mb-1">Métricas en Vivo</h4>
+              <p className="text-sm text-slate-600">Visualiza el estado de tu negocio en tiempo real</p>
+            </div>
+            
+            <div className="text-center">
+              <div className="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center mx-auto mb-3">
+                <TrendingUp className="w-6 h-6 text-green-600" />
+              </div>
+              <h4 className="font-semibold text-slate-900 mb-1">Control Total</h4>
+              <p className="text-sm text-slate-600">Gestiona préstamos y cobros desde un solo lugar</p>
+            </div>
+            
+            <div className="text-center">
+              <div className="w-12 h-12 rounded-lg bg-purple-100 flex items-center justify-center mx-auto mb-3">
+                <Users className="w-6 h-6 text-purple-600" />
+              </div>
+              <h4 className="font-semibold text-slate-900 mb-1">Base de Clientes</h4>
+              <p className="text-sm text-slate-600">Historial completo de cada cliente y préstamo</p>
+            </div>
+            
+            <div className="text-center">
+              <div className="w-12 h-12 rounded-lg bg-amber-100 flex items-center justify-center mx-auto mb-3">
+                <Bell className="w-6 h-6 text-amber-600" />
+              </div>
+              <h4 className="font-semibold text-slate-900 mb-1">Alertas Automáticas</h4>
+              <p className="text-sm text-slate-600">Recordatorios de pagos y cuotas vencidas</p>
             </div>
           </div>
         </div>
