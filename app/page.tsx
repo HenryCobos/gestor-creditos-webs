@@ -125,27 +125,14 @@ export default async function LandingPage() {
           {/* Right Column - Video Demo */}
           <div className="relative">
             <div className="relative rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white p-2">
-              <div className="aspect-video bg-gradient-to-br from-slate-900 to-slate-800 rounded-lg flex items-center justify-center relative group cursor-pointer">
-                {/* Placeholder para Video Demo - Reemplazar con iframe de YouTube/Vimeo */}
-                <div className="text-center space-y-4">
-                  <div className="w-20 h-20 mx-auto rounded-full bg-blue-600 flex items-center justify-center group-hover:bg-blue-700 transition-all group-hover:scale-110">
-                    <Play className="w-10 h-10 text-white ml-1" />
-                  </div>
-                  <p className="text-sm text-slate-300">Video Demo del Sistema</p>
-                  <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                    Haz clic para ver cómo funciona GestorPro
-                  </p>
-                </div>
-                {/* 
-                  Para agregar video real, reemplaza todo el div de arriba con:
-                  <iframe
-                    className="w-full h-full rounded-lg"
-                    src="https://www.youtube.com/embed/TU_VIDEO_ID"
-                    title="Demo GestorPro"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  ></iframe>
-                */}
+              <div className="aspect-video bg-slate-900 rounded-lg overflow-hidden">
+                <iframe
+                  className="w-full h-full"
+                  src="https://www.youtube.com/embed/nc3M93QZkLA"
+                  title="Demo GestorPro - Sistema de Gestión de Créditos"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                ></iframe>
               </div>
             </div>
             
