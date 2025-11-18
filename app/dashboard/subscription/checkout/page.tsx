@@ -139,6 +139,23 @@ function CheckoutContent() {
               </ul>
             </div>
 
+            {/* Prueba Gratis */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                  <Check className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-blue-900 font-semibold">
+                    ✨ 7 Días de Prueba GRATIS
+                  </p>
+                  <p className="text-xs text-blue-700">
+                    No se te cobrará hasta que termine tu prueba. Cancela cuando quieras.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {period === 'yearly' && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                 <p className="text-sm text-green-800 font-medium">
@@ -160,7 +177,13 @@ function CheckoutContent() {
               Pago seguro procesado por PayPal
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {/* Banner de prueba gratis */}
+            <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-3">
+              <p className="text-sm text-blue-900 font-semibold text-center">
+                🎁 Primeros 7 días GRATIS - Después ${precio}/mes
+              </p>
+            </div>
             {processing ? (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>

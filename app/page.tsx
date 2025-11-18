@@ -408,7 +408,7 @@ export default async function LandingPage() {
               Planes para Cada Etapa de tu Negocio
             </h2>
             <p className="text-xl text-slate-600 max-w-2xl mx-auto">
-              Sin compromisos. Cancela cuando quieras. Garantía de 30 días.
+              Sin compromisos. Cancela cuando quieras. <span className="font-semibold text-blue-600">7 días de prueba GRATIS.</span>
             </p>
           </div>
 

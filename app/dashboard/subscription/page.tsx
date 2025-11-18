@@ -298,19 +298,19 @@ export default function SubscriptionPage() {
         })}
       </div>
 
-      {/* Garantía */}
-      <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
+      {/* Prueba Gratis */}
+      <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
         <CardContent className="pt-6">
           <div className="flex items-center justify-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
-              <Check className="w-8 h-8 text-green-600" />
+            <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center">
+              <Zap className="w-8 h-8 text-blue-600" />
             </div>
             <div>
               <h3 className="text-lg font-semibold text-gray-900">
-                Garantía de 30 Días
+                7 Días de Prueba GRATIS
               </h3>
               <p className="text-gray-600">
-                Si no estás satisfecho, te devolvemos tu dinero. Sin preguntas.
+                Prueba cualquier plan sin costo. Cancela cuando quieras, sin compromisos.
               </p>
             </div>
           </div>
