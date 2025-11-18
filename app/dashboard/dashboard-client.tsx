@@ -27,7 +27,8 @@ interface Cuota {
 }
 
 export function DashboardClient() {
-  const [loading, setLoading] = useState(true)
+  const [loadingMetrics, setLoadingMetrics] = useState(true)
+  const [loadingPlan, setLoadingPlan] = useState(true)
   const [prestamos, setPrestamos] = useState<Prestamo[]>([])
   const [clientes, setClientes] = useState<any[]>([])
   const [cuotas, setCuotas] = useState<Cuota[]>([])
@@ -41,11 +42,10 @@ export function DashboardClient() {
   const supabase = createClient()
 
   useEffect(() => {
-    // Cargar datos de suscripción primero (más rápido)
-    loadSubscriptionData().then(() => {
-      // Luego cargar métricas
-      loadData()
-    })
+    // Cargar plan y límites primero
+    loadSubscriptionData()
+    // Cargar métricas en paralelo
+    loadData()
   }, [])
   
   const loadSubscriptionData = async () => {
@@ -70,6 +70,8 @@ export function DashboardClient() {
       }
     } catch (error) {
       console.error('Error al cargar suscripción:', error)
+    } finally {
+      setLoadingPlan(false)
     }
   }
 
@@ -91,7 +93,7 @@ export function DashboardClient() {
     } catch (error) {
       console.error('Error al cargar datos:', error)
     } finally {
-      setLoading(false)
+      setLoadingMetrics(false)
     }
   }
 
@@ -125,23 +127,12 @@ export function DashboardClient() {
     { name: 'Mensual', value: prestamos?.filter(p => p.frecuencia_pago === 'mensual').length || 0 },
   ].filter(f => f.value > 0)
 
-  if (loading) {
-    return (
-      <div className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-500 mt-1">Cargando...</p>
-        </div>
-      </div>
-    )
-  }
-
   const currentPlan = getCurrentPlan()
   
   return (
     <div className="space-y-8">
-      {/* Banner de Suscripción */}
-      {currentPlan?.slug === 'free' && (
+      {/* Banner de Suscripción - Siempre visible para plan gratuito o mientras carga */}
+      {(!loadingPlan && currentPlan?.slug === 'free') && (
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg p-6 text-white">
           <div className="flex items-center justify-between">
             <div>
@@ -166,7 +157,15 @@ export function DashboardClient() {
             Vista general de tu gestión de créditos
           </p>
         </div>
-        {currentPlan && (
+        {loadingPlan ? (
+          <div className="flex items-center gap-3 px-5 py-3 rounded-lg bg-gray-100 border-2 border-gray-300 animate-pulse">
+            <Crown className="h-6 w-6 text-gray-400" />
+            <div>
+              <p className="text-xs font-medium text-gray-400">Cargando plan...</p>
+              <div className="h-5 w-24 bg-gray-300 rounded mt-1"></div>
+            </div>
+          </div>
+        ) : currentPlan ? (
           <Link href="/dashboard/subscription">
             <div className={`flex items-center gap-3 px-5 py-3 rounded-lg cursor-pointer transition-all hover:shadow-lg border-2 ${
               currentPlan.slug === 'free' 
@@ -184,64 +183,81 @@ export function DashboardClient() {
               </div>
             </div>
           </Link>
-        )}
+        ) : null}
       </div>
       
-      {/* Indicador de uso del plan */}
-      {usageLimits && currentPlan && currentPlan.slug !== 'enterprise' && (
+      {/* Indicador de uso del plan - Siempre visible */}
+      {!loadingPlan && (
         <Card className="border-l-4 border-l-blue-500">
           <CardContent className="pt-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-600">Clientes</span>
-                  <span className="text-sm font-bold text-gray-900">
-                    {usageLimits.clientes.current} / {usageLimits.clientes.limit}
-                  </span>
+            {usageLimits && currentPlan && currentPlan.slug !== 'enterprise' ? (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-600">Clientes</span>
+                      <span className="text-sm font-bold text-gray-900">
+                        {usageLimits.clientes.current} / {usageLimits.clientes.limit}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full transition-all ${
+                          usageLimits.clientes.current >= usageLimits.clientes.limit 
+                            ? 'bg-red-500' 
+                            : usageLimits.clientes.current / usageLimits.clientes.limit > 0.8
+                            ? 'bg-yellow-500'
+                            : 'bg-green-500'
+                        }`}
+                        style={{ 
+                          width: `${Math.min((usageLimits.clientes.current / usageLimits.clientes.limit) * 100, 100)}%` 
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-600">Préstamos Activos</span>
+                      <span className="text-sm font-bold text-gray-900">
+                        {usageLimits.prestamos.current} / {usageLimits.prestamos.limit}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full transition-all ${
+                          usageLimits.prestamos.current >= usageLimits.prestamos.limit 
+                            ? 'bg-red-500' 
+                            : usageLimits.prestamos.current / usageLimits.prestamos.limit > 0.8
+                            ? 'bg-yellow-500'
+                            : 'bg-green-500'
+                        }`}
+                        style={{ 
+                          width: `${Math.min((usageLimits.prestamos.current / usageLimits.prestamos.limit) * 100, 100)}%` 
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className={`h-2 rounded-full transition-all ${
-                      usageLimits.clientes.current >= usageLimits.clientes.limit 
-                        ? 'bg-red-500' 
-                        : usageLimits.clientes.current / usageLimits.clientes.limit > 0.8
-                        ? 'bg-yellow-500'
-                        : 'bg-green-500'
-                    }`}
-                    style={{ 
-                      width: `${Math.min((usageLimits.clientes.current / usageLimits.clientes.limit) * 100, 100)}%` 
-                    }}
-                  />
+                {(!usageLimits.clientes.canAdd || !usageLimits.prestamos.canAdd) && (
+                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                    <p className="text-sm text-yellow-800">
+                      ⚠️ Has alcanzado el límite de tu plan. <Link href="/dashboard/subscription" className="font-semibold underline">Actualiza tu plan</Link> para continuar.
+                    </p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="animate-pulse">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
+                    <div className="h-2 bg-gray-200 rounded w-full"></div>
+                  </div>
+                  <div>
+                    <div className="h-4 bg-gray-200 rounded w-32 mb-2"></div>
+                    <div className="h-2 bg-gray-200 rounded w-full"></div>
+                  </div>
                 </div>
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-600">Préstamos Activos</span>
-                  <span className="text-sm font-bold text-gray-900">
-                    {usageLimits.prestamos.current} / {usageLimits.prestamos.limit}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className={`h-2 rounded-full transition-all ${
-                      usageLimits.prestamos.current >= usageLimits.prestamos.limit 
-                        ? 'bg-red-500' 
-                        : usageLimits.prestamos.current / usageLimits.prestamos.limit > 0.8
-                        ? 'bg-yellow-500'
-                        : 'bg-green-500'
-                    }`}
-                    style={{ 
-                      width: `${Math.min((usageLimits.prestamos.current / usageLimits.prestamos.limit) * 100, 100)}%` 
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-            {(!usageLimits.clientes.canAdd || !usageLimits.prestamos.canAdd) && (
-              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                <p className="text-sm text-yellow-800">
-                  ⚠️ Has alcanzado el límite de tu plan. <Link href="/dashboard/subscription" className="font-semibold underline">Actualiza tu plan</Link> para continuar.
-                </p>
               </div>
             )}
           </CardContent>
@@ -258,10 +274,19 @@ export function DashboardClient() {
             <CreditCard className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{prestamosActivos}</div>
-            <p className="text-xs text-muted-foreground">
-              préstamos en curso
-            </p>
+            {loadingMetrics ? (
+              <div className="animate-pulse">
+                <div className="h-8 bg-gray-200 rounded w-16 mb-2"></div>
+                <div className="h-4 bg-gray-200 rounded w-32"></div>
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">{prestamosActivos}</div>
+                <p className="text-xs text-muted-foreground">
+                  préstamos en curso
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -273,10 +298,19 @@ export function DashboardClient() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalPrestado, config.currency)}</div>
-            <p className="text-xs text-muted-foreground">
-              capital en circulación
-            </p>
+            {loadingMetrics ? (
+              <div className="animate-pulse">
+                <div className="h-8 bg-gray-200 rounded w-24 mb-2"></div>
+                <div className="h-4 bg-gray-200 rounded w-32"></div>
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">{formatCurrency(totalPrestado, config.currency)}</div>
+                <p className="text-xs text-muted-foreground">
+                  capital en circulación
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -288,10 +322,19 @@ export function DashboardClient() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalRecuperado, config.currency)}</div>
-            <p className="text-xs text-muted-foreground">
-              pagos recibidos
-            </p>
+            {loadingMetrics ? (
+              <div className="animate-pulse">
+                <div className="h-8 bg-gray-200 rounded w-24 mb-2"></div>
+                <div className="h-4 bg-gray-200 rounded w-32"></div>
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">{formatCurrency(totalRecuperado, config.currency)}</div>
+                <p className="text-xs text-muted-foreground">
+                  pagos recibidos
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -303,12 +346,21 @@ export function DashboardClient() {
             <TrendingUp className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {formatCurrency(gananciaIntereses, config.currency)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              intereses generados
-            </p>
+            {loadingMetrics ? (
+              <div className="animate-pulse">
+                <div className="h-8 bg-gray-200 rounded w-24 mb-2"></div>
+                <div className="h-4 bg-gray-200 rounded w-32"></div>
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-green-600">
+                  {formatCurrency(gananciaIntereses, config.currency)}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  intereses generados
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -320,10 +372,19 @@ export function DashboardClient() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{clientesActivos}</div>
-            <p className="text-xs text-muted-foreground">
-              clientes registrados
-            </p>
+            {loadingMetrics ? (
+              <div className="animate-pulse">
+                <div className="h-8 bg-gray-200 rounded w-16 mb-2"></div>
+                <div className="h-4 bg-gray-200 rounded w-32"></div>
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">{clientesActivos}</div>
+                <p className="text-xs text-muted-foreground">
+                  clientes registrados
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -335,10 +396,19 @@ export function DashboardClient() {
             <AlertCircle className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{cuotasRetrasadas}</div>
-            <p className="text-xs text-muted-foreground">
-              requieren atención
-            </p>
+            {loadingMetrics ? (
+              <div className="animate-pulse">
+                <div className="h-8 bg-gray-200 rounded w-16 mb-2"></div>
+                <div className="h-4 bg-gray-200 rounded w-32"></div>
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-red-600">{cuotasRetrasadas}</div>
+                <p className="text-xs text-muted-foreground">
+                  requieren atención
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

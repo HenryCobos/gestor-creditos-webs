@@ -9,141 +9,104 @@ export async function loadUserSubscription(): Promise<UserSubscription | null> {
   
   if (!user) return null
 
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select(`
-      plan_id,
-      subscription_status,
-      subscription_period,
-      subscription_start_date,
-      subscription_end_date,
-      paypal_subscription_id,
-      payment_method,
-      plan:planes(*)
-    `)
-    .eq('id', user.id)
-    .single()
-
-  // Si no existe el perfil, intentar crearlo con plan gratuito
-  if (profileError || !profile) {
-    console.log('Perfil no encontrado, creando con plan gratuito...')
-    
-    // Obtener el plan gratuito
+  try {
+    // Primero, obtener el plan gratuito (lo vamos a necesitar)
     const { data: freePlan } = await supabase
       .from('planes')
-      .select('id')
+      .select('*')
       .eq('slug', 'free')
       .single()
 
-    if (freePlan) {
-      // Crear el perfil con plan gratuito
-      const { error: insertError } = await supabase
+    if (!freePlan) {
+      console.error('❌ No existe el plan gratuito en la base de datos!')
+      return null
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select(`
+        plan_id,
+        subscription_status,
+        subscription_period,
+        subscription_start_date,
+        subscription_end_date,
+        paypal_subscription_id,
+        payment_method,
+        plan:planes(*)
+      `)
+      .eq('id', user.id)
+      .single()
+
+    // CASO 1: No existe el perfil → Crearlo con plan gratuito
+    if (profileError || !profile) {
+      console.log('⚠️ Perfil no encontrado, creando con plan gratuito...')
+      
+      await supabase
         .from('profiles')
-        .insert({
+        .upsert({
           id: user.id,
           email: user.email,
           full_name: user.user_metadata?.full_name || user.email,
           plan_id: freePlan.id,
           subscription_status: 'active',
+          subscription_period: 'monthly',
+        }, {
+          onConflict: 'id'
         })
 
-      if (!insertError) {
-        // Recargar el perfil
-        const { data: newProfile } = await supabase
-          .from('profiles')
-          .select(`
-            plan_id,
-            subscription_status,
-            subscription_period,
-            subscription_start_date,
-            subscription_end_date,
-            paypal_subscription_id,
-            payment_method,
-            plan:planes(*)
-          `)
-          .eq('id', user.id)
-          .single()
-
-        if (newProfile) {
-          return {
-            plan_id: newProfile.plan_id,
-            plan: newProfile.plan as any,
-            subscription_status: newProfile.subscription_status || 'active',
-            subscription_period: newProfile.subscription_period || 'monthly',
-            subscription_start_date: newProfile.subscription_start_date,
-            subscription_end_date: newProfile.subscription_end_date,
-            paypal_subscription_id: newProfile.paypal_subscription_id,
-            payment_method: newProfile.payment_method,
-          }
-        }
+      // Retornar el plan gratuito directamente
+      return {
+        plan_id: freePlan.id,
+        plan: freePlan,
+        subscription_status: 'active',
+        subscription_period: 'monthly',
+        subscription_start_date: null,
+        subscription_end_date: null,
+        paypal_subscription_id: null,
+        payment_method: null,
       }
     }
-    
-    return null
-  }
 
-  // Si el perfil existe pero no tiene plan asignado, asignarle el plan gratuito
-  if (!profile.plan_id || !profile.plan) {
-    console.log('Perfil sin plan, asignando plan gratuito...')
-    
-    const { data: freePlan } = await supabase
-      .from('planes')
-      .select('id')
-      .eq('slug', 'free')
-      .single()
-
-    if (freePlan) {
-      const { error: updateError } = await supabase
+    // CASO 2: Perfil existe pero NO tiene plan asignado → Asignar plan gratuito
+    if (!profile.plan_id || !profile.plan) {
+      console.log('⚠️ Perfil sin plan, asignando plan gratuito...')
+      
+      await supabase
         .from('profiles')
         .update({
           plan_id: freePlan.id,
           subscription_status: 'active',
+          subscription_period: 'monthly',
         })
         .eq('id', user.id)
 
-      if (!updateError) {
-        // Recargar el perfil actualizado
-        const { data: updatedProfile } = await supabase
-          .from('profiles')
-          .select(`
-            plan_id,
-            subscription_status,
-            subscription_period,
-            subscription_start_date,
-            subscription_end_date,
-            paypal_subscription_id,
-            payment_method,
-            plan:planes(*)
-          `)
-          .eq('id', user.id)
-          .single()
-
-        if (updatedProfile) {
-          return {
-            plan_id: updatedProfile.plan_id,
-            plan: updatedProfile.plan as any,
-            subscription_status: updatedProfile.subscription_status || 'active',
-            subscription_period: updatedProfile.subscription_period || 'monthly',
-            subscription_start_date: updatedProfile.subscription_start_date,
-            subscription_end_date: updatedProfile.subscription_end_date,
-            paypal_subscription_id: updatedProfile.paypal_subscription_id,
-            payment_method: updatedProfile.payment_method,
-          }
-        }
+      // Retornar el plan gratuito directamente
+      return {
+        plan_id: freePlan.id,
+        plan: freePlan,
+        subscription_status: 'active',
+        subscription_period: 'monthly',
+        subscription_start_date: profile.subscription_start_date,
+        subscription_end_date: profile.subscription_end_date,
+        paypal_subscription_id: profile.paypal_subscription_id,
+        payment_method: profile.payment_method,
       }
     }
-  }
 
-  // Retornar el perfil normal si todo está bien
-  return {
-    plan_id: profile.plan_id,
-    plan: profile.plan as any,
-    subscription_status: profile.subscription_status || 'active',
-    subscription_period: profile.subscription_period || 'monthly',
-    subscription_start_date: profile.subscription_start_date,
-    subscription_end_date: profile.subscription_end_date,
-    paypal_subscription_id: profile.paypal_subscription_id,
-    payment_method: profile.payment_method,
+    // CASO 3: Todo está bien → Retornar el perfil
+    return {
+      plan_id: profile.plan_id,
+      plan: profile.plan as any,
+      subscription_status: profile.subscription_status || 'active',
+      subscription_period: profile.subscription_period || 'monthly',
+      subscription_start_date: profile.subscription_start_date,
+      subscription_end_date: profile.subscription_end_date,
+      paypal_subscription_id: profile.paypal_subscription_id,
+      payment_method: profile.payment_method,
+    }
+  } catch (error) {
+    console.error('❌ Error en loadUserSubscription:', error)
+    return null
   }
 }
 

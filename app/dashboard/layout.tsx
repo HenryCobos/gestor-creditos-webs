@@ -22,6 +22,13 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
     redirect('/login')
   }
 
+  // Obtener plan gratuito primero (lo usaremos si hace falta)
+  const { data: freePlan } = await supabase
+    .from('planes')
+    .select('id, nombre, slug')
+    .eq('slug', 'free')
+    .single()
+
   let { data: profile } = await supabase
     .from('profiles')
     .select(`
@@ -31,51 +38,63 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
     .eq('id', user.id)
     .single()
 
-  // Si el perfil no existe o no tiene plan, crearlo/actualizarlo con plan gratuito
-  if (!profile || !profile.plan_id) {
-    console.log('Usuario sin perfil o sin plan, asignando plan gratuito...')
+  // Si el perfil no existe, no tiene plan, o el plan no se cargó correctamente
+  if (freePlan && (!profile || !profile.plan_id || !profile.plan)) {
+    console.log('🔧 Usuario sin perfil o sin plan, asignando plan gratuito...')
     
-    const { data: freePlan } = await supabase
-      .from('planes')
-      .select('id')
-      .eq('slug', 'free')
+    // Usar UPSERT para crear o actualizar
+    const { error: upsertError } = await supabase
+      .from('profiles')
+      .upsert({
+        id: user.id,
+        email: user.email || '',
+        full_name: user.user_metadata?.full_name || user.email || 'Usuario',
+        plan_id: freePlan.id,
+        subscription_status: 'active',
+        subscription_period: 'monthly',
+      }, {
+        onConflict: 'id'
+      })
+
+    if (upsertError) {
+      console.error('Error al crear/actualizar perfil:', upsertError)
+    }
+
+    // Recargar el perfil
+    const { data: updatedProfile } = await supabase
+      .from('profiles')
+      .select(`
+        *,
+        plan:planes(id, nombre, slug)
+      `)
+      .eq('id', user.id)
       .single()
 
-    if (freePlan) {
-      if (!profile) {
-        // Crear perfil nuevo
-        await supabase
-          .from('profiles')
-          .insert({
-            id: user.id,
-            email: user.email,
-            full_name: user.user_metadata?.full_name || user.email,
-            plan_id: freePlan.id,
-            subscription_status: 'active',
-          })
-      } else {
-        // Actualizar perfil existente
-        await supabase
-          .from('profiles')
-          .update({
-            plan_id: freePlan.id,
-            subscription_status: 'active',
-          })
-          .eq('id', user.id)
-      }
-
-      // Recargar el perfil
-      const { data: updatedProfile } = await supabase
-        .from('profiles')
-        .select(`
-          *,
-          plan:planes(id, nombre, slug)
-        `)
-        .eq('id', user.id)
-        .single()
-
-      profile = updatedProfile
+    profile = updatedProfile
+    
+    // Si todavía no hay perfil o plan, usar fallback
+    if (!profile || !profile.plan) {
+      profile = {
+        id: user.id,
+        email: user.email || '',
+        full_name: user.user_metadata?.full_name || user.email || 'Usuario',
+        plan_id: freePlan.id,
+        plan: freePlan,
+        subscription_status: 'active',
+        subscription_period: 'monthly',
+        subscription_start_date: null,
+        subscription_end_date: null,
+        paypal_subscription_id: null,
+        payment_method: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      } as any
     }
+  }
+
+  // Asegurar que siempre haya un plan
+  if (profile && !profile.plan && profile.plan_id && freePlan && profile.plan_id === freePlan.id) {
+    profile.plan = freePlan as any
   }
 
   const handleSignOut = async () => {
