@@ -160,22 +160,6 @@ export default async function LandingPage() {
         </div>
       </section>
 
-      {/* Social Proof */}
-      <section className="border-y bg-white py-12">
-        <div className="container mx-auto px-4">
-          <p className="text-center text-sm text-slate-600 mb-8">
-            Confiado por empresas de crédito líderes
-          </p>
-          <div className="flex items-center justify-center gap-12 flex-wrap opacity-50">
-            {/* Aquí irían logos de clientes - por ahora usamos texto */}
-            <div className="text-2xl font-bold text-slate-400">Empresa 1</div>
-            <div className="text-2xl font-bold text-slate-400">Empresa 2</div>
-            <div className="text-2xl font-bold text-slate-400">Empresa 3</div>
-            <div className="text-2xl font-bold text-slate-400">Empresa 4</div>
-          </div>
-        </div>
-      </section>
-
       {/* Problema → Solución */}
       <section className="container mx-auto px-4 py-20">
         <div className="max-w-4xl mx-auto">
@@ -479,7 +463,7 @@ export default async function LandingPage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm text-slate-600">Sin marca de agua</span>
+                    <span className="text-sm text-slate-600">Reportes avanzados</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
@@ -521,15 +505,19 @@ export default async function LandingPage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm text-slate-600">Todo del Plan Profesional</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
                     <span className="text-sm text-slate-600">Recordatorios automáticos</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm text-slate-600">API básica</span>
+                    <span className="text-sm text-slate-600">Roles y permisos</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm text-slate-600">Soporte 12h</span>
+                    <span className="text-sm text-slate-600">Soporte prioritario 12h</span>
                   </li>
                 </ul>
                 <Link href="/register" className="block">
@@ -567,19 +555,19 @@ export default async function LandingPage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm text-slate-600">Marca blanca</span>
+                    <span className="text-sm text-slate-600">Todo del Plan Business</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm text-slate-600">API completa</span>
+                    <span className="text-sm text-slate-600">Reportes personalizados</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm text-slate-600">Soporte 24/7</span>
+                    <span className="text-sm text-slate-600">Soporte prioritario 24/7</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm text-slate-600">Gerente dedicado</span>
+                    <span className="text-sm text-slate-600">Capacitación personalizada</span>
                   </li>
                 </ul>
                 <Link href="/register" className="block">
