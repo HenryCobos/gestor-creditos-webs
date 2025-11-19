@@ -91,6 +91,7 @@ export default async function LandingPage() {
         "@type": "Product",
         "name": "GestorPro - Software de Gestión de Préstamos",
         "description": "Sistema completo para gestionar tu negocio de créditos y préstamos",
+        "image": "https://gestor-creditos-webs.vercel.app/dashboard-screenshot.png",
         "brand": {
           "@type": "Brand",
           "name": "GestorPro"
