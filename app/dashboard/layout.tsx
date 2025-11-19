@@ -13,6 +13,7 @@ import {
   Settings
 } from 'lucide-react'
 import { CompanyHeader } from '@/components/company-header'
+import { MobileMenu } from '@/components/mobile-menu'
 
 async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -106,7 +107,19 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      {/* Sidebar */}
+      {/* Mobile Header */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 px-4 py-3">
+        <div className="flex items-center justify-between">
+          <CompanyHeader />
+          <MobileMenu 
+            user={profile}
+            planName={profile?.plan?.nombre || 'Gratuito'}
+            onSignOut={handleSignOut}
+          />
+        </div>
+      </div>
+
+      {/* Sidebar - Desktop */}
       <aside className="w-64 bg-white border-r border-gray-200 hidden md:block">
         <div className="h-full flex flex-col">
           <div className="p-6 border-b border-gray-200">
@@ -176,7 +189,7 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto">
-        <div className="p-8">
+        <div className="p-4 md:p-8 pt-20 md:pt-8">
           {children}
         </div>
       </main>
