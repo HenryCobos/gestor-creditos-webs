@@ -6,8 +6,73 @@ import { Toaster } from "@/components/ui/toaster";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Gestor de Créditos - Gestiona tus préstamos fácilmente",
-  description: "Sistema profesional de gestión de préstamos, clientes y cuotas",
+  metadataBase: new URL('https://gestor-creditos-webs.vercel.app'),
+  title: {
+    default: "GestorPro - Software de Gestión de Préstamos y Créditos | Sistema Profesional",
+    template: "%s | GestorPro"
+  },
+  description: "Software profesional para gestionar préstamos, créditos, clientes y cobros. Controla tu negocio de créditos con reportes automáticos, recordatorios y análisis en tiempo real. Prueba gratis 7 días.",
+  keywords: [
+    "software de préstamos",
+    "sistema de créditos",
+    "gestión de préstamos",
+    "software para prestamistas",
+    "control de créditos",
+    "sistema de cobranza",
+    "gestión de clientes",
+    "software financiero",
+    "préstamos en línea",
+    "sistema de cuotas",
+    "cobros automáticos",
+    "reportes financieros",
+    "gestión de microcréditos",
+    "software de microfinanzas"
+  ],
+  authors: [{ name: "GestorPro" }],
+  creator: "GestorPro",
+  publisher: "GestorPro",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'es_ES',
+    url: 'https://gestor-creditos-webs.vercel.app',
+    siteName: 'GestorPro',
+    title: 'GestorPro - Software Profesional de Gestión de Préstamos y Créditos',
+    description: 'Gestiona préstamos, clientes y cobros desde una plataforma profesional. Reportes automáticos, recordatorios y control total. Prueba gratis 7 días.',
+    images: [
+      {
+        url: '/dashboard-screenshot.png',
+        width: 1200,
+        height: 630,
+        alt: 'Dashboard de GestorPro - Sistema de Gestión de Préstamos',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'GestorPro - Software de Gestión de Préstamos',
+    description: 'Control total de tu negocio de créditos. Reportes, recordatorios y análisis automáticos.',
+    images: ['/dashboard-screenshot.png'],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+  verification: {
+    // Agrega aquí tu código de Google Search Console cuando lo tengas
+    // google: 'tu-codigo-de-verificacion',
+  },
 };
 
 export default function RootLayout({
@@ -17,6 +82,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
+      <head>
+        <link rel="canonical" href="https://gestor-creditos-webs.vercel.app" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
+        <link rel="icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+      </head>
       <body className={inter.className}>
         {children}
         <Toaster />

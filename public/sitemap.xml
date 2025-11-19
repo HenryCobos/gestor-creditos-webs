@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  
+  <!-- Landing Page (Más importante) -->
+  <url>
+    <loc>https://gestor-creditos-webs.vercel.app/</loc>
+    <lastmod>2025-11-19</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://gestor-creditos-webs.vercel.app/dashboard-screenshot.png</image:loc>
+      <image:title>Dashboard de GestorPro</image:title>
+      <image:caption>Sistema profesional de gestión de préstamos y créditos</image:caption>
+    </image:image>
+  </url>
+
+  <!-- Términos de Servicio -->
+  <url>
+    <loc>https://gestor-creditos-webs.vercel.app/terminos</loc>
+    <lastmod>2025-11-19</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+  <!-- Política de Privacidad -->
+  <url>
+    <loc>https://gestor-creditos-webs.vercel.app/privacidad</loc>
+    <lastmod>2025-11-19</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+</urlset>
+

@@ -31,8 +31,113 @@ export default async function LandingPage() {
     redirect('/dashboard')
   }
 
+  // Schema.org JSON-LD para SEO
+  const schemaOrg = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "name": "GestorPro",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "offers": {
+          "@type": "AggregateOffer",
+          "lowPrice": "0",
+          "highPrice": "179",
+          "priceCurrency": "USD",
+          "offerCount": "4"
+        },
+        "aggregateRating": {
+          "@type": "AggregateRating",
+          "ratingValue": "4.9",
+          "reviewCount": "5000",
+          "bestRating": "5",
+          "worstRating": "1"
+        },
+        "description": "Software profesional para gestionar préstamos, créditos, clientes y cobros. Control total de tu negocio financiero.",
+        "screenshot": "https://gestor-creditos-webs.vercel.app/dashboard-screenshot.png",
+        "featureList": [
+          "Gestión de clientes",
+          "Control de préstamos",
+          "Recordatorios automáticos",
+          "Reportes profesionales en PDF",
+          "Analytics avanzado",
+          "Seguridad bancaria"
+        ]
+      },
+      {
+        "@type": "Organization",
+        "name": "GestorPro",
+        "url": "https://gestor-creditos-webs.vercel.app",
+        "logo": "https://gestor-creditos-webs.vercel.app/dashboard-screenshot.png",
+        "sameAs": [],
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "contactType": "Customer Service",
+          "availableLanguage": ["Spanish", "English"]
+        }
+      },
+      {
+        "@type": "WebSite",
+        "name": "GestorPro",
+        "url": "https://gestor-creditos-webs.vercel.app",
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": "https://gestor-creditos-webs.vercel.app/?s={search_term_string}",
+          "query-input": "required name=search_term_string"
+        }
+      },
+      {
+        "@type": "Product",
+        "name": "GestorPro - Software de Gestión de Préstamos",
+        "description": "Sistema completo para gestionar tu negocio de créditos y préstamos",
+        "brand": {
+          "@type": "Brand",
+          "name": "GestorPro"
+        },
+        "offers": [
+          {
+            "@type": "Offer",
+            "name": "Plan Gratuito",
+            "price": "0",
+            "priceCurrency": "USD",
+            "availability": "https://schema.org/InStock"
+          },
+          {
+            "@type": "Offer",
+            "name": "Plan Profesional",
+            "price": "19",
+            "priceCurrency": "USD",
+            "availability": "https://schema.org/InStock"
+          },
+          {
+            "@type": "Offer",
+            "name": "Plan Business",
+            "price": "49",
+            "priceCurrency": "USD",
+            "availability": "https://schema.org/InStock"
+          },
+          {
+            "@type": "Offer",
+            "name": "Plan Enterprise",
+            "price": "179",
+            "priceCurrency": "USD",
+            "availability": "https://schema.org/InStock"
+          }
+        ]
+      }
+    ]
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+    <>
+      {/* JSON-LD Schema Markup */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaOrg) }}
+      />
+      
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
       {/* Header/Navigation */}
       <header className="sticky top-0 z-50 w-full border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
@@ -852,6 +957,7 @@ export default async function LandingPage() {
           </div>
         </div>
       </footer>
-    </div>
+      </div>
+    </>
   )
 }

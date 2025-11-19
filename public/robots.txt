@@ -1,0 +1,34 @@
+# robots.txt para GestorPro
+
+# Permitir acceso a todos los bots
+User-agent: *
+Allow: /
+
+# Bloquear áreas privadas
+Disallow: /dashboard/
+Disallow: /api/
+Disallow: /login
+Disallow: /register
+Disallow: /actualizar-contrasena
+Disallow: /recuperar-contrasena
+
+# Permitir indexación de landing page y páginas públicas
+Allow: /$
+Allow: /terminos
+Allow: /privacidad
+
+# Configuración específica para Googlebot
+User-agent: Googlebot
+Allow: /
+Disallow: /dashboard/
+Disallow: /api/
+
+# Configuración específica para Bingbot
+User-agent: Bingbot
+Allow: /
+Disallow: /dashboard/
+Disallow: /api/
+
+# Sitemap location
+Sitemap: https://gestor-creditos-webs.vercel.app/sitemap.xml
+
