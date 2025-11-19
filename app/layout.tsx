@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import GoogleAnalytics from "@/app/components/GoogleAnalytics";
+import GoogleAdsConversion from "@/app/components/GoogleAdsConversion";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -90,6 +92,8 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       </head>
       <body className={inter.className}>
+        <GoogleAnalytics />
+        <GoogleAdsConversion />
         {children}
         <Toaster />
       </body>

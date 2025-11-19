@@ -9,6 +9,8 @@ import { ArrowLeft, Check, CreditCard } from 'lucide-react'
 import { useSubscriptionStore } from '@/lib/subscription-store'
 import { loadPlans, upgradePlan } from '@/lib/subscription-helpers'
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js"
+import { trackSubscriptionConversion, trackBeginCheckout } from '@/lib/analytics'
+import { createClient } from '@/lib/supabase/client'
 
 function CheckoutContent() {
   const searchParams = useSearchParams()
@@ -34,6 +36,13 @@ function CheckoutContent() {
 
   const selectedPlan = plans.find(p => p.id === planId)
   const precio = period === 'monthly' ? selectedPlan?.precio_mensual : selectedPlan?.precio_anual
+
+  // 🎯 Tracking: Usuario inició proceso de pago
+  useEffect(() => {
+    if (selectedPlan && precio) {
+      trackBeginCheckout(selectedPlan.nombre, precio)
+    }
+  }, [selectedPlan, precio])
 
   if (loading) {
     return <div className="text-center py-12">Cargando...</div>
@@ -241,6 +250,11 @@ function CheckoutContent() {
                       const result = await upgradePlan(planId!, period, subscriptionId)
                       
                       if (result.success) {
+                        // 🎯 CONVERSIÓN SECUNDARIA (MÁS VALIOSA): Usuario compró suscripción
+                        const supabase = createClient()
+                        const { data: { user } } = await supabase.auth.getUser()
+                        trackSubscriptionConversion(selectedPlan.nombre, precio || 0, user?.id)
+                        
                         toast({
                           title: '¡Suscripción Exitosa!',
                           description: `Has activado el plan ${selectedPlan.nombre}`,

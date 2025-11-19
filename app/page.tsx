@@ -1,3 +1,5 @@
+'use client'
+
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -19,17 +21,41 @@ import {
   Play,
   Star
 } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+import { trackCTAClick, trackViewPricing } from '@/lib/analytics'
+import { useEffect, useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 
-export default async function LandingPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+export default function LandingPage() {
+  const router = useRouter()
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const supabase = createClient()
 
-  // Si el usuario ya está logueado, redirigir al dashboard
-  if (user) {
-    redirect('/dashboard')
-  }
+  useEffect(() => {
+    // Verificar si el usuario ya está logueado
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        setIsLoggedIn(true)
+        router.push('/dashboard')
+      }
+    })
+  }, [router, supabase])
+
+  // Tracking: Usuario llegó a la sección de precios
+  useEffect(() => {
+    const handleScroll = () => {
+      const pricingSection = document.getElementById('precios')
+      if (pricingSection) {
+        const rect = pricingSection.getBoundingClientRect()
+        if (rect.top < window.innerHeight && rect.bottom > 0) {
+          trackViewPricing()
+          window.removeEventListener('scroll', handleScroll)
+        }
+      }
+    }
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   // Schema.org JSON-LD para SEO
   const schemaOrg = {
@@ -164,12 +190,19 @@ export default async function LandingPage() {
 
           <div className="flex items-center gap-3">
             <Link href="/login">
-              <Button variant="ghost" className="text-sm font-medium">
+              <Button 
+                variant="ghost" 
+                className="text-sm font-medium"
+                onClick={() => trackCTAClick('Iniciar Sesión', 'Header')}
+              >
                 Iniciar Sesión
               </Button>
             </Link>
             <Link href="/register">
-              <Button className="text-sm font-medium bg-blue-600 hover:bg-blue-700">
+              <Button 
+                className="text-sm font-medium bg-blue-600 hover:bg-blue-700"
+                onClick={() => trackCTAClick('Comenzar Gratis', 'Header')}
+              >
                 Comenzar Gratis
               </Button>
             </Link>
@@ -201,7 +234,11 @@ export default async function LandingPage() {
 
             <div className="flex flex-col sm:flex-row gap-4">
               <Link href="/register">
-                <Button size="lg" className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-base px-8 py-6">
+                <Button 
+                  size="lg" 
+                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-base px-8 py-6"
+                  onClick={() => trackCTAClick('Comenzar Gratis Ahora', 'Hero Section')}
+                >
                   Comenzar Gratis Ahora
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
@@ -210,6 +247,7 @@ export default async function LandingPage() {
                 size="lg" 
                 variant="outline" 
                 className="w-full sm:w-auto text-base px-8 py-6 border-slate-300"
+                onClick={() => trackCTAClick('Ver Demo', 'Hero Section')}
               >
                 <Play className="mr-2 h-5 w-5" />
                 Ver Demo
@@ -536,7 +574,11 @@ export default async function LandingPage() {
                   </li>
                 </ul>
                 <Link href="/register" className="block">
-                  <Button variant="outline" className="w-full">
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={() => trackCTAClick('Comenzar Gratis', 'Plan Gratuito')}
+                  >
                     Comenzar Gratis
                   </Button>
                 </Link>
@@ -581,7 +623,10 @@ export default async function LandingPage() {
                   </li>
                 </ul>
                 <Link href="/register" className="block">
-                  <Button className="w-full bg-blue-600 hover:bg-blue-700">
+                  <Button 
+                    className="w-full bg-blue-600 hover:bg-blue-700"
+                    onClick={() => trackCTAClick('Comenzar Prueba', 'Plan Profesional')}
+                  >
                     Comenzar Prueba
                   </Button>
                 </Link>
@@ -631,7 +676,11 @@ export default async function LandingPage() {
                   </li>
                 </ul>
                 <Link href="/register" className="block">
-                  <Button variant="outline" className="w-full">
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={() => trackCTAClick('Comenzar Prueba', 'Plan Business')}
+                  >
                     Comenzar Prueba
                   </Button>
                 </Link>
@@ -681,7 +730,10 @@ export default async function LandingPage() {
                   </li>
                 </ul>
                 <Link href="/register" className="block">
-                  <Button className="w-full bg-amber-600 hover:bg-amber-700">
+                  <Button 
+                    className="w-full bg-amber-600 hover:bg-amber-700"
+                    onClick={() => trackCTAClick('Contactar Ventas', 'Plan Enterprise')}
+                  >
                     Contactar Ventas
                   </Button>
                 </Link>
@@ -880,7 +932,11 @@ export default async function LandingPage() {
               </p>
               <div className="flex justify-center pt-4">
                 <Link href="/register">
-                  <Button size="lg" className="bg-blue-600 hover:bg-blue-700 px-8 py-6">
+                  <Button 
+                    size="lg" 
+                    className="bg-blue-600 hover:bg-blue-700 px-8 py-6"
+                    onClick={() => trackCTAClick('Comenzar Gratis Ahora', 'CTA Final')}
+                  >
                     Comenzar Gratis Ahora
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>

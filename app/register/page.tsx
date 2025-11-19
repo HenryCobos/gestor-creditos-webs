@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import Link from 'next/link'
+import { trackSignupConversion } from '@/lib/analytics'
 
 export default function RegisterPage() {
   const [email, setEmail] = useState('')
@@ -43,6 +44,9 @@ export default function RegisterPage() {
       if (!authData.user) {
         throw new Error('No se pudo crear el usuario')
       }
+
+      // 🎯 CONVERSIÓN PRIMARIA: Usuario se registró
+      trackSignupConversion(authData.user.id)
 
       toast({
         title: '¡Registro exitoso!',
