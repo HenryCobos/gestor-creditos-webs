@@ -83,6 +83,7 @@ export default function RootLayout({
   return (
     <html lang="es">
       <head>
+        <meta name="google-site-verification" content="7uSR0O1iKcIUd_3DOaAOmBXnu-EHVj0KFw_1hMj_KDc" />
         <link rel="canonical" href="https://gestor-creditos-webs.vercel.app" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
         <link rel="icon" href="/favicon.ico" />
