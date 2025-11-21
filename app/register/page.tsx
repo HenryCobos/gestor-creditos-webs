@@ -201,9 +201,20 @@ export default function RegisterPage() {
                 minLength={6}
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Creando cuenta...' : 'Crear Cuenta'}
+            <Button 
+              type="submit" 
+              className="w-full" 
+              disabled={loading || !!emailError}
+            >
+              {loading ? 'Creando cuenta...' : emailError ? 'Corrige el email para continuar' : 'Crear Cuenta'}
             </Button>
+            
+            {/* Mensaje de ayuda cuando el botón está deshabilitado */}
+            {emailError && !loading && (
+              <p className="text-xs text-center text-muted-foreground">
+                Por favor corrige el email para poder registrarte
+              </p>
+            )}
           </form>
           <div className="mt-4 text-center text-sm">
             ¿Ya tienes cuenta?{' '}
