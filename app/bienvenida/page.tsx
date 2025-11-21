@@ -36,27 +36,13 @@ export default function BienvenidaPage() {
   }
 
   const handleAddToFavorites = () => {
-    if (window.sidebar && window.sidebar.addPanel) {
-      // Firefox
-      window.sidebar.addPanel(document.title, window.location.href, '')
-    } else if (window.external && ('AddFavorite' in window.external)) {
-      // IE
-      ;(window.external as any).AddFavorite(window.location.href, document.title)
-    } else if (window.opera) {
-      // Opera
-      const a = document.createElement('a')
-      a.setAttribute('href', window.location.href)
-      a.setAttribute('title', document.title)
-      a.setAttribute('rel', 'sidebar')
-      a.click()
-    } else {
-      // Para navegadores modernos (Chrome, Safari, etc)
-      toast({
-        title: '📌 Cómo agregar a favoritos:',
-        description: 'Presiona Ctrl+D (Windows) o Cmd+D (Mac) para agregar esta página a favoritos',
-        duration: 8000,
-      })
-    }
+    // Los métodos antiguos (sidebar, external) ya no funcionan en navegadores modernos
+    // Mostrar instrucciones para todos los navegadores
+    toast({
+      title: '📌 Cómo agregar a favoritos:',
+      description: 'Presiona Ctrl+D (Windows) o Cmd+D (Mac) para agregar esta página a favoritos',
+      duration: 8000,
+    })
   }
 
   const handleGoToLogin = () => {
