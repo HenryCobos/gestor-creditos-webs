@@ -4,6 +4,8 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import GoogleAnalytics from "@/app/components/GoogleAnalytics";
 import GoogleAdsConversion from "@/app/components/GoogleAdsConversion";
+import WhatsAppButton from "@/components/whatsapp-button";
+import { whatsappConfig } from "@/lib/config/whatsapp";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -99,6 +101,11 @@ export default function RootLayout({
         <GoogleAdsConversion />
         {children}
         <Toaster />
+        <WhatsAppButton 
+          phoneNumber={whatsappConfig.phoneNumber} 
+          message={whatsappConfig.defaultMessage}
+          position={whatsappConfig.position}
+        />
       </body>
     </html>
   );
