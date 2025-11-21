@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import Link from 'next/link'
+import { normalizeEmail } from '@/lib/utils/email-validation'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -22,8 +23,11 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
 
+    // Normalizar email antes de login
+    const normalizedEmail = normalizeEmail(email)
+
     const { error } = await supabase.auth.signInWithPassword({
-      email,
+      email: normalizedEmail,
       password,
     })
 
