@@ -74,7 +74,7 @@ export async function GET(request: Request) {
           if (template) {
             // Enviar email con Resend
             const { data: emailData, error: emailError } = await resend.emails.send({
-              from: 'Henry <noreply@gestorcreditos.com>', // Cambiar por tu dominio
+              from: 'Henry - Gestor de Créditos <onboarding@resend.dev>',
               to: campaign.email,
               subject: template.subject,
               html: template.html,
