@@ -67,7 +67,9 @@ export default function PrestamosPage() {
     cliente_id: '',
     monto_prestado: '',
     interes_porcentaje: '',
+    tipo_duracion: 'meses' as 'meses' | 'dias', // Tipo de duración
     numero_meses: '', // Duración en meses
+    numero_dias: '', // Duración en días
     fecha_inicio: format(new Date(), 'yyyy-MM-dd'),
     fecha_fin: '',
     frecuencia_pago: 'mensual' as FrecuenciaPago,
@@ -106,19 +108,26 @@ export default function PrestamosPage() {
 
   useEffect(() => {
     // Calcular detalles del préstamo cuando cambian los valores
-    if (formData.monto_prestado && formData.interes_porcentaje && formData.numero_meses) {
+    const tieneMonto = formData.monto_prestado && !isNaN(parseFloat(formData.monto_prestado))
+    const tieneInteres = formData.interes_porcentaje && !isNaN(parseFloat(formData.interes_porcentaje))
+    const tieneDuracion = (formData.tipo_duracion === 'meses' && formData.numero_meses && !isNaN(parseFloat(formData.numero_meses))) ||
+                          (formData.tipo_duracion === 'dias' && formData.numero_dias && !isNaN(parseFloat(formData.numero_dias)))
+    
+    if (tieneMonto && tieneInteres && tieneDuracion) {
       const monto = parseFloat(formData.monto_prestado)
       const interes = parseFloat(formData.interes_porcentaje)
-      const meses = parseFloat(formData.numero_meses)
+      const meses = formData.tipo_duracion === 'meses' ? parseFloat(formData.numero_meses) : undefined
+      const dias = formData.tipo_duracion === 'dias' ? parseFloat(formData.numero_dias) : undefined
 
-      if (!isNaN(monto) && !isNaN(interes) && !isNaN(meses) && meses > 0) {
-        // Calcular número de cuotas basado en meses y frecuencia
-        const numeroCuotas = calcularNumeroCuotas(meses, formData.frecuencia_pago)
+      if (!isNaN(monto) && !isNaN(interes) && (meses !== undefined && meses > 0 || dias !== undefined && dias > 0)) {
+        // Calcular número de cuotas basado en meses/días y frecuencia
+        const numeroCuotas = calcularNumeroCuotas(meses, formData.frecuencia_pago, dias)
         
         const details = calculateLoanDetails({
           monto,
           interesPorcentaje: interes,
           numeroMeses: meses,
+          numeroDias: dias,
           frecuenciaPago: formData.frecuencia_pago,
           tipoInteres: formData.tipo_interes,
           tipoPrestamo: formData.tipo_prestamo,
@@ -129,7 +138,15 @@ export default function PrestamosPage() {
         // Calcular fecha_fin para modo solo intereses
         if (formData.tipo_prestamo === 'solo_intereses' && formData.fecha_inicio) {
           const fechaInicio = new Date(formData.fecha_inicio)
-          const fechaFin = addMonths(fechaInicio, meses)
+          let fechaFin: Date
+          
+          if (formData.tipo_duracion === 'dias' && dias) {
+            fechaFin = addDays(fechaInicio, dias)
+          } else if (meses) {
+            fechaFin = addMonths(fechaInicio, meses)
+          } else {
+            fechaFin = fechaInicio
+          }
           
           setFormData(prev => ({
             ...prev,
@@ -138,7 +155,7 @@ export default function PrestamosPage() {
         }
       }
     }
-  }, [formData.monto_prestado, formData.interes_porcentaje, formData.numero_meses, formData.tipo_interes, formData.tipo_prestamo, formData.frecuencia_pago, formData.fecha_inicio, formData.tipo_calculo_interes])
+  }, [formData.monto_prestado, formData.interes_porcentaje, formData.numero_meses, formData.numero_dias, formData.tipo_duracion, formData.tipo_interes, formData.tipo_prestamo, formData.frecuencia_pago, formData.fecha_inicio, formData.tipo_calculo_interes])
 
   const loadData = async () => {
     setLoading(true)
@@ -202,24 +219,26 @@ export default function PrestamosPage() {
 
     const monto = parseFloat(formData.monto_prestado)
     const interes = parseFloat(formData.interes_porcentaje)
-    const meses = parseFloat(formData.numero_meses)
+    const meses = formData.tipo_duracion === 'meses' ? parseFloat(formData.numero_meses) : undefined
+    const dias = formData.tipo_duracion === 'dias' ? parseFloat(formData.numero_dias) : undefined
 
-    if (isNaN(meses) || meses <= 0) {
+    if ((meses === undefined || isNaN(meses) || meses <= 0) && (dias === undefined || isNaN(dias) || dias <= 0)) {
       toast({
         title: 'Error de validación',
-        description: 'La duración en meses debe ser mayor a 0',
+        description: `La duración en ${formData.tipo_duracion === 'meses' ? 'meses' : 'días'} debe ser mayor a 0`,
         variant: 'destructive',
       })
       return
     }
 
-    // Calcular número de cuotas basado en meses y frecuencia
-    const cuotas = calcularNumeroCuotas(meses, formData.frecuencia_pago)
+    // Calcular número de cuotas basado en meses/días y frecuencia
+    const cuotas = calcularNumeroCuotas(meses, formData.frecuencia_pago, dias)
 
     const { montoTotal, montoCuota } = calculateLoanDetails({
       monto,
       interesPorcentaje: interes,
       numeroMeses: meses,
+      numeroDias: dias,
       frecuenciaPago: formData.frecuencia_pago,
       tipoInteres: formData.tipo_interes,
       tipoPrestamo: formData.tipo_prestamo,
@@ -230,7 +249,16 @@ export default function PrestamosPage() {
     let fechaFin: string | null = null
     if (formData.tipo_prestamo === 'solo_intereses') {
       const fechaInicio = new Date(formData.fecha_inicio)
-      const fechaFinDate = addMonths(fechaInicio, meses)
+      let fechaFinDate: Date
+      
+      if (formData.tipo_duracion === 'dias' && dias) {
+        fechaFinDate = addDays(fechaInicio, dias)
+      } else if (meses) {
+        fechaFinDate = addMonths(fechaInicio, meses)
+      } else {
+        fechaFinDate = fechaInicio
+      }
+      
       fechaFin = format(fechaFinDate, 'yyyy-MM-dd')
     }
 
@@ -347,9 +375,15 @@ export default function PrestamosPage() {
     }
 
     addPrestamo(prestamo)
+    const duracionTexto = formData.tipo_duracion === 'meses' && meses
+      ? `${meses} mes${meses > 1 ? 'es' : ''}`
+      : formData.tipo_duracion === 'dias' && dias
+      ? `${dias} día${dias > 1 ? 's' : ''}`
+      : ''
+    
     toast({
       title: 'Éxito',
-      description: `Préstamo creado con ${cuotas} cuotas ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}${cuotas > 1 ? 'es' : ''} (${meses} mes${meses > 1 ? 'es' : ''})`,
+      description: `Préstamo creado con ${cuotas} cuotas ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}${cuotas > 1 ? 'es' : ''} ${duracionTexto ? `(${duracionTexto})` : ''}`,
     })
     
     // Recargar límites después de agregar
@@ -385,7 +419,9 @@ export default function PrestamosPage() {
       cliente_id: '',
       monto_prestado: '',
       interes_porcentaje: '',
+      tipo_duracion: 'meses',
       numero_meses: '',
+      numero_dias: '',
       fecha_inicio: format(new Date(), 'yyyy-MM-dd'),
       fecha_fin: '',
       frecuencia_pago: 'mensual',
@@ -552,34 +588,78 @@ export default function PrestamosPage() {
                   />
                   <p className="text-xs text-gray-500">
                     {formData.tipo_calculo_interes === 'global' 
-                      ? `Interés fijo del ${formData.interes_porcentaje || 'X'}% sobre el capital total (independiente del tiempo). Se divide en ${formData.numero_meses ? calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago) : 'N'} cuotas ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}${formData.numero_meses ? (calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago) > 1 ? 'es' : '') : ''}`
-                      : `Interés MENSUAL que se multiplicará por ${formData.numero_meses || 'N'} mes${formData.numero_meses && parseFloat(formData.numero_meses) > 1 ? 'es' : ''}. Luego se divide en ${formData.numero_meses ? calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago) : 'N'} cuotas ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}${formData.numero_meses ? (calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago) > 1 ? 'es' : '') : ''}`}
+                      ? `Interés fijo del ${formData.interes_porcentaje || 'X'}% sobre el capital total (independiente del tiempo). Se divide en ${formData.tipo_duracion === 'meses' ? (formData.numero_meses ? calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago) : 'N') : (formData.numero_dias ? calcularNumeroCuotas(undefined, formData.frecuencia_pago, parseFloat(formData.numero_dias)) : 'N')} cuotas ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}${(formData.tipo_duracion === 'meses' && formData.numero_meses ? (calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago) > 1 ? 'es' : '') : (formData.tipo_duracion === 'dias' && formData.numero_dias ? (calcularNumeroCuotas(undefined, formData.frecuencia_pago, parseFloat(formData.numero_dias)) > 1 ? 'es' : '') : ''))}`
+                      : `Interés MENSUAL que se multiplicará por ${formData.tipo_duracion === 'meses' ? (formData.numero_meses || 'N') : (formData.numero_dias ? (parseFloat(formData.numero_dias) / 30).toFixed(1) : 'N')} mes${(formData.tipo_duracion === 'meses' && formData.numero_meses && parseFloat(formData.numero_meses) > 1) || (formData.tipo_duracion === 'dias' && formData.numero_dias && parseFloat(formData.numero_dias) > 30) ? 'es' : ''}. Luego se divide en ${formData.tipo_duracion === 'meses' ? (formData.numero_meses ? calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago) : 'N') : (formData.numero_dias ? calcularNumeroCuotas(undefined, formData.frecuencia_pago, parseFloat(formData.numero_dias)) : 'N')} cuotas ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}${(formData.tipo_duracion === 'meses' && formData.numero_meses ? (calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago) > 1 ? 'es' : '') : (formData.tipo_duracion === 'dias' && formData.numero_dias ? (calcularNumeroCuotas(undefined, formData.frecuencia_pago, parseFloat(formData.numero_dias)) > 1 ? 'es' : '') : ''))}`}
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="numero_meses">Duración del Préstamo (meses) *</Label>
-                  <Input
-                    id="numero_meses"
-                    type="number"
-                    step="0.5"
-                    min="0.5"
-                    value={formData.numero_meses}
-                    onChange={(e) =>
-                      setFormData({ ...formData, numero_meses: e.target.value })
+                  <Label>Tipo de Duración *</Label>
+                  <Select
+                    value={formData.tipo_duracion}
+                    onValueChange={(value: 'meses' | 'dias') =>
+                      setFormData({ ...formData, tipo_duracion: value, numero_meses: value === 'meses' ? formData.numero_meses : '', numero_dias: value === 'dias' ? formData.numero_dias : '' })
                     }
-                    required
-                  />
-                  <p className="text-xs text-gray-500">
-                    {formData.numero_meses && formData.frecuencia_pago ? (
-                      <>
-                        Número de cuotas calculado: <strong>{calcularNumeroCuotas(parseFloat(formData.numero_meses) || 0, formData.frecuencia_pago)}</strong> cuotas {getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}{calcularNumeroCuotas(parseFloat(formData.numero_meses) || 0, formData.frecuencia_pago) > 1 ? 'es' : ''}
-                      </>
-                    ) : (
-                      'El número de cuotas se calculará automáticamente según la duración y frecuencia'
-                    )}
-                  </p>
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="meses">Meses</SelectItem>
+                      <SelectItem value="dias">Días</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+
+                {formData.tipo_duracion === 'meses' ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="numero_meses">Duración del Préstamo (meses) *</Label>
+                    <Input
+                      id="numero_meses"
+                      type="number"
+                      step="0.5"
+                      min="0.5"
+                      value={formData.numero_meses}
+                      onChange={(e) =>
+                        setFormData({ ...formData, numero_meses: e.target.value })
+                      }
+                      required
+                    />
+                    <p className="text-xs text-gray-500">
+                      {formData.numero_meses && formData.frecuencia_pago ? (
+                        <>
+                          Número de cuotas calculado: <strong>{calcularNumeroCuotas(parseFloat(formData.numero_meses) || 0, formData.frecuencia_pago)}</strong> cuotas {getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}{calcularNumeroCuotas(parseFloat(formData.numero_meses) || 0, formData.frecuencia_pago) > 1 ? 'es' : ''}
+                        </>
+                      ) : (
+                        'El número de cuotas se calculará automáticamente según la duración y frecuencia'
+                      )}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="numero_dias">Duración del Préstamo (días) *</Label>
+                    <Input
+                      id="numero_dias"
+                      type="number"
+                      step="1"
+                      min="1"
+                      value={formData.numero_dias}
+                      onChange={(e) =>
+                        setFormData({ ...formData, numero_dias: e.target.value })
+                      }
+                      required
+                    />
+                    <p className="text-xs text-gray-500">
+                      {formData.numero_dias && formData.frecuencia_pago ? (
+                        <>
+                          Número de cuotas calculado: <strong>{calcularNumeroCuotas(undefined, formData.frecuencia_pago, parseFloat(formData.numero_dias) || 0)}</strong> cuotas {getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}{calcularNumeroCuotas(undefined, formData.frecuencia_pago, parseFloat(formData.numero_dias) || 0) > 1 ? 'es' : ''}
+                        </>
+                      ) : (
+                        'El número de cuotas se calculará automáticamente según la duración y frecuencia'
+                      )}
+                    </p>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="fecha_inicio">Fecha de Inicio *</Label>
@@ -690,7 +770,9 @@ export default function PrestamosPage() {
                           <p className="text-xs text-gray-500 mt-1">
                             {formData.tipo_calculo_interes === 'global' 
                               ? `${formData.interes_porcentaje}% global sobre capital`
-                              : `${formData.interes_porcentaje}% mensual × ${formData.numero_meses || 'N'} mes${formData.numero_meses && parseFloat(formData.numero_meses) > 1 ? 'es' : ''}`}
+                              : formData.tipo_duracion === 'meses'
+                                ? `${formData.interes_porcentaje}% mensual × ${formData.numero_meses || 'N'} mes${formData.numero_meses && parseFloat(formData.numero_meses) > 1 ? 'es' : ''}`
+                                : `${formData.interes_porcentaje}% mensual × ${formData.numero_dias ? (parseFloat(formData.numero_dias) / 30).toFixed(1) : 'N'} mes${formData.numero_dias && parseFloat(formData.numero_dias) > 30 ? 'es' : ''} (${formData.numero_dias || 'N'} días)`}
                           </p>
                         </div>
                         <div>
@@ -704,11 +786,13 @@ export default function PrestamosPage() {
                           <p className="font-semibold text-blue-900">
                             {formatCurrency(calculatedDetails.montoCuota, config.currency)}
                           </p>
-                          {formData.numero_meses && (
+                          {(formData.tipo_duracion === 'meses' && formData.numero_meses) || (formData.tipo_duracion === 'dias' && formData.numero_dias) ? (
                             <p className="text-xs text-gray-500 mt-1">
-                              {calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago)} cuotas en total
+                              {formData.tipo_duracion === 'meses'
+                                ? calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago)
+                                : calcularNumeroCuotas(undefined, formData.frecuencia_pago, parseFloat(formData.numero_dias))} cuotas en total
                             </p>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                       <div className="pt-2 border-t border-blue-200 space-y-1">
@@ -716,12 +800,18 @@ export default function PrestamosPage() {
                           <strong>Cálculo:</strong> {
                             formData.tipo_calculo_interes === 'global'
                               ? `$${parseFloat(formData.monto_prestado || '0').toFixed(2)} + ($${parseFloat(formData.monto_prestado || '0').toFixed(2)} × ${formData.interes_porcentaje}%) = ${formatCurrency(calculatedDetails.montoTotal, config.currency)}`
-                              : `$${parseFloat(formData.monto_prestado || '0').toFixed(2)} + ($${parseFloat(formData.monto_prestado || '0').toFixed(2)} × ${formData.interes_porcentaje}% mensual × ${formData.numero_meses || 'N'} mes${formData.numero_meses && parseFloat(formData.numero_meses) > 1 ? 'es' : ''}) = ${formatCurrency(calculatedDetails.montoTotal, config.currency)}`
+                              : formData.tipo_duracion === 'meses'
+                                ? `$${parseFloat(formData.monto_prestado || '0').toFixed(2)} + ($${parseFloat(formData.monto_prestado || '0').toFixed(2)} × ${formData.interes_porcentaje}% mensual × ${formData.numero_meses || 'N'} mes${formData.numero_meses && parseFloat(formData.numero_meses) > 1 ? 'es' : ''}) = ${formatCurrency(calculatedDetails.montoTotal, config.currency)}`
+                                : `$${parseFloat(formData.monto_prestado || '0').toFixed(2)} + ($${parseFloat(formData.monto_prestado || '0').toFixed(2)} × ${formData.interes_porcentaje}% mensual × ${formData.numero_dias ? (parseFloat(formData.numero_dias) / 30).toFixed(1) : 'N'} mes${formData.numero_dias && parseFloat(formData.numero_dias) > 30 ? 'es' : ''}) = ${formatCurrency(calculatedDetails.montoTotal, config.currency)}`
                           }
                         </p>
-                        {formData.numero_meses && (
+                        {((formData.tipo_duracion === 'meses' && formData.numero_meses) || (formData.tipo_duracion === 'dias' && formData.numero_dias)) && (
                           <p className="text-xs text-gray-500">
-                            <strong>Cuotas:</strong> {calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago)} cuotas {getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}{calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago) > 1 ? 'es' : ''} de {formatCurrency(calculatedDetails.montoCuota, config.currency)} cada una
+                            <strong>Cuotas:</strong> {formData.tipo_duracion === 'meses'
+                              ? calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago)
+                              : calcularNumeroCuotas(undefined, formData.frecuencia_pago, parseFloat(formData.numero_dias))} cuotas {getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}{(formData.tipo_duracion === 'meses'
+                              ? calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago)
+                              : calcularNumeroCuotas(undefined, formData.frecuencia_pago, parseFloat(formData.numero_dias))) > 1 ? 'es' : ''} de {formatCurrency(calculatedDetails.montoCuota, config.currency)} cada una
                           </p>
                         )}
                       </div>

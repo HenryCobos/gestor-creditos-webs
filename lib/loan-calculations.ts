@@ -10,7 +10,8 @@ export type TipoCalculoInteres = 'por_periodo' | 'global' // Por período (20% m
 export interface CalculoPrestamoParams {
   monto: number
   interesPorcentaje: number // Interés MENSUAL (siempre mensual)
-  numeroMeses: number // Duración del préstamo en MESES
+  numeroMeses?: number // Duración del préstamo en MESES (opcional si se usa numeroDias)
+  numeroDias?: number // Duración del préstamo en DÍAS (opcional si se usa numeroMeses)
   frecuenciaPago: FrecuenciaPago // Frecuencia de pago (diario, semanal, quincenal, mensual)
   tipoInteres?: TipoInteres
   tipoPrestamo?: TipoPrestamo
@@ -26,27 +27,56 @@ export interface CalculoPrestamoResult {
 }
 
 /**
- * Calcula el número de cuotas según la duración en meses y la frecuencia de pago
+ * Calcula el número de cuotas según la duración (meses o días) y la frecuencia de pago
  */
 export function calcularNumeroCuotas(
-  numeroMeses: number,
-  frecuenciaPago: FrecuenciaPago
+  numeroMeses: number | undefined,
+  frecuenciaPago: FrecuenciaPago,
+  numeroDias?: number | undefined
 ): number {
-  switch (frecuenciaPago) {
-    case 'diario':
-      // Aproximadamente 30 días por mes
-      return Math.round(numeroMeses * 30)
-    case 'semanal':
-      // Aproximadamente 4 semanas por mes
-      return numeroMeses * 4
-    case 'quincenal':
-      // 2 quincenas por mes
-      return numeroMeses * 2
-    case 'mensual':
-      return numeroMeses
-    default:
-      return numeroMeses
+  // Si se especifica número de días, calcular cuotas directamente según frecuencia
+  if (numeroDias !== undefined && numeroDias > 0) {
+    switch (frecuenciaPago) {
+      case 'diario':
+        return numeroDias // 1 día = 1 cuota diaria
+      case 'semanal':
+        return Math.round(numeroDias / 7) // Dividir días entre 7
+      case 'quincenal':
+        return Math.round(numeroDias / 15) // Dividir días entre 15
+      case 'mensual':
+        return Math.round(numeroDias / 30) // Dividir días entre 30
+      default:
+        return numeroDias
+    }
   }
+  
+  // Si se usa meses (comportamiento original)
+  if (numeroMeses !== undefined && numeroMeses > 0) {
+    switch (frecuenciaPago) {
+      case 'diario':
+        // Aproximadamente 30 días por mes
+        return Math.round(numeroMeses * 30)
+      case 'semanal':
+        // Aproximadamente 4 semanas por mes
+        return numeroMeses * 4
+      case 'quincenal':
+        // 2 quincenas por mes
+        return numeroMeses * 2
+      case 'mensual':
+        return numeroMeses
+      default:
+        return numeroMeses
+    }
+  }
+  
+  return 0
+}
+
+/**
+ * Convierte días a meses para cálculos de interés (aproximación: 30 días = 1 mes)
+ */
+export function convertirDiasAMeses(numeroDias: number): number {
+  return numeroDias / 30
 }
 
 /**
@@ -61,20 +91,27 @@ export function calculateLoanDetails(
     monto, 
     interesPorcentaje, 
     numeroMeses,
+    numeroDias,
     frecuenciaPago,
     tipoInteres = 'simple',
     tipoPrestamo = 'amortizacion'
   } = params
   
-  // Calcular número de cuotas basado en meses y frecuencia
-  const numeroCuotas = calcularNumeroCuotas(numeroMeses, frecuenciaPago)
+  // Calcular número de cuotas basado en meses/días y frecuencia
+  const numeroCuotas = calcularNumeroCuotas(numeroMeses, frecuenciaPago, numeroDias)
+  
+  // Determinar número de meses equivalentes para el cálculo de interés
+  // Si se especifica días, convertir a meses (30 días = 1 mes)
+  const mesesParaInteres = numeroDias !== undefined && numeroDias > 0
+    ? convertirDiasAMeses(numeroDias)
+    : (numeroMeses || 0)
   
   // Modo "Solo Intereses": Solo se paga interés mensual, capital al final
   if (tipoPrestamo === 'solo_intereses') {
     // El interés se calcula mensualmente
     const tasaMensual = interesPorcentaje / 100
     const interesPorMes = monto * tasaMensual
-    const interesTotal = interesPorMes * numeroMeses // Interés por número de MESES
+    const interesTotal = interesPorMes * mesesParaInteres // Interés por número de MESES equivalentes
     const montoTotal = monto + interesTotal
     
     // El interés mensual se divide según la frecuencia de pago
@@ -102,30 +139,31 @@ export function calculateLoanDetails(
   
   if (tipoCalculo === 'global') {
     // Interés GLOBAL: Se aplica sobre el capital total, independiente del tiempo
-    // Ejemplo: $1000 al 20% global = $200 de interés (sin importar cuántos meses)
+    // Ejemplo: $1000 al 20% global = $200 de interés (sin importar cuántos meses/días)
     const tasaGlobal = interesPorcentaje / 100
     interes = monto * tasaGlobal
     montoTotal = monto + interes
   } else {
-    // Interés MENSUAL: Se multiplica por número de MESES
+    // Interés MENSUAL: Se multiplica por número de MESES equivalentes
     // Ejemplo: $1000 al 20% mensual por 6 meses = $1000 * 20% * 6 = $1200 de interés
+    // Ejemplo: $1000 al 20% mensual por 24 días (0.8 meses) = $1000 * 20% * 0.8 = $160 de interés
     if (tipoInteres === 'simple') {
       // Interés simple: I = P * r * t
-      // r = tasa MENSUAL, t = número de MESES
+      // r = tasa MENSUAL, t = número de MESES equivalentes
       const tasaMensual = interesPorcentaje / 100
-      interes = monto * tasaMensual * numeroMeses
+      interes = monto * tasaMensual * mesesParaInteres
       montoTotal = monto + interes
     } else {
       // Interés compuesto: A = P(1 + r)^n
-      // r = tasa MENSUAL, n = número de MESES
+      // r = tasa MENSUAL, n = número de MESES equivalentes
       const tasaMensual = interesPorcentaje / 100
-      montoTotal = monto * Math.pow(1 + tasaMensual, numeroMeses)
+      montoTotal = monto * Math.pow(1 + tasaMensual, mesesParaInteres)
       interes = montoTotal - monto
     }
   }
   
   // Dividir el monto total entre el número de cuotas según la frecuencia de pago
-  const montoCuota = montoTotal / numeroCuotas
+  const montoCuota = numeroCuotas > 0 ? montoTotal / numeroCuotas : 0
   
   return {
     interes: Number(interes.toFixed(2)),
