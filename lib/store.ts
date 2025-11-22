@@ -13,6 +13,8 @@ export interface Cliente {
   updated_at: string
 }
 
+export type TipoPrestamo = 'amortizacion' | 'solo_intereses' | 'empeño'
+
 export interface Prestamo {
   id: string
   user_id: string
@@ -21,13 +23,36 @@ export interface Prestamo {
   interes_porcentaje: number
   numero_cuotas: number
   fecha_inicio: string
+  fecha_fin?: string | null
   estado: 'activo' | 'pagado' | 'retrasado'
   monto_total: number
   frecuencia_pago: 'diario' | 'semanal' | 'quincenal' | 'mensual'
   tipo_interes: 'simple' | 'compuesto'
+  tipo_prestamo: TipoPrestamo
+  dias_gracia?: number | null
   created_at: string
   updated_at: string
   cliente?: Cliente
+  garantias?: Garantia[]
+}
+
+export interface Garantia {
+  id: string
+  user_id: string
+  prestamo_id: string
+  descripcion: string
+  categoria: string | null
+  valor_estimado: number | null
+  foto_url: string | null
+  fecha_vencimiento: string | null
+  estado: 'activo' | 'liquidado' | 'renovado' | 'recuperado'
+  fecha_liquidacion: string | null
+  monto_liquidacion: number | null
+  fecha_renovacion: string | null
+  numero_renovaciones: number
+  observaciones: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface Cuota {

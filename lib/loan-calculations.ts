@@ -4,18 +4,22 @@ import { addDays, addWeeks, addMonths } from 'date-fns'
 
 export type FrecuenciaPago = 'diario' | 'semanal' | 'quincenal' | 'mensual'
 export type TipoInteres = 'simple' | 'compuesto'
+export type TipoPrestamo = 'amortizacion' | 'solo_intereses' | 'empeño'
 
 export interface CalculoPrestamoParams {
   monto: number
   interesPorcentaje: number
   numeroCuotas: number
   tipoInteres?: TipoInteres
+  tipoPrestamo?: TipoPrestamo
 }
 
 export interface CalculoPrestamoResult {
   interes: number
   montoTotal: number
   montoCuota: number
+  montoInteresCuota?: number // Solo para modo "solo intereses"
+  montoCapitalFinal?: number // Capital a pagar al final en "solo intereses"
 }
 
 /**
@@ -24,8 +28,39 @@ export interface CalculoPrestamoResult {
 export function calculateLoanDetails(
   params: CalculoPrestamoParams
 ): CalculoPrestamoResult {
-  const { monto, interesPorcentaje, numeroCuotas, tipoInteres = 'simple' } = params
+  const { 
+    monto, 
+    interesPorcentaje, 
+    numeroCuotas, 
+    tipoInteres = 'simple',
+    tipoPrestamo = 'amortizacion'
+  } = params
   
+  // Modo "Solo Intereses": Solo se paga interés mensual, capital al final
+  if (tipoPrestamo === 'solo_intereses') {
+    const tasaMensual = interesPorcentaje / 100
+    const montoInteresCuota = monto * tasaMensual
+    const interesTotal = montoInteresCuota * numeroCuotas
+    const montoTotal = monto + interesTotal
+    
+    return {
+      interes: Number(interesTotal.toFixed(2)),
+      montoTotal: Number(montoTotal.toFixed(2)),
+      montoCuota: Number(montoInteresCuota.toFixed(2)), // Solo el interés
+      montoInteresCuota: Number(montoInteresCuota.toFixed(2)),
+      montoCapitalFinal: monto, // Capital a devolver al final
+    }
+  }
+  
+  // Modo "Empeño": Similar a amortización pero con garantía
+  // Por ahora usa la misma lógica de amortización
+  if (tipoPrestamo === 'empeño') {
+    // En empeños, normalmente se paga interés periódico y se puede renovar
+    // Por defecto, calculamos como amortización normal
+    // El usuario puede ajustar según su modelo de negocio
+  }
+  
+  // Modo "Amortización" (por defecto): Pago de capital + interés
   let interes: number
   let montoTotal: number
   

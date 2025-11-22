@@ -44,9 +44,11 @@ import {
   getNombreFrecuencia,
   validarNumeroCuotas,
   type FrecuenciaPago,
-  type TipoInteres 
+  type TipoInteres,
+  type TipoPrestamo
 } from '@/lib/loan-calculations'
-import { format } from 'date-fns'
+import { format, addMonths, addWeeks, addDays } from 'date-fns'
+import type { Garantia } from '@/lib/store'
 
 export default function PrestamosPage() {
   const [open, setOpen] = useState(false)
@@ -66,9 +68,19 @@ export default function PrestamosPage() {
     interes_porcentaje: '',
     numero_cuotas: '',
     fecha_inicio: format(new Date(), 'yyyy-MM-dd'),
+    fecha_fin: '',
     frecuencia_pago: 'mensual' as FrecuenciaPago,
     tipo_interes: 'simple' as TipoInteres,
+    tipo_prestamo: 'amortizacion' as TipoPrestamo,
   })
+
+  const [garantias, setGarantias] = useState<Array<{
+    descripcion: string
+    categoria: string
+    valor_estimado: string
+    fecha_vencimiento: string
+    observaciones: string
+  }>>([])
 
   const [calculatedDetails, setCalculatedDetails] = useState({
     interes: 0,
@@ -103,11 +115,39 @@ export default function PrestamosPage() {
           interesPorcentaje: interes,
           numeroCuotas: cuotas,
           tipoInteres: formData.tipo_interes,
+          tipoPrestamo: formData.tipo_prestamo,
         })
         setCalculatedDetails(details)
+        
+        // Calcular fecha_fin para modo solo intereses
+        if (formData.tipo_prestamo === 'solo_intereses' && formData.fecha_inicio) {
+          const fechaInicio = new Date(formData.fecha_inicio)
+          let fechaFin: Date
+          
+          switch (formData.frecuencia_pago) {
+            case 'diario':
+              fechaFin = addDays(fechaInicio, cuotas)
+              break
+            case 'semanal':
+              fechaFin = addWeeks(fechaInicio, cuotas)
+              break
+            case 'quincenal':
+              fechaFin = addWeeks(fechaInicio, cuotas * 2)
+              break
+            case 'mensual':
+            default:
+              fechaFin = addMonths(fechaInicio, cuotas)
+              break
+          }
+          
+          setFormData(prev => ({
+            ...prev,
+            fecha_fin: format(fechaFin, 'yyyy-MM-dd')
+          }))
+        }
       }
     }
-  }, [formData.monto_prestado, formData.interes_porcentaje, formData.numero_cuotas, formData.tipo_interes])
+  }, [formData.monto_prestado, formData.interes_porcentaje, formData.numero_cuotas, formData.tipo_interes, formData.tipo_prestamo, formData.frecuencia_pago, formData.fecha_inicio])
 
   const loadData = async () => {
     setLoading(true)
@@ -189,7 +229,32 @@ export default function PrestamosPage() {
       interesPorcentaje: interes,
       numeroCuotas: cuotas,
       tipoInteres: formData.tipo_interes,
+      tipoPrestamo: formData.tipo_prestamo,
     })
+
+    // Calcular fecha_fin si es modo solo intereses
+    let fechaFin: string | null = null
+    if (formData.tipo_prestamo === 'solo_intereses') {
+      const fechaInicio = new Date(formData.fecha_inicio)
+      let fechaFinDate: Date
+      
+      switch (formData.frecuencia_pago) {
+        case 'diario':
+          fechaFinDate = addDays(fechaInicio, cuotas)
+          break
+        case 'semanal':
+          fechaFinDate = addWeeks(fechaInicio, cuotas)
+          break
+        case 'quincenal':
+          fechaFinDate = addWeeks(fechaInicio, cuotas * 2)
+          break
+        case 'mensual':
+        default:
+          fechaFinDate = addMonths(fechaInicio, cuotas)
+          break
+      }
+      fechaFin = format(fechaFinDate, 'yyyy-MM-dd')
+    }
 
     // Crear préstamo
     const { data: prestamo, error: prestamoError } = await supabase
@@ -201,9 +266,11 @@ export default function PrestamosPage() {
         interes_porcentaje: interes,
         numero_cuotas: cuotas,
         fecha_inicio: formData.fecha_inicio,
+        fecha_fin: fechaFin,
         monto_total: montoTotal,
         frecuencia_pago: formData.frecuencia_pago,
         tipo_interes: formData.tipo_interes,
+        tipo_prestamo: formData.tipo_prestamo,
         estado: 'activo',
       }])
       .select(`
@@ -221,9 +288,46 @@ export default function PrestamosPage() {
       return
     }
 
+    // Crear garantías si es empeño
+    if (formData.tipo_prestamo === 'empeño' && garantias.length > 0) {
+      const garantiasToCreate = garantias
+        .filter(g => g.descripcion.trim() !== '')
+        .map(garantia => ({
+          user_id: user.id,
+          prestamo_id: prestamo.id,
+          descripcion: garantia.descripcion,
+          categoria: garantia.categoria || null,
+          valor_estimado: garantia.valor_estimado ? parseFloat(garantia.valor_estimado) : null,
+          fecha_vencimiento: garantia.fecha_vencimiento || null,
+          observaciones: garantia.observaciones || null,
+          estado: 'activo',
+          numero_renovaciones: 0,
+        }))
+
+      if (garantiasToCreate.length > 0) {
+        const { error: garantiasError } = await supabase
+          .from('garantias')
+          .insert(garantiasToCreate)
+
+        if (garantiasError) {
+          toast({
+            title: 'Advertencia',
+            description: 'Préstamo creado pero no se pudieron crear las garantías',
+            variant: 'destructive',
+          })
+        }
+      }
+    }
+
     // Crear cuotas automáticamente con la frecuencia seleccionada
     const cuotasToCreate = []
     const fechaInicio = new Date(formData.fecha_inicio)
+
+    // Para modo "solo intereses", cada cuota es solo el interés
+    // Para modo "amortización" o "empeño", cada cuota incluye capital + interés
+    const montoPorCuota = formData.tipo_prestamo === 'solo_intereses'
+      ? (monto * interes / 100) // Solo el interés mensual
+      : montoCuota // Capital + interés
 
     for (let i = 1; i <= cuotas; i++) {
       const fechaVencimiento = calcularSiguienteFechaPago(
@@ -231,11 +335,18 @@ export default function PrestamosPage() {
         i,
         formData.frecuencia_pago
       )
+      
+      // Última cuota en modo "solo intereses" incluye el capital
+      const esUltimaCuota = i === cuotas
+      const montoCuotaFinal = formData.tipo_prestamo === 'solo_intereses' && esUltimaCuota
+        ? montoPorCuota + monto // Interés + capital
+        : montoPorCuota
+
       cuotasToCreate.push({
         user_id: user.id,
         prestamo_id: prestamo.id,
         numero_cuota: i,
-        monto_cuota: montoCuota,
+        monto_cuota: montoCuotaFinal,
         fecha_vencimiento: format(fechaVencimiento, 'yyyy-MM-dd'),
         estado: 'pendiente',
         monto_pagado: 0,
@@ -298,15 +409,38 @@ export default function PrestamosPage() {
       interes_porcentaje: '',
       numero_cuotas: '',
       fecha_inicio: format(new Date(), 'yyyy-MM-dd'),
+      fecha_fin: '',
       frecuencia_pago: 'mensual',
       tipo_interes: 'simple',
+      tipo_prestamo: 'amortizacion',
     })
+    setGarantias([])
     setCalculatedDetails({
       interes: 0,
       montoTotal: 0,
       montoCuota: 0,
     })
     setOpen(false)
+  }
+
+  const addGarantia = () => {
+    setGarantias([...garantias, {
+      descripcion: '',
+      categoria: '',
+      valor_estimado: '',
+      fecha_vencimiento: '',
+      observaciones: '',
+    }])
+  }
+
+  const removeGarantia = (index: number) => {
+    setGarantias(garantias.filter((_, i) => i !== index))
+  }
+
+  const updateGarantia = (index: number, field: string, value: string) => {
+    const updated = [...garantias]
+    updated[index] = { ...updated[index], [field]: value }
+    setGarantias(updated)
   }
 
   return (
@@ -335,6 +469,29 @@ export default function PrestamosPage() {
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2 space-y-2">
+                  <Label htmlFor="tipo_prestamo">Tipo de Préstamo *</Label>
+                  <Select
+                    value={formData.tipo_prestamo}
+                    onValueChange={(value) => {
+                      setFormData({ ...formData, tipo_prestamo: value as TipoPrestamo })
+                      if (value !== 'empeño') {
+                        setGarantias([])
+                      }
+                    }}
+                    required
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="amortizacion">Amortización (Capital + Interés)</SelectItem>
+                      <SelectItem value="solo_intereses">Solo Intereses (Capital al final)</SelectItem>
+                      <SelectItem value="empeño">Empeño (Con garantías)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="col-span-2 space-y-2">
                   <Label htmlFor="cliente_id">Cliente *</Label>
                   <Select
@@ -415,6 +572,20 @@ export default function PrestamosPage() {
                   />
                 </div>
 
+                {formData.tipo_prestamo === 'solo_intereses' && formData.fecha_fin && (
+                  <div className="space-y-2">
+                    <Label htmlFor="fecha_fin">Fecha de Vencimiento (Capital)</Label>
+                    <Input
+                      id="fecha_fin"
+                      type="date"
+                      value={formData.fecha_fin}
+                      disabled
+                      className="bg-gray-100"
+                    />
+                    <p className="text-xs text-gray-500">Calculada automáticamente</p>
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <Label htmlFor="frecuencia_pago">Frecuencia de Pago *</Label>
                   <Select
@@ -459,26 +630,160 @@ export default function PrestamosPage() {
                   <h4 className="font-semibold text-sm text-blue-900">
                     Resumen del Préstamo
                   </h4>
-                  <div className="grid grid-cols-3 gap-4 text-sm">
-                    <div>
-                      <p className="text-gray-600">Interés Total</p>
-                      <p className="font-semibold text-blue-900">
-                        {formatCurrency(calculatedDetails.interes, config.currency)}
-                      </p>
+                  {formData.tipo_prestamo === 'solo_intereses' ? (
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-gray-600">Interés por Cuota</p>
+                        <p className="font-semibold text-blue-900">
+                          {formatCurrency(calculatedDetails.montoCuota || 0, config.currency)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Capital a Pagar al Final</p>
+                        <p className="font-semibold text-blue-900">
+                          {formatCurrency(parseFloat(formData.monto_prestado || '0'), config.currency)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Interés Total</p>
+                        <p className="font-semibold text-blue-900">
+                          {formatCurrency(calculatedDetails.interes, config.currency)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Monto Total</p>
+                        <p className="font-semibold text-blue-900">
+                          {formatCurrency(calculatedDetails.montoTotal, config.currency)}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-gray-600">Monto Total</p>
-                      <p className="font-semibold text-blue-900">
-                        {formatCurrency(calculatedDetails.montoTotal, config.currency)}
-                      </p>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <p className="text-gray-600">Interés Total</p>
+                        <p className="font-semibold text-blue-900">
+                          {formatCurrency(calculatedDetails.interes, config.currency)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Monto Total</p>
+                        <p className="font-semibold text-blue-900">
+                          {formatCurrency(calculatedDetails.montoTotal, config.currency)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Cuota {getNombreFrecuencia(formData.frecuencia_pago)}</p>
+                        <p className="font-semibold text-blue-900">
+                          {formatCurrency(calculatedDetails.montoCuota, config.currency)}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-gray-600">Cuota {getNombreFrecuencia(formData.frecuencia_pago)}</p>
-                      <p className="font-semibold text-blue-900">
-                        {formatCurrency(calculatedDetails.montoCuota, config.currency)}
-                      </p>
-                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Sección de Garantías para Empeños */}
+              {formData.tipo_prestamo === 'empeño' && (
+                <div className="space-y-3 border-t pt-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-base font-semibold">Garantías/Colaterales</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addGarantia}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Agregar Garantía
+                    </Button>
                   </div>
+                  
+                  {garantias.length === 0 ? (
+                    <p className="text-sm text-gray-500 italic">
+                      Agrega al menos una garantía para este empeño
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {garantias.map((garantia, index) => (
+                        <div key={index} className="border rounded-lg p-4 space-y-3 bg-gray-50">
+                          <div className="flex items-center justify-between">
+                            <h5 className="font-medium text-sm">Garantía {index + 1}</h5>
+                            {garantias.length > 1 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeGarantia(index)}
+                              >
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                              </Button>
+                            )}
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="col-span-2">
+                              <Label>Descripción *</Label>
+                              <Input
+                                value={garantia.descripcion}
+                                onChange={(e) => updateGarantia(index, 'descripcion', e.target.value)}
+                                placeholder="Ej: Anillo de oro, iPhone 13, etc."
+                                required
+                              />
+                            </div>
+                            
+                            <div>
+                              <Label>Categoría</Label>
+                              <Select
+                                value={garantia.categoria}
+                                onValueChange={(value) => updateGarantia(index, 'categoria', value)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Seleccionar" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="joyas">Joyas</SelectItem>
+                                  <SelectItem value="electronica">Electrónica</SelectItem>
+                                  <SelectItem value="vehiculo">Vehículo</SelectItem>
+                                  <SelectItem value="electrodomesticos">Electrodomésticos</SelectItem>
+                                  <SelectItem value="herramientas">Herramientas</SelectItem>
+                                  <SelectItem value="otros">Otros</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            
+                            <div>
+                              <Label>Valor Estimado</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={garantia.valor_estimado}
+                                onChange={(e) => updateGarantia(index, 'valor_estimado', e.target.value)}
+                                placeholder="0.00"
+                              />
+                            </div>
+                            
+                            <div>
+                              <Label>Fecha de Vencimiento</Label>
+                              <Input
+                                type="date"
+                                value={garantia.fecha_vencimiento}
+                                onChange={(e) => updateGarantia(index, 'fecha_vencimiento', e.target.value)}
+                              />
+                            </div>
+                            
+                            <div className="col-span-2">
+                              <Label>Observaciones</Label>
+                              <Input
+                                value={garantia.observaciones}
+                                onChange={(e) => updateGarantia(index, 'observaciones', e.target.value)}
+                                placeholder="Notas adicionales..."
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -523,6 +828,7 @@ export default function PrestamosPage() {
                   <TableHead>Interés</TableHead>
                   <TableHead>Monto Total</TableHead>
                   <TableHead>Cuotas</TableHead>
+                  <TableHead>Tipo</TableHead>
                   <TableHead>Frecuencia</TableHead>
                   <TableHead>Fecha Inicio</TableHead>
                   <TableHead>Estado</TableHead>
@@ -541,6 +847,19 @@ export default function PrestamosPage() {
                       {formatCurrency(prestamo.monto_total, config.currency)}
                     </TableCell>
                     <TableCell>{prestamo.numero_cuotas}</TableCell>
+                    <TableCell>
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        prestamo.tipo_prestamo === 'empeño'
+                          ? 'bg-purple-100 text-purple-800'
+                          : prestamo.tipo_prestamo === 'solo_intereses'
+                          ? 'bg-orange-100 text-orange-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {prestamo.tipo_prestamo === 'empeño' ? 'Empeño' :
+                         prestamo.tipo_prestamo === 'solo_intereses' ? 'Solo Interés' :
+                         'Amortización'}
+                      </span>
+                    </TableCell>
                     <TableCell>
                       <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
                         {getNombreFrecuencia(prestamo.frecuencia_pago || 'mensual')}

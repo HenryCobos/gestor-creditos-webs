@@ -21,11 +21,12 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useToast } from '@/components/ui/use-toast'
-import { CheckCircle, DollarSign, Eye, X } from 'lucide-react'
+import { CheckCircle, DollarSign, Eye, X, FileText, Package } from 'lucide-react'
 import { formatCurrency, formatDate, isDateOverdue } from '@/lib/utils'
 import { format } from 'date-fns'
 import { useConfigStore } from '@/lib/config-store'
-import type { Prestamo } from '@/lib/store'
+import type { Prestamo, Garantia } from '@/lib/store'
+import { generarContratoPrestamo } from '@/lib/pdf-generator'
 
 interface Cuota {
   id: string
@@ -51,6 +52,7 @@ export function PrestamoDetailDialog({
   onUpdate,
 }: PrestamoDetailDialogProps) {
   const [cuotas, setCuotas] = useState<Cuota[]>([])
+  const [garantias, setGarantias] = useState<Garantia[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedCuota, setSelectedCuota] = useState<Cuota | null>(null)
   const [pagoDialogOpen, setPagoDialogOpen] = useState(false)
@@ -64,6 +66,9 @@ export function PrestamoDetailDialog({
   useEffect(() => {
     if (prestamo && open) {
       loadCuotas()
+      if (prestamo.tipo_prestamo === 'empeño') {
+        loadGarantias()
+      }
     }
   }, [prestamo, open])
 
@@ -94,6 +99,61 @@ export function PrestamoDetailDialog({
       setCuotas(cuotasActualizadas as Cuota[])
     }
     setLoading(false)
+  }
+
+  const loadGarantias = async () => {
+    if (!prestamo) return
+    
+    const { data, error } = await supabase
+      .from('garantias')
+      .select('*')
+      .eq('prestamo_id', prestamo.id)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error('Error cargando garantías:', error)
+    } else {
+      setGarantias(data || [])
+    }
+  }
+
+  const handleGenerarContrato = () => {
+    if (!prestamo || !prestamo.cliente) return
+
+    const garantiasInfo = garantias.map(g => ({
+      descripcion: g.descripcion,
+      categoria: g.categoria,
+      valor_estimado: g.valor_estimado,
+      fecha_vencimiento: g.fecha_vencimiento,
+    }))
+
+    generarContratoPrestamo(
+      {
+        nombre: prestamo.cliente.nombre,
+        dni: prestamo.cliente.dni,
+        telefono: prestamo.cliente.telefono || undefined,
+        direccion: prestamo.cliente.direccion || undefined,
+      },
+      {
+        id: prestamo.id,
+        monto_prestado: prestamo.monto_prestado,
+        interes_porcentaje: prestamo.interes_porcentaje,
+        numero_cuotas: prestamo.numero_cuotas,
+        fecha_inicio: prestamo.fecha_inicio,
+        fecha_fin: prestamo.fecha_fin || undefined,
+        monto_total: prestamo.monto_total,
+        frecuencia_pago: prestamo.frecuencia_pago,
+        tipo_interes: prestamo.tipo_interes,
+        tipo_prestamo: prestamo.tipo_prestamo,
+      },
+      config.companyName,
+      garantiasInfo.length > 0 ? garantiasInfo : undefined
+    )
+
+    toast({
+      title: 'Éxito',
+      description: 'Contrato PDF generado correctamente',
+    })
   }
 
   const handleRegistrarPago = async (e: React.FormEvent) => {
@@ -210,10 +270,22 @@ export function PrestamoDetailDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Detalle del Préstamo</DialogTitle>
-            <DialogDescription>
-              Cliente: {prestamo.cliente?.nombre || '-'}
-            </DialogDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle>Detalle del Préstamo</DialogTitle>
+                <DialogDescription>
+                  Cliente: {prestamo.cliente?.nombre || '-'}
+                </DialogDescription>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleGenerarContrato}
+                className="gap-2"
+              >
+                <FileText className="h-4 w-4" />
+                Generar Contrato PDF
+              </Button>
+            </div>
           </DialogHeader>
 
           <div className="space-y-6">
@@ -271,8 +343,92 @@ export function PrestamoDetailDialog({
                     {cuotasPagadas} / {cuotas.length} cuotas pagadas
                   </p>
                 </div>
+                {prestamo.tipo_prestamo && (
+                  <div>
+                    <p className="text-sm text-gray-600">Tipo</p>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      prestamo.tipo_prestamo === 'empeño'
+                        ? 'bg-purple-100 text-purple-800'
+                        : prestamo.tipo_prestamo === 'solo_intereses'
+                        ? 'bg-orange-100 text-orange-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {prestamo.tipo_prestamo === 'empeño' ? 'Empeño' :
+                       prestamo.tipo_prestamo === 'solo_intereses' ? 'Solo Intereses' :
+                       'Amortización'}
+                    </span>
+                  </div>
+                )}
+                {prestamo.fecha_fin && (
+                  <div>
+                    <p className="text-sm text-gray-600">Vencimiento Capital</p>
+                    <p className="font-semibold">{formatDate(prestamo.fecha_fin)}</p>
+                  </div>
+                )}
               </div>
             </div>
+
+            {/* Sección de Garantías (Solo para Empeños) */}
+            {prestamo.tipo_prestamo === 'empeño' && garantias.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="font-semibold text-lg text-gray-900 flex items-center gap-2">
+                  <Package className="h-5 w-5" />
+                  Garantías/Colaterales
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {garantias.map((garantia) => (
+                    <div key={garantia.id} className="border rounded-lg p-4 bg-purple-50 space-y-2">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h4 className="font-medium text-sm text-purple-900">{garantia.descripcion}</h4>
+                          {garantia.categoria && (
+                            <p className="text-xs text-purple-700 mt-1">
+                              Categoría: {garantia.categoria}
+                            </p>
+                          )}
+                        </div>
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          garantia.estado === 'activo'
+                            ? 'bg-green-100 text-green-800'
+                            : garantia.estado === 'liquidado'
+                            ? 'bg-red-100 text-red-800'
+                            : garantia.estado === 'renovado'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {garantia.estado}
+                        </span>
+                      </div>
+                      {garantia.valor_estimado && (
+                        <p className="text-sm text-gray-700">
+                          <span className="font-medium">Valor estimado:</span>{' '}
+                          {formatCurrency(garantia.valor_estimado, config.currency)}
+                        </p>
+                      )}
+                      {garantia.fecha_vencimiento && (
+                        <p className="text-xs text-gray-600">
+                          <span className="font-medium">Vencimiento:</span>{' '}
+                          {formatDate(garantia.fecha_vencimiento)}
+                          {isDateOverdue(garantia.fecha_vencimiento) && garantia.estado === 'activo' && (
+                            <span className="ml-2 text-red-600 font-medium">⚠ Vencido</span>
+                          )}
+                        </p>
+                      )}
+                      {garantia.numero_renovaciones > 0 && (
+                        <p className="text-xs text-blue-700">
+                          Renovaciones: {garantia.numero_renovaciones}
+                        </p>
+                      )}
+                      {garantia.observaciones && (
+                        <p className="text-xs text-gray-600 mt-2 italic">
+                          {garantia.observaciones}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Lista de Cuotas */}
             <div>

@@ -17,9 +17,18 @@ interface PrestamoInfo {
   interes_porcentaje: number
   numero_cuotas: number
   fecha_inicio: string
+  fecha_fin?: string | null
   monto_total: number
   frecuencia_pago: string
   tipo_interes: string
+  tipo_prestamo?: 'amortizacion' | 'solo_intereses' | 'empeño'
+}
+
+interface GarantiaInfo {
+  descripcion: string
+  categoria?: string | null
+  valor_estimado?: number | null
+  fecha_vencimiento?: string | null
 }
 
 interface PagoInfo {
@@ -40,7 +49,8 @@ interface CuotaInfo {
 export function generarContratoPrestamo(
   cliente: ClienteInfo,
   prestamo: PrestamoInfo,
-  companyName: string = 'Gestor de Créditos'
+  companyName: string = 'Gestor de Créditos',
+  garantias?: GarantiaInfo[]
 ) {
   const doc = new jsPDF()
   
@@ -49,34 +59,54 @@ export function generarContratoPrestamo(
   doc.setFont('helvetica', 'bold')
   doc.text(companyName, 105, 20, { align: 'center' })
   
+  // Título según tipo de préstamo
+  const tipoPrestamo = prestamo.tipo_prestamo || 'amortizacion'
+  let tituloContrato = 'CONTRATO DE PRÉSTAMO'
+  if (tipoPrestamo === 'empeño') {
+    tituloContrato = 'CONTRATO DE EMPEÑO'
+  } else if (tipoPrestamo === 'solo_intereses') {
+    tituloContrato = 'CONTRATO DE PRÉSTAMO (SOLO INTERESES)'
+  }
+  
   doc.setFontSize(16)
-  doc.text('CONTRATO DE PRÉSTAMO', 105, 30, { align: 'center' })
+  doc.text(tituloContrato, 105, 30, { align: 'center' })
   
   // Línea separadora
   doc.setLineWidth(0.5)
   doc.line(20, 35, 190, 35)
   
+  let yPos = 45
+  
   // Información del Prestamista
   doc.setFontSize(12)
   doc.setFont('helvetica', 'bold')
-  doc.text('EL PRESTAMISTA:', 20, 45)
+  doc.text('EL PRESTAMISTA:', 20, yPos)
   doc.setFont('helvetica', 'normal')
-  doc.text(`${companyName}`, 20, 52)
-  doc.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, 20, 59)
+  doc.text(`${companyName}`, 20, yPos + 7)
+  doc.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, 20, yPos + 14)
+  yPos += 27
   
   // Información del Cliente
   doc.setFont('helvetica', 'bold')
-  doc.text('EL PRESTATARIO:', 20, 72)
+  doc.text('EL PRESTATARIO:', 20, yPos)
   doc.setFont('helvetica', 'normal')
-  doc.text(`Nombre: ${cliente.nombre}`, 20, 79)
-  doc.text(`DNI: ${cliente.dni}`, 20, 86)
-  if (cliente.telefono) doc.text(`Teléfono: ${cliente.telefono}`, 20, 93)
-  if (cliente.direccion) doc.text(`Dirección: ${cliente.direccion}`, 20, 100)
+  doc.text(`Nombre: ${cliente.nombre}`, 20, yPos + 7)
+  doc.text(`DNI: ${cliente.dni}`, 20, yPos + 14)
+  if (cliente.telefono) {
+    doc.text(`Teléfono: ${cliente.telefono}`, 20, yPos + 21)
+    yPos += 7
+  }
+  if (cliente.direccion) {
+    doc.text(`Dirección: ${cliente.direccion}`, 20, yPos + 21)
+    yPos += 7
+  }
+  yPos += 21
   
   // Detalles del Préstamo
   doc.setFont('helvetica', 'bold')
-  doc.text('DETALLES DEL PRÉSTAMO:', 20, 115)
+  doc.text('DETALLES DEL PRÉSTAMO:', 20, yPos)
   doc.setFont('helvetica', 'normal')
+  yPos += 10
   
   const frecuencias: Record<string, string> = {
     diario: 'Diario',
@@ -85,41 +115,128 @@ export function generarContratoPrestamo(
     mensual: 'Mensual'
   }
   
-  doc.text(`Monto Prestado: $${prestamo.monto_prestado.toFixed(2)}`, 20, 122)
-  doc.text(`Tasa de Interés: ${prestamo.interes_porcentaje}% (${prestamo.tipo_interes})`, 20, 129)
-  doc.text(`Monto Total a Pagar: $${prestamo.monto_total.toFixed(2)}`, 20, 136)
-  doc.text(`Número de Cuotas: ${prestamo.numero_cuotas}`, 20, 143)
-  doc.text(`Frecuencia de Pago: ${frecuencias[prestamo.frecuencia_pago] || 'Mensual'}`, 20, 150)
-  doc.text(`Fecha de Inicio: ${format(new Date(prestamo.fecha_inicio), 'dd/MM/yyyy')}`, 20, 157)
-  doc.text(`Monto por Cuota: $${(prestamo.monto_total / prestamo.numero_cuotas).toFixed(2)}`, 20, 164)
+  doc.text(`Monto Prestado: $${prestamo.monto_prestado.toFixed(2)}`, 20, yPos)
+  yPos += 7
   
-  // Cláusulas
+  doc.text(`Tasa de Interés: ${prestamo.interes_porcentaje}% (${prestamo.tipo_interes})`, 20, yPos)
+  yPos += 7
+  
+  // Mostrar detalles según tipo de préstamo
+  if (tipoPrestamo === 'solo_intereses') {
+    const montoInteresCuota = prestamo.monto_prestado * (prestamo.interes_porcentaje / 100)
+    doc.text(`Tipo: Solo Intereses (Capital al final)`, 20, yPos)
+    yPos += 7
+    doc.text(`Monto por Cuota (Solo Interés): $${montoInteresCuota.toFixed(2)}`, 20, yPos)
+    yPos += 7
+    doc.text(`Capital a Pagar al Final: $${prestamo.monto_prestado.toFixed(2)}`, 20, yPos)
+    yPos += 7
+    doc.text(`Interés Total: $${(montoInteresCuota * prestamo.numero_cuotas).toFixed(2)}`, 20, yPos)
+    yPos += 7
+    if (prestamo.fecha_fin) {
+      doc.text(`Fecha de Vencimiento: ${format(new Date(prestamo.fecha_fin), 'dd/MM/yyyy')}`, 20, yPos)
+      yPos += 7
+    }
+  } else if (tipoPrestamo === 'empeño') {
+    doc.text(`Tipo: Empeño`, 20, yPos)
+    yPos += 7
+    doc.text(`Monto Total a Pagar: $${prestamo.monto_total.toFixed(2)}`, 20, yPos)
+    yPos += 7
+    doc.text(`Monto por Cuota: $${(prestamo.monto_total / prestamo.numero_cuotas).toFixed(2)}`, 20, yPos)
+    yPos += 7
+  } else {
+    doc.text(`Monto Total a Pagar: $${prestamo.monto_total.toFixed(2)}`, 20, yPos)
+    yPos += 7
+    doc.text(`Monto por Cuota: $${(prestamo.monto_total / prestamo.numero_cuotas).toFixed(2)}`, 20, yPos)
+    yPos += 7
+  }
+  
+  doc.text(`Número de Cuotas: ${prestamo.numero_cuotas}`, 20, yPos)
+  yPos += 7
+  doc.text(`Frecuencia de Pago: ${frecuencias[prestamo.frecuencia_pago] || 'Mensual'}`, 20, yPos)
+  yPos += 7
+  doc.text(`Fecha de Inicio: ${format(new Date(prestamo.fecha_inicio), 'dd/MM/yyyy')}`, 20, yPos)
+  yPos += 12
+  
+  // Sección de Garantías (solo para empeños)
+  if (tipoPrestamo === 'empeño' && garantias && garantias.length > 0) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('GARANTÍAS/COLATERALES:', 20, yPos)
+    doc.setFont('helvetica', 'normal')
+    yPos += 10
+    
+    garantias.forEach((garantia, index) => {
+      doc.text(`${index + 1}. ${garantia.descripcion}`, 20, yPos)
+      yPos += 7
+      if (garantia.categoria) {
+        doc.text(`   Categoría: ${garantia.categoria}`, 25, yPos)
+        yPos += 7
+      }
+      if (garantia.valor_estimado) {
+        doc.text(`   Valor Estimado: $${garantia.valor_estimado.toFixed(2)}`, 25, yPos)
+        yPos += 7
+      }
+      if (garantia.fecha_vencimiento) {
+        doc.text(`   Fecha de Vencimiento: ${format(new Date(garantia.fecha_vencimiento), 'dd/MM/yyyy')}`, 25, yPos)
+        yPos += 7
+      }
+      yPos += 3
+    })
+    yPos += 5
+  }
+  
+  // Cláusulas (personalizadas según tipo)
   doc.setFont('helvetica', 'bold')
-  doc.text('CLÁUSULAS:', 20, 180)
+  doc.text('CLÁUSULAS:', 20, yPos)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(10)
+  yPos += 7
   
-  const clausulas = [
-    '1. El PRESTATARIO se compromete a pagar el monto total del préstamo en las fechas establecidas.',
-    '2. Los pagos se realizarán según la frecuencia acordada.',
-    '3. En caso de mora, se aplicarán los cargos correspondientes según las leyes vigentes.',
-    '4. El PRESTATARIO reconoce haber recibido el monto completo del préstamo.',
-    '5. Ambas partes aceptan los términos y condiciones del presente contrato.',
-  ]
+  let clausulas: string[] = []
   
-  let yPos = 188
+  if (tipoPrestamo === 'empeño') {
+    clausulas = [
+      '1. El PRESTATARIO entrega en garantía los bienes descritos en la sección de GARANTÍAS.',
+      '2. El PRESTAMISTA podrá liquidar los bienes empeñados si el préstamo no es cancelado en la fecha acordada.',
+      '3. El PRESTATARIO puede renovar el empeño pagando los intereses correspondientes antes del vencimiento.',
+      '4. El PRESTATARIO reconoce haber recibido el monto completo del préstamo.',
+      '5. Ambas partes aceptan los términos y condiciones del presente contrato de empeño.',
+    ]
+  } else if (tipoPrestamo === 'solo_intereses') {
+    clausulas = [
+      '1. El PRESTATARIO se compromete a pagar solo los intereses mensuales según la frecuencia acordada.',
+      '2. El capital deberá ser devuelto íntegramente al final del período del préstamo.',
+      '3. Los pagos de interés se realizarán según la frecuencia acordada.',
+      '4. En caso de mora, se aplicarán los cargos correspondientes según las leyes vigentes.',
+      '5. El PRESTATARIO reconoce haber recibido el monto completo del préstamo.',
+      '6. Ambas partes aceptan los términos y condiciones del presente contrato.',
+    ]
+  } else {
+    clausulas = [
+      '1. El PRESTATARIO se compromete a pagar el monto total del préstamo en las fechas establecidas.',
+      '2. Los pagos se realizarán según la frecuencia acordada.',
+      '3. En caso de mora, se aplicarán los cargos correspondientes según las leyes vigentes.',
+      '4. El PRESTATARIO reconoce haber recibido el monto completo del préstamo.',
+      '5. Ambas partes aceptan los términos y condiciones del presente contrato.',
+    ]
+  }
+  
   clausulas.forEach((clausula) => {
-    doc.text(clausula, 20, yPos, { maxWidth: 170 })
-    yPos += 10
+    const lines = doc.splitTextToSize(clausula, 170)
+    lines.forEach((line: string) => {
+      doc.text(line, 20, yPos)
+      yPos += 6
+    })
+    yPos += 2
   })
   
   // Firmas
+  yPos = Math.max(yPos, 240)
   doc.setFontSize(12)
-  doc.line(40, 250, 90, 250)
-  doc.text('Firma del Prestamista', 45, 257)
+  doc.line(40, yPos, 90, yPos)
+  doc.text('Firma del Prestamista', 45, yPos + 7)
   
-  doc.line(120, 250, 170, 250)
-  doc.text('Firma del Prestatario', 125, 257)
+  doc.line(120, yPos, 170, yPos)
+  doc.text('Firma del Prestatario', 125, yPos + 7)
   
   // Pie de página
   doc.setFontSize(8)
