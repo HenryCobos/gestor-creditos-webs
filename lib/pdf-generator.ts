@@ -22,6 +22,7 @@ interface PrestamoInfo {
   frecuencia_pago: string
   tipo_interes: string
   tipo_prestamo?: 'amortizacion' | 'solo_intereses' | 'empeño'
+  tipo_calculo_interes?: 'por_periodo' | 'global' // Por defecto 'por_periodo' si no se especifica
 }
 
 interface GarantiaInfo {
@@ -118,8 +119,22 @@ export function generarContratoPrestamo(
   doc.text(`Monto Prestado: $${prestamo.monto_prestado.toFixed(2)}`, 20, yPos)
   yPos += 7
   
-  doc.text(`Tasa de Interés: ${prestamo.interes_porcentaje}% (${prestamo.tipo_interes})`, 20, yPos)
-  yPos += 7
+  const frecuenciaNombre = frecuencias[prestamo.frecuencia_pago] || 'Mensual'
+  const tipoCalculo = prestamo.tipo_calculo_interes || 'por_periodo'
+  
+  if (tipoCalculo === 'global') {
+    // Interés Global
+    doc.text(`Tasa de Interés: ${prestamo.interes_porcentaje}% Global (${prestamo.tipo_interes})`, 20, yPos)
+    doc.setFontSize(9)
+    doc.text(`Interés fijo del ${prestamo.interes_porcentaje}% sobre el capital total, independiente del tiempo`, 20, yPos + 5)
+  } else {
+    // Interés Por Período
+    doc.text(`Tasa de Interés: ${prestamo.interes_porcentaje}% por ${frecuenciaNombre.toLowerCase()} (${prestamo.tipo_interes})`, 20, yPos)
+    doc.setFontSize(9)
+    doc.text(`Total: ${prestamo.interes_porcentaje}% × ${prestamo.numero_cuotas} ${frecuenciaNombre.toLowerCase()}${prestamo.numero_cuotas > 1 ? 'es' : ''} = ${((prestamo.interes_porcentaje * prestamo.numero_cuotas)).toFixed(2)}% del capital`, 20, yPos + 5)
+  }
+  doc.setFontSize(12)
+  yPos += 12
   
   // Mostrar detalles según tipo de préstamo
   if (tipoPrestamo === 'solo_intereses') {
@@ -152,7 +167,7 @@ export function generarContratoPrestamo(
   
   doc.text(`Número de Cuotas: ${prestamo.numero_cuotas}`, 20, yPos)
   yPos += 7
-  doc.text(`Frecuencia de Pago: ${frecuencias[prestamo.frecuencia_pago] || 'Mensual'}`, 20, yPos)
+  doc.text(`Frecuencia de Pago: ${frecuenciaNombre}`, 20, yPos)
   yPos += 7
   doc.text(`Fecha de Inicio: ${format(new Date(prestamo.fecha_inicio), 'dd/MM/yyyy')}`, 20, yPos)
   yPos += 12

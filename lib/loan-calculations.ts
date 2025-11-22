@@ -5,13 +5,16 @@ import { addDays, addWeeks, addMonths } from 'date-fns'
 export type FrecuenciaPago = 'diario' | 'semanal' | 'quincenal' | 'mensual'
 export type TipoInteres = 'simple' | 'compuesto'
 export type TipoPrestamo = 'amortizacion' | 'solo_intereses' | 'empeño'
+export type TipoCalculoInteres = 'por_periodo' | 'global' // Por período (20% mensual) o Global (20% total)
 
 export interface CalculoPrestamoParams {
   monto: number
-  interesPorcentaje: number
+  interesPorcentaje: number // Interés POR PERÍODO o GLOBAL según tipoCalculoInteres
   numeroCuotas: number
   tipoInteres?: TipoInteres
   tipoPrestamo?: TipoPrestamo
+  frecuenciaPago?: FrecuenciaPago // Necesario para mostrar correctamente en labels
+  tipoCalculoInteres?: TipoCalculoInteres // Por período o global
 }
 
 export interface CalculoPrestamoResult {
@@ -61,18 +64,33 @@ export function calculateLoanDetails(
   }
   
   // Modo "Amortización" (por defecto): Pago de capital + interés
+  const tipoCalculo = params.tipoCalculoInteres || 'por_periodo'
+  
   let interes: number
   let montoTotal: number
   
-  if (tipoInteres === 'simple') {
-    // Interés simple: I = P * r * t
-    interes = (monto * interesPorcentaje) / 100
+  if (tipoCalculo === 'global') {
+    // Interés GLOBAL: Se aplica sobre el capital total, independiente del tiempo
+    // Ejemplo: $1000 al 20% global = $200 de interés (sin importar cuántos meses)
+    const tasaGlobal = interesPorcentaje / 100
+    interes = monto * tasaGlobal
     montoTotal = monto + interes
   } else {
-    // Interés compuesto: A = P(1 + r)^n
-    const tasa = interesPorcentaje / 100
-    montoTotal = monto * Math.pow(1 + tasa / numeroCuotas, numeroCuotas)
-    interes = montoTotal - monto
+    // Interés POR PERÍODO: Se multiplica por número de períodos
+    // Ejemplo: $1000 al 20% mensual por 6 meses = $1000 * 20% * 6 = $1200 de interés
+    if (tipoInteres === 'simple') {
+      // Interés simple: I = P * r * t
+      // r = tasa por período, t = número de períodos
+      const tasaPorPeriodo = interesPorcentaje / 100
+      interes = monto * tasaPorPeriodo * numeroCuotas
+      montoTotal = monto + interes
+    } else {
+      // Interés compuesto: A = P(1 + r)^n
+      // r = tasa por período, n = número de períodos
+      const tasaPorPeriodo = interesPorcentaje / 100
+      montoTotal = monto * Math.pow(1 + tasaPorPeriodo, numeroCuotas)
+      interes = montoTotal - monto
+    }
   }
   
   const montoCuota = montoTotal / numeroCuotas

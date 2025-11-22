@@ -145,6 +145,7 @@ export function PrestamoDetailDialog({
         frecuencia_pago: prestamo.frecuencia_pago,
         tipo_interes: prestamo.tipo_interes,
         tipo_prestamo: prestamo.tipo_prestamo,
+        tipo_calculo_interes: prestamo.tipo_calculo_interes,
       },
       config.companyName,
       garantiasInfo.length > 0 ? garantiasInfo : undefined

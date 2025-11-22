@@ -45,7 +45,8 @@ import {
   validarNumeroCuotas,
   type FrecuenciaPago,
   type TipoInteres,
-  type TipoPrestamo
+  type TipoPrestamo,
+  type TipoCalculoInteres
 } from '@/lib/loan-calculations'
 import { format, addMonths, addWeeks, addDays } from 'date-fns'
 import type { Garantia } from '@/lib/store'
@@ -72,6 +73,7 @@ export default function PrestamosPage() {
     frecuencia_pago: 'mensual' as FrecuenciaPago,
     tipo_interes: 'simple' as TipoInteres,
     tipo_prestamo: 'amortizacion' as TipoPrestamo,
+    tipo_calculo_interes: 'por_periodo' as TipoCalculoInteres,
   })
 
   const [garantias, setGarantias] = useState<Array<{
@@ -116,6 +118,8 @@ export default function PrestamosPage() {
           numeroCuotas: cuotas,
           tipoInteres: formData.tipo_interes,
           tipoPrestamo: formData.tipo_prestamo,
+          frecuenciaPago: formData.frecuencia_pago,
+          tipoCalculoInteres: formData.tipo_calculo_interes,
         })
         setCalculatedDetails(details)
         
@@ -147,7 +151,7 @@ export default function PrestamosPage() {
         }
       }
     }
-  }, [formData.monto_prestado, formData.interes_porcentaje, formData.numero_cuotas, formData.tipo_interes, formData.tipo_prestamo, formData.frecuencia_pago, formData.fecha_inicio])
+  }, [formData.monto_prestado, formData.interes_porcentaje, formData.numero_cuotas, formData.tipo_interes, formData.tipo_prestamo, formData.frecuencia_pago, formData.fecha_inicio, formData.tipo_calculo_interes])
 
   const loadData = async () => {
     setLoading(true)
@@ -230,6 +234,8 @@ export default function PrestamosPage() {
       numeroCuotas: cuotas,
       tipoInteres: formData.tipo_interes,
       tipoPrestamo: formData.tipo_prestamo,
+      frecuenciaPago: formData.frecuencia_pago,
+      tipoCalculoInteres: formData.tipo_calculo_interes,
     })
 
     // Calcular fecha_fin si es modo solo intereses
@@ -271,6 +277,7 @@ export default function PrestamosPage() {
         frecuencia_pago: formData.frecuencia_pago,
         tipo_interes: formData.tipo_interes,
         tipo_prestamo: formData.tipo_prestamo,
+        tipo_calculo_interes: formData.tipo_calculo_interes,
         estado: 'activo',
       }])
       .select(`
@@ -413,6 +420,7 @@ export default function PrestamosPage() {
       frecuencia_pago: 'mensual',
       tipo_interes: 'simple',
       tipo_prestamo: 'amortizacion',
+      tipo_calculo_interes: 'por_periodo',
     })
     setGarantias([])
     setCalculatedDetails({
@@ -531,7 +539,30 @@ export default function PrestamosPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="interes_porcentaje">Interés (%) *</Label>
+                  <Label htmlFor="tipo_calculo_interes">Tipo de Cálculo de Interés *</Label>
+                  <Select
+                    value={formData.tipo_calculo_interes}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, tipo_calculo_interes: value as TipoCalculoInteres })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="por_periodo">Por Período ({getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()})</SelectItem>
+                      <SelectItem value="global">Global (sobre el total)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="interes_porcentaje">
+                    Interés (%) *
+                    {formData.tipo_calculo_interes === 'por_periodo' 
+                      ? ` por ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}`
+                      : ' global'}
+                  </Label>
                   <Input
                     id="interes_porcentaje"
                     type="number"
@@ -544,6 +575,11 @@ export default function PrestamosPage() {
                     }
                     required
                   />
+                  <p className="text-xs text-gray-500">
+                    {formData.tipo_calculo_interes === 'global' 
+                      ? `Interés fijo del ${formData.interes_porcentaje || 'X'}% sobre el capital total (independiente del tiempo)`
+                      : `Interés por ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()} (se multiplicará por ${formData.numero_cuotas || 'N'} cuotas)`}
+                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -659,23 +695,39 @@ export default function PrestamosPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <p className="text-gray-600">Interés Total</p>
-                        <p className="font-semibold text-blue-900">
-                          {formatCurrency(calculatedDetails.interes, config.currency)}
-                        </p>
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <p className="text-gray-600">Interés Total</p>
+                          <p className="font-semibold text-blue-900">
+                            {formatCurrency(calculatedDetails.interes, config.currency)}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {formData.tipo_calculo_interes === 'global' 
+                              ? `${formData.interes_porcentaje}% global sobre capital`
+                              : `${formData.interes_porcentaje}% × ${formData.numero_cuotas} ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}${formData.numero_cuotas && parseInt(formData.numero_cuotas) > 1 ? 'es' : ''}`}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-600">Monto Total</p>
+                          <p className="font-semibold text-blue-900">
+                            {formatCurrency(calculatedDetails.montoTotal, config.currency)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-600">Cuota {getNombreFrecuencia(formData.frecuencia_pago)}</p>
+                          <p className="font-semibold text-blue-900">
+                            {formatCurrency(calculatedDetails.montoCuota, config.currency)}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-gray-600">Monto Total</p>
-                        <p className="font-semibold text-blue-900">
-                          {formatCurrency(calculatedDetails.montoTotal, config.currency)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600">Cuota {getNombreFrecuencia(formData.frecuencia_pago)}</p>
-                        <p className="font-semibold text-blue-900">
-                          {formatCurrency(calculatedDetails.montoCuota, config.currency)}
+                      <div className="pt-2 border-t border-blue-200">
+                        <p className="text-xs text-gray-600">
+                          <strong>Cálculo:</strong> {
+                            formData.tipo_calculo_interes === 'global'
+                              ? `$${parseFloat(formData.monto_prestado || '0').toFixed(2)} + ($${parseFloat(formData.monto_prestado || '0').toFixed(2)} × ${formData.interes_porcentaje}%) = ${formatCurrency(calculatedDetails.montoTotal, config.currency)}`
+                              : `$${parseFloat(formData.monto_prestado || '0').toFixed(2)} + ($${parseFloat(formData.monto_prestado || '0').toFixed(2)} × ${formData.interes_porcentaje}% × ${formData.numero_cuotas} ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}${formData.numero_cuotas && parseInt(formData.numero_cuotas) > 1 ? 'es' : ''}) = ${formatCurrency(calculatedDetails.montoTotal, config.currency)}`
+                          }
                         </p>
                       </div>
                     </div>

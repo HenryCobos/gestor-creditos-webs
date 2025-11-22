@@ -29,6 +29,7 @@ export interface Prestamo {
   frecuencia_pago: 'diario' | 'semanal' | 'quincenal' | 'mensual'
   tipo_interes: 'simple' | 'compuesto'
   tipo_prestamo: TipoPrestamo
+  tipo_calculo_interes?: 'por_periodo' | 'global'
   dias_gracia?: number | null
   created_at: string
   updated_at: string
