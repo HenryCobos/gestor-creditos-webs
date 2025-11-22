@@ -9,12 +9,12 @@ export type TipoCalculoInteres = 'por_periodo' | 'global' // Por período (20% m
 
 export interface CalculoPrestamoParams {
   monto: number
-  interesPorcentaje: number // Interés POR PERÍODO o GLOBAL según tipoCalculoInteres
-  numeroCuotas: number
+  interesPorcentaje: number // Interés MENSUAL (siempre mensual)
+  numeroMeses: number // Duración del préstamo en MESES
+  frecuenciaPago: FrecuenciaPago // Frecuencia de pago (diario, semanal, quincenal, mensual)
   tipoInteres?: TipoInteres
   tipoPrestamo?: TipoPrestamo
-  frecuenciaPago?: FrecuenciaPago // Necesario para mostrar correctamente en labels
-  tipoCalculoInteres?: TipoCalculoInteres // Por período o global
+  tipoCalculoInteres?: TipoCalculoInteres // Por período (mensual) o global
 }
 
 export interface CalculoPrestamoResult {
@@ -26,7 +26,33 @@ export interface CalculoPrestamoResult {
 }
 
 /**
+ * Calcula el número de cuotas según la duración en meses y la frecuencia de pago
+ */
+export function calcularNumeroCuotas(
+  numeroMeses: number,
+  frecuenciaPago: FrecuenciaPago
+): number {
+  switch (frecuenciaPago) {
+    case 'diario':
+      // Aproximadamente 30 días por mes
+      return Math.round(numeroMeses * 30)
+    case 'semanal':
+      // Aproximadamente 4 semanas por mes
+      return numeroMeses * 4
+    case 'quincenal':
+      // 2 quincenas por mes
+      return numeroMeses * 2
+    case 'mensual':
+      return numeroMeses
+    default:
+      return numeroMeses
+  }
+}
+
+/**
  * Calcula los detalles de un préstamo
+ * El interés siempre es MENSUAL, y se calcula por número de MESES
+ * Luego el monto total se divide según la frecuencia de pago
  */
 export function calculateLoanDetails(
   params: CalculoPrestamoParams
@@ -34,33 +60,38 @@ export function calculateLoanDetails(
   const { 
     monto, 
     interesPorcentaje, 
-    numeroCuotas, 
+    numeroMeses,
+    frecuenciaPago,
     tipoInteres = 'simple',
     tipoPrestamo = 'amortizacion'
   } = params
   
+  // Calcular número de cuotas basado en meses y frecuencia
+  const numeroCuotas = calcularNumeroCuotas(numeroMeses, frecuenciaPago)
+  
   // Modo "Solo Intereses": Solo se paga interés mensual, capital al final
   if (tipoPrestamo === 'solo_intereses') {
+    // El interés se calcula mensualmente
     const tasaMensual = interesPorcentaje / 100
-    const montoInteresCuota = monto * tasaMensual
-    const interesTotal = montoInteresCuota * numeroCuotas
+    const interesPorMes = monto * tasaMensual
+    const interesTotal = interesPorMes * numeroMeses // Interés por número de MESES
     const montoTotal = monto + interesTotal
+    
+    // El interés mensual se divide según la frecuencia de pago
+    const montoInteresPorCuota = interesTotal / numeroCuotas
     
     return {
       interes: Number(interesTotal.toFixed(2)),
       montoTotal: Number(montoTotal.toFixed(2)),
-      montoCuota: Number(montoInteresCuota.toFixed(2)), // Solo el interés
-      montoInteresCuota: Number(montoInteresCuota.toFixed(2)),
+      montoCuota: Number(montoInteresPorCuota.toFixed(2)), // Solo el interés dividido
+      montoInteresCuota: Number(montoInteresPorCuota.toFixed(2)),
       montoCapitalFinal: monto, // Capital a devolver al final
     }
   }
   
   // Modo "Empeño": Similar a amortización pero con garantía
-  // Por ahora usa la misma lógica de amortización
   if (tipoPrestamo === 'empeño') {
-    // En empeños, normalmente se paga interés periódico y se puede renovar
-    // Por defecto, calculamos como amortización normal
-    // El usuario puede ajustar según su modelo de negocio
+    // Usa la misma lógica de amortización
   }
   
   // Modo "Amortización" (por defecto): Pago de capital + interés
@@ -76,23 +107,24 @@ export function calculateLoanDetails(
     interes = monto * tasaGlobal
     montoTotal = monto + interes
   } else {
-    // Interés POR PERÍODO: Se multiplica por número de períodos
+    // Interés MENSUAL: Se multiplica por número de MESES
     // Ejemplo: $1000 al 20% mensual por 6 meses = $1000 * 20% * 6 = $1200 de interés
     if (tipoInteres === 'simple') {
       // Interés simple: I = P * r * t
-      // r = tasa por período, t = número de períodos
-      const tasaPorPeriodo = interesPorcentaje / 100
-      interes = monto * tasaPorPeriodo * numeroCuotas
+      // r = tasa MENSUAL, t = número de MESES
+      const tasaMensual = interesPorcentaje / 100
+      interes = monto * tasaMensual * numeroMeses
       montoTotal = monto + interes
     } else {
       // Interés compuesto: A = P(1 + r)^n
-      // r = tasa por período, n = número de períodos
-      const tasaPorPeriodo = interesPorcentaje / 100
-      montoTotal = monto * Math.pow(1 + tasaPorPeriodo, numeroCuotas)
+      // r = tasa MENSUAL, n = número de MESES
+      const tasaMensual = interesPorcentaje / 100
+      montoTotal = monto * Math.pow(1 + tasaMensual, numeroMeses)
       interes = montoTotal - monto
     }
   }
   
+  // Dividir el monto total entre el número de cuotas según la frecuencia de pago
   const montoCuota = montoTotal / numeroCuotas
   
   return {

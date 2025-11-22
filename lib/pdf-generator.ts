@@ -122,16 +122,34 @@ export function generarContratoPrestamo(
   const frecuenciaNombre = frecuencias[prestamo.frecuencia_pago] || 'Mensual'
   const tipoCalculo = prestamo.tipo_calculo_interes || 'por_periodo'
   
+  // Calcular número de meses aproximado desde número de cuotas y frecuencia
+  let numeroMeses: number
+  switch (prestamo.frecuencia_pago) {
+    case 'diario':
+      numeroMeses = Math.round((prestamo.numero_cuotas / 30) * 10) / 10
+      break
+    case 'semanal':
+      numeroMeses = prestamo.numero_cuotas / 4
+      break
+    case 'quincenal':
+      numeroMeses = prestamo.numero_cuotas / 2
+      break
+    case 'mensual':
+    default:
+      numeroMeses = prestamo.numero_cuotas
+      break
+  }
+  
   if (tipoCalculo === 'global') {
     // Interés Global
     doc.text(`Tasa de Interés: ${prestamo.interes_porcentaje}% Global (${prestamo.tipo_interes})`, 20, yPos)
     doc.setFontSize(9)
-    doc.text(`Interés fijo del ${prestamo.interes_porcentaje}% sobre el capital total, independiente del tiempo`, 20, yPos + 5)
+    doc.text(`Interés fijo del ${prestamo.interes_porcentaje}% sobre el capital total (${numeroMeses.toFixed(1)} mes${numeroMeses > 1 ? 'es' : ''})`, 20, yPos + 5)
   } else {
-    // Interés Por Período
-    doc.text(`Tasa de Interés: ${prestamo.interes_porcentaje}% por ${frecuenciaNombre.toLowerCase()} (${prestamo.tipo_interes})`, 20, yPos)
+    // Interés Por Mes
+    doc.text(`Tasa de Interés: ${prestamo.interes_porcentaje}% Mensual (${prestamo.tipo_interes})`, 20, yPos)
     doc.setFontSize(9)
-    doc.text(`Total: ${prestamo.interes_porcentaje}% × ${prestamo.numero_cuotas} ${frecuenciaNombre.toLowerCase()}${prestamo.numero_cuotas > 1 ? 'es' : ''} = ${((prestamo.interes_porcentaje * prestamo.numero_cuotas)).toFixed(2)}% del capital`, 20, yPos + 5)
+    doc.text(`Total: ${prestamo.interes_porcentaje}% mensual × ${numeroMeses.toFixed(1)} mes${numeroMeses > 1 ? 'es' : ''} = ${((prestamo.interes_porcentaje * numeroMeses)).toFixed(2)}% del capital`, 20, yPos + 5)
   }
   doc.setFontSize(12)
   yPos += 12

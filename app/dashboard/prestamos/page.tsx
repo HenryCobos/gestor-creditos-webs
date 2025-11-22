@@ -41,8 +41,8 @@ import { loadUserSubscription, loadUsageLimits } from '@/lib/subscription-helper
 import { 
   calculateLoanDetails, 
   calcularSiguienteFechaPago, 
+  calcularNumeroCuotas,
   getNombreFrecuencia,
-  validarNumeroCuotas,
   type FrecuenciaPago,
   type TipoInteres,
   type TipoPrestamo,
@@ -67,7 +67,7 @@ export default function PrestamosPage() {
     cliente_id: '',
     monto_prestado: '',
     interes_porcentaje: '',
-    numero_cuotas: '',
+    numero_meses: '', // Duración en meses
     fecha_inicio: format(new Date(), 'yyyy-MM-dd'),
     fecha_fin: '',
     frecuencia_pago: 'mensual' as FrecuenciaPago,
@@ -106,19 +106,22 @@ export default function PrestamosPage() {
 
   useEffect(() => {
     // Calcular detalles del préstamo cuando cambian los valores
-    if (formData.monto_prestado && formData.interes_porcentaje && formData.numero_cuotas) {
+    if (formData.monto_prestado && formData.interes_porcentaje && formData.numero_meses) {
       const monto = parseFloat(formData.monto_prestado)
       const interes = parseFloat(formData.interes_porcentaje)
-      const cuotas = parseInt(formData.numero_cuotas)
+      const meses = parseFloat(formData.numero_meses)
 
-      if (!isNaN(monto) && !isNaN(interes) && !isNaN(cuotas) && cuotas > 0) {
+      if (!isNaN(monto) && !isNaN(interes) && !isNaN(meses) && meses > 0) {
+        // Calcular número de cuotas basado en meses y frecuencia
+        const numeroCuotas = calcularNumeroCuotas(meses, formData.frecuencia_pago)
+        
         const details = calculateLoanDetails({
           monto,
           interesPorcentaje: interes,
-          numeroCuotas: cuotas,
+          numeroMeses: meses,
+          frecuenciaPago: formData.frecuencia_pago,
           tipoInteres: formData.tipo_interes,
           tipoPrestamo: formData.tipo_prestamo,
-          frecuenciaPago: formData.frecuencia_pago,
           tipoCalculoInteres: formData.tipo_calculo_interes,
         })
         setCalculatedDetails(details)
@@ -126,23 +129,7 @@ export default function PrestamosPage() {
         // Calcular fecha_fin para modo solo intereses
         if (formData.tipo_prestamo === 'solo_intereses' && formData.fecha_inicio) {
           const fechaInicio = new Date(formData.fecha_inicio)
-          let fechaFin: Date
-          
-          switch (formData.frecuencia_pago) {
-            case 'diario':
-              fechaFin = addDays(fechaInicio, cuotas)
-              break
-            case 'semanal':
-              fechaFin = addWeeks(fechaInicio, cuotas)
-              break
-            case 'quincenal':
-              fechaFin = addWeeks(fechaInicio, cuotas * 2)
-              break
-            case 'mensual':
-            default:
-              fechaFin = addMonths(fechaInicio, cuotas)
-              break
-          }
+          const fechaFin = addMonths(fechaInicio, meses)
           
           setFormData(prev => ({
             ...prev,
@@ -151,7 +138,7 @@ export default function PrestamosPage() {
         }
       }
     }
-  }, [formData.monto_prestado, formData.interes_porcentaje, formData.numero_cuotas, formData.tipo_interes, formData.tipo_prestamo, formData.frecuencia_pago, formData.fecha_inicio, formData.tipo_calculo_interes])
+  }, [formData.monto_prestado, formData.interes_porcentaje, formData.numero_meses, formData.tipo_interes, formData.tipo_prestamo, formData.frecuencia_pago, formData.fecha_inicio, formData.tipo_calculo_interes])
 
   const loadData = async () => {
     setLoading(true)
@@ -215,26 +202,27 @@ export default function PrestamosPage() {
 
     const monto = parseFloat(formData.monto_prestado)
     const interes = parseFloat(formData.interes_porcentaje)
-    const cuotas = parseInt(formData.numero_cuotas)
+    const meses = parseFloat(formData.numero_meses)
 
-    // Validar número de cuotas según frecuencia
-    const validacion = validarNumeroCuotas(cuotas, formData.frecuencia_pago)
-    if (!validacion.valido) {
+    if (isNaN(meses) || meses <= 0) {
       toast({
         title: 'Error de validación',
-        description: validacion.mensaje,
+        description: 'La duración en meses debe ser mayor a 0',
         variant: 'destructive',
       })
       return
     }
 
+    // Calcular número de cuotas basado en meses y frecuencia
+    const cuotas = calcularNumeroCuotas(meses, formData.frecuencia_pago)
+
     const { montoTotal, montoCuota } = calculateLoanDetails({
       monto,
       interesPorcentaje: interes,
-      numeroCuotas: cuotas,
+      numeroMeses: meses,
+      frecuenciaPago: formData.frecuencia_pago,
       tipoInteres: formData.tipo_interes,
       tipoPrestamo: formData.tipo_prestamo,
-      frecuenciaPago: formData.frecuencia_pago,
       tipoCalculoInteres: formData.tipo_calculo_interes,
     })
 
@@ -242,23 +230,7 @@ export default function PrestamosPage() {
     let fechaFin: string | null = null
     if (formData.tipo_prestamo === 'solo_intereses') {
       const fechaInicio = new Date(formData.fecha_inicio)
-      let fechaFinDate: Date
-      
-      switch (formData.frecuencia_pago) {
-        case 'diario':
-          fechaFinDate = addDays(fechaInicio, cuotas)
-          break
-        case 'semanal':
-          fechaFinDate = addWeeks(fechaInicio, cuotas)
-          break
-        case 'quincenal':
-          fechaFinDate = addWeeks(fechaInicio, cuotas * 2)
-          break
-        case 'mensual':
-        default:
-          fechaFinDate = addMonths(fechaInicio, cuotas)
-          break
-      }
+      const fechaFinDate = addMonths(fechaInicio, meses)
       fechaFin = format(fechaFinDate, 'yyyy-MM-dd')
     }
 
@@ -270,7 +242,7 @@ export default function PrestamosPage() {
         cliente_id: formData.cliente_id,
         monto_prestado: monto,
         interes_porcentaje: interes,
-        numero_cuotas: cuotas,
+        numero_cuotas: cuotas, // Calculado automáticamente
         fecha_inicio: formData.fecha_inicio,
         fecha_fin: fechaFin,
         monto_total: montoTotal,
@@ -330,12 +302,8 @@ export default function PrestamosPage() {
     const cuotasToCreate = []
     const fechaInicio = new Date(formData.fecha_inicio)
 
-    // Para modo "solo intereses", cada cuota es solo el interés
+    // Para modo "solo intereses", cada cuota es solo el interés (excepto la última que incluye capital)
     // Para modo "amortización" o "empeño", cada cuota incluye capital + interés
-    const montoPorCuota = formData.tipo_prestamo === 'solo_intereses'
-      ? (monto * interes / 100) // Solo el interés mensual
-      : montoCuota // Capital + interés
-
     for (let i = 1; i <= cuotas; i++) {
       const fechaVencimiento = calcularSiguienteFechaPago(
         fechaInicio,
@@ -345,9 +313,12 @@ export default function PrestamosPage() {
       
       // Última cuota en modo "solo intereses" incluye el capital
       const esUltimaCuota = i === cuotas
-      const montoCuotaFinal = formData.tipo_prestamo === 'solo_intereses' && esUltimaCuota
-        ? montoPorCuota + monto // Interés + capital
-        : montoPorCuota
+      let montoCuotaFinal = montoCuota
+      
+      if (formData.tipo_prestamo === 'solo_intereses' && esUltimaCuota) {
+        // Última cuota: interés + capital
+        montoCuotaFinal = montoCuota + monto
+      }
 
       cuotasToCreate.push({
         user_id: user.id,
@@ -378,7 +349,7 @@ export default function PrestamosPage() {
     addPrestamo(prestamo)
     toast({
       title: 'Éxito',
-      description: `Préstamo creado con ${cuotas} cuotas ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}es`,
+      description: `Préstamo creado con ${cuotas} cuotas ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}${cuotas > 1 ? 'es' : ''} (${meses} mes${meses > 1 ? 'es' : ''})`,
     })
     
     // Recargar límites después de agregar
@@ -414,7 +385,7 @@ export default function PrestamosPage() {
       cliente_id: '',
       monto_prestado: '',
       interes_porcentaje: '',
-      numero_cuotas: '',
+      numero_meses: '',
       fecha_inicio: format(new Date(), 'yyyy-MM-dd'),
       fecha_fin: '',
       frecuencia_pago: 'mensual',
@@ -550,18 +521,22 @@ export default function PrestamosPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="por_periodo">Por Período ({getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()})</SelectItem>
-                      <SelectItem value="global">Global (sobre el total)</SelectItem>
+                      <SelectItem value="por_periodo">Por Mes (interés mensual × meses)</SelectItem>
+                      <SelectItem value="global">Global (interés fijo sobre el total)</SelectItem>
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-gray-500">
+                    {formData.tipo_calculo_interes === 'global' 
+                      ? 'El interés se aplica una sola vez sobre el capital total'
+                      : 'El interés mensual se multiplica por el número de meses'}
+                  </p>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="interes_porcentaje">
-                    Interés (%) *
-                    {formData.tipo_calculo_interes === 'por_periodo' 
-                      ? ` por ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}`
-                      : ' global'}
+                    {formData.tipo_calculo_interes === 'global' 
+                      ? 'Interés Global (%) *'
+                      : 'Interés Mensual (%) *'}
                   </Label>
                   <Input
                     id="interes_porcentaje"
@@ -577,23 +552,33 @@ export default function PrestamosPage() {
                   />
                   <p className="text-xs text-gray-500">
                     {formData.tipo_calculo_interes === 'global' 
-                      ? `Interés fijo del ${formData.interes_porcentaje || 'X'}% sobre el capital total (independiente del tiempo)`
-                      : `Interés por ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()} (se multiplicará por ${formData.numero_cuotas || 'N'} cuotas)`}
+                      ? `Interés fijo del ${formData.interes_porcentaje || 'X'}% sobre el capital total (independiente del tiempo). Se divide en ${formData.numero_meses ? calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago) : 'N'} cuotas ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}${formData.numero_meses ? (calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago) > 1 ? 'es' : '') : ''}`
+                      : `Interés MENSUAL que se multiplicará por ${formData.numero_meses || 'N'} mes${formData.numero_meses && parseFloat(formData.numero_meses) > 1 ? 'es' : ''}. Luego se divide en ${formData.numero_meses ? calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago) : 'N'} cuotas ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}${formData.numero_meses ? (calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago) > 1 ? 'es' : '') : ''}`}
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="numero_cuotas">Número de Cuotas *</Label>
+                  <Label htmlFor="numero_meses">Duración del Préstamo (meses) *</Label>
                   <Input
-                    id="numero_cuotas"
+                    id="numero_meses"
                     type="number"
-                    min="1"
-                    value={formData.numero_cuotas}
+                    step="0.5"
+                    min="0.5"
+                    value={formData.numero_meses}
                     onChange={(e) =>
-                      setFormData({ ...formData, numero_cuotas: e.target.value })
+                      setFormData({ ...formData, numero_meses: e.target.value })
                     }
                     required
                   />
+                  <p className="text-xs text-gray-500">
+                    {formData.numero_meses && formData.frecuencia_pago ? (
+                      <>
+                        Número de cuotas calculado: <strong>{calcularNumeroCuotas(parseFloat(formData.numero_meses) || 0, formData.frecuencia_pago)}</strong> cuotas {getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}{calcularNumeroCuotas(parseFloat(formData.numero_meses) || 0, formData.frecuencia_pago) > 1 ? 'es' : ''}
+                      </>
+                    ) : (
+                      'El número de cuotas se calculará automáticamente según la duración y frecuencia'
+                    )}
+                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -705,7 +690,7 @@ export default function PrestamosPage() {
                           <p className="text-xs text-gray-500 mt-1">
                             {formData.tipo_calculo_interes === 'global' 
                               ? `${formData.interes_porcentaje}% global sobre capital`
-                              : `${formData.interes_porcentaje}% × ${formData.numero_cuotas} ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}${formData.numero_cuotas && parseInt(formData.numero_cuotas) > 1 ? 'es' : ''}`}
+                              : `${formData.interes_porcentaje}% mensual × ${formData.numero_meses || 'N'} mes${formData.numero_meses && parseFloat(formData.numero_meses) > 1 ? 'es' : ''}`}
                           </p>
                         </div>
                         <div>
@@ -719,16 +704,26 @@ export default function PrestamosPage() {
                           <p className="font-semibold text-blue-900">
                             {formatCurrency(calculatedDetails.montoCuota, config.currency)}
                           </p>
+                          {formData.numero_meses && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              {calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago)} cuotas en total
+                            </p>
+                          )}
                         </div>
                       </div>
-                      <div className="pt-2 border-t border-blue-200">
+                      <div className="pt-2 border-t border-blue-200 space-y-1">
                         <p className="text-xs text-gray-600">
                           <strong>Cálculo:</strong> {
                             formData.tipo_calculo_interes === 'global'
                               ? `$${parseFloat(formData.monto_prestado || '0').toFixed(2)} + ($${parseFloat(formData.monto_prestado || '0').toFixed(2)} × ${formData.interes_porcentaje}%) = ${formatCurrency(calculatedDetails.montoTotal, config.currency)}`
-                              : `$${parseFloat(formData.monto_prestado || '0').toFixed(2)} + ($${parseFloat(formData.monto_prestado || '0').toFixed(2)} × ${formData.interes_porcentaje}% × ${formData.numero_cuotas} ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}${formData.numero_cuotas && parseInt(formData.numero_cuotas) > 1 ? 'es' : ''}) = ${formatCurrency(calculatedDetails.montoTotal, config.currency)}`
+                              : `$${parseFloat(formData.monto_prestado || '0').toFixed(2)} + ($${parseFloat(formData.monto_prestado || '0').toFixed(2)} × ${formData.interes_porcentaje}% mensual × ${formData.numero_meses || 'N'} mes${formData.numero_meses && parseFloat(formData.numero_meses) > 1 ? 'es' : ''}) = ${formatCurrency(calculatedDetails.montoTotal, config.currency)}`
                           }
                         </p>
+                        {formData.numero_meses && (
+                          <p className="text-xs text-gray-500">
+                            <strong>Cuotas:</strong> {calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago)} cuotas {getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}{calcularNumeroCuotas(parseFloat(formData.numero_meses), formData.frecuencia_pago) > 1 ? 'es' : ''} de {formatCurrency(calculatedDetails.montoCuota, config.currency)} cada una
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}
