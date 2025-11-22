@@ -460,14 +460,15 @@ export default function PrestamosPage() {
               Nuevo Préstamo
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
+          <DialogContent className="max-w-2xl max-h-[95vh] flex flex-col p-0">
+            <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-4 border-b">
               <DialogTitle>Nuevo Préstamo</DialogTitle>
               <DialogDescription>
                 Las cuotas se calcularán y crearán automáticamente
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 custom-scrollbar min-h-0">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2 space-y-2">
                   <Label htmlFor="tipo_prestamo">Tipo de Préstamo *</Label>
@@ -786,8 +787,10 @@ export default function PrestamosPage() {
                   )}
                 </div>
               )}
-
-              <div className="flex justify-end space-x-2">
+              </div>
+              
+              {/* Footer fijo con botones */}
+              <div className="flex-shrink-0 flex justify-end space-x-2 px-6 py-4 pt-4 border-t bg-gray-50/50">
                 <Button type="button" variant="outline" onClick={resetForm}>
                   Cancelar
                 </Button>
