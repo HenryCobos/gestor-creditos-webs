@@ -30,7 +30,7 @@ export async function loadUserSubscription(): Promise<UserSubscription | null> {
         subscription_period,
         subscription_start_date,
         subscription_end_date,
-        paypal_subscription_id,
+        hotmart_subscription_id,
         payment_method,
         plan:planes(*)
       `)
@@ -62,7 +62,7 @@ export async function loadUserSubscription(): Promise<UserSubscription | null> {
         subscription_period: 'monthly',
         subscription_start_date: null,
         subscription_end_date: null,
-        paypal_subscription_id: null,
+        hotmart_subscription_id: null,
         payment_method: null,
       }
     }
@@ -88,7 +88,7 @@ export async function loadUserSubscription(): Promise<UserSubscription | null> {
         subscription_period: 'monthly',
         subscription_start_date: profile.subscription_start_date,
         subscription_end_date: profile.subscription_end_date,
-        paypal_subscription_id: profile.paypal_subscription_id,
+        hotmart_subscription_id: profile.hotmart_subscription_id,
         payment_method: profile.payment_method,
       }
     }
@@ -101,7 +101,7 @@ export async function loadUserSubscription(): Promise<UserSubscription | null> {
       subscription_period: profile.subscription_period || 'monthly',
       subscription_start_date: profile.subscription_start_date,
       subscription_end_date: profile.subscription_end_date,
-      paypal_subscription_id: profile.paypal_subscription_id,
+      hotmart_subscription_id: profile.hotmart_subscription_id,
       payment_method: profile.payment_method,
     }
   } catch (error) {
@@ -173,10 +173,11 @@ export async function loadUsageLimits(): Promise<UsageLimits | null> {
   }
 }
 
+// NOTA: Esta función ya no se usa con Hotmart (se activa vía Webhook)
+// La mantenemos simplificada por si se requiere activación manual/admin
 export async function upgradePlan(
   planId: string, 
-  period: 'monthly' | 'yearly', 
-  paypalSubscriptionId?: string
+  period: 'monthly' | 'yearly'
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -190,12 +191,7 @@ export async function upgradePlan(
     subscription_period: period,
     subscription_status: 'active',
     subscription_start_date: new Date().toISOString(),
-    payment_method: 'paypal',
-  }
-
-  // Agregar subscription_id si está disponible
-  if (paypalSubscriptionId) {
-    updateData.paypal_subscription_id = paypalSubscriptionId
+    payment_method: 'manual_upgrade', // Cambiado de 'paypal'
   }
 
   const { error } = await supabase
@@ -283,4 +279,3 @@ export function getPlanBenefits(slug: string): string[] {
 
   return benefits[slug] || []
 }
-

@@ -20,8 +20,6 @@ export interface Plan {
     marca_blanca?: boolean
     soporte: string
     historial_dias: number
-    paypal_plan_id_monthly?: string
-    paypal_plan_id_yearly?: string
   }
   activo: boolean
   orden: number
@@ -34,7 +32,7 @@ export interface UserSubscription {
   subscription_period: 'monthly' | 'yearly'
   subscription_start_date: string | null
   subscription_end_date: string | null
-  paypal_subscription_id: string | null
+  hotmart_subscription_id: string | null
   payment_method: string | null
 }
 
@@ -125,4 +123,3 @@ export const useSubscriptionStore = create<SubscriptionStore>((set, get) => ({
     return plan?.slug !== 'free'
   },
 }))
-
