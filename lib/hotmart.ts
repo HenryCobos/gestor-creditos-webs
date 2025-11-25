@@ -1,7 +1,8 @@
 export const HOTMART_CONFIG = {
   // URLs base de tus productos en Hotmart
   LINKS: {
-    professional: {
+    // IMPORTANTE: Las claves deben coincidir exactamente con los "slugs" de tu base de datos
+    pro: {
       monthly: 'https://pay.hotmart.com/C103126853X?off=ik0qihyk',
       yearly: 'https://pay.hotmart.com/C103126853X?off=r73t9021',
     },
@@ -19,7 +20,7 @@ export const HOTMART_CONFIG = {
 /**
  * Genera la URL de checkout de Hotmart con los parámetros de rastreo necesarios.
  * 
- * @param planSlug - El slug del plan (professional, business, enterprise)
+ * @param planSlug - El slug del plan (pro, business, enterprise)
  * @param period - El periodo (monthly, yearly)
  * @param userEmail - El email del usuario (para pre-llenar el campo)
  * @param userId - El ID del usuario (para rastrear quién compró)
@@ -39,6 +40,15 @@ export function getHotmartCheckoutUrl(
 
   if (!baseUrl) {
     console.error(`No se encontró link de Hotmart para: ${normalizedSlug} - ${period}`)
+    
+    // Fallback por si acaso (intentar mapear nombres comunes)
+    if (normalizedSlug === 'professional') {
+      // @ts-ignore
+      return HOTMART_CONFIG.LINKS['pro']?.[period] 
+        ? `${HOTMART_CONFIG.LINKS['pro'][period]}&email=${encodeURIComponent(userEmail)}&sck=${userId}&checkoutMode=10`
+        : null
+    }
+    
     return null
   }
 
@@ -48,4 +58,3 @@ export function getHotmartCheckoutUrl(
   // checkoutMode: 10 (apariencia limpia)
   return `${baseUrl}&email=${encodeURIComponent(userEmail)}&sck=${userId}&checkoutMode=10`
 }
-
