@@ -5,9 +5,10 @@
 -- Ejecuta las que necesites en el SQL Editor de Supabase
 
 -- ============================================
--- 🔥 QUERY PRINCIPAL: VER TODOS LOS REGISTROS RECIENTES
+-- ✅ QUERY PRINCIPAL: SOLO REGISTROS EXITOSOS (SIN ERRORES)
 -- ============================================
--- Esta query muestra los últimos registros con toda la información importante
+-- Esta query muestra SOLO los registros que están bien (los que funcionan correctamente)
+-- Perfecto para verificar tus 13 registros de Google Ads
 SELECT 
   u.email,
   u.created_at as fecha_registro,
@@ -17,7 +18,30 @@ SELECT
   -- Contar actividad del usuario
   (SELECT COUNT(*) FROM clientes WHERE user_id = u.id) as clientes_creados,
   (SELECT COUNT(*) FROM prestamos WHERE user_id = u.id) as prestamos_creados,
-  -- Estado general
+  -- Estado (siempre será OK porque filtramos solo los que están bien)
+  CASE 
+    WHEN pl.slug != 'free' THEN '💰 Usuario de pago'
+    ELSE '✅ Usuario gratuito OK'
+  END as estado
+FROM auth.users u
+INNER JOIN profiles p ON u.id = p.id
+INNER JOIN planes pl ON p.plan_id = pl.id
+WHERE p.id IS NOT NULL AND p.plan_id IS NOT NULL
+ORDER BY u.created_at DESC;
+
+-- ============================================
+-- 🔥 QUERY ALTERNATIVA: TODOS LOS REGISTROS (INCLUYE ERRORES)
+-- ============================================
+-- Usa esta si quieres ver también los que tienen problemas
+/*
+SELECT 
+  u.email,
+  u.created_at as fecha_registro,
+  p.full_name as nombre,
+  pl.nombre as plan_actual,
+  p.subscription_status as estado_suscripcion,
+  (SELECT COUNT(*) FROM clientes WHERE user_id = u.id) as clientes_creados,
+  (SELECT COUNT(*) FROM prestamos WHERE user_id = u.id) as prestamos_creados,
   CASE 
     WHEN p.id IS NULL THEN '❌ ERROR: Sin perfil'
     WHEN p.plan_id IS NULL THEN '❌ ERROR: Sin plan'
@@ -29,6 +53,7 @@ LEFT JOIN profiles p ON u.id = p.id
 LEFT JOIN planes pl ON p.plan_id = pl.id
 ORDER BY u.created_at DESC
 LIMIT 50;
+*/
 
 -- ============================================
 -- 📈 ESTADÍSTICAS DE REGISTROS
@@ -128,33 +153,48 @@ FROM (
 ) stats;
 
 -- ============================================
--- ⏰ REGISTROS DE LAS ÚLTIMAS 24 HORAS
+-- ⏰ REGISTROS EXITOSOS DE LAS ÚLTIMAS 24 HORAS
 -- ============================================
--- Perfecto para monitorear tu campaña activa
+-- Solo los registros que están bien (sin errores)
 SELECT 
   u.email,
   u.created_at as fecha_registro,
   p.full_name,
   pl.nombre as plan,
-  CASE 
-    WHEN p.id IS NULL THEN '❌ ERROR'
-    WHEN p.plan_id IS NULL THEN '❌ ERROR'
-    ELSE '✅ OK'
-  END as estado
+  (SELECT COUNT(*) FROM clientes WHERE user_id = u.id) as clientes_creados,
+  (SELECT COUNT(*) FROM prestamos WHERE user_id = u.id) as prestamos_creados,
+  '✅ OK' as estado
 FROM auth.users u
-LEFT JOIN profiles p ON u.id = p.id
-LEFT JOIN planes pl ON p.plan_id = pl.id
+INNER JOIN profiles p ON u.id = p.id
+INNER JOIN planes pl ON p.plan_id = pl.id
 WHERE u.created_at >= NOW() - INTERVAL '24 hours'
+  AND p.id IS NOT NULL 
+  AND p.plan_id IS NOT NULL
 ORDER BY u.created_at DESC;
+
+-- ============================================
+-- 📊 CONTAR REGISTROS EXITOSOS TOTALES
+-- ============================================
+-- Cuenta cuántos registros tienes que están funcionando correctamente
+SELECT 
+  COUNT(*) as total_registros_exitosos,
+  COUNT(CASE WHEN pl.slug = 'free' THEN 1 END) as usuarios_gratuitos,
+  COUNT(CASE WHEN pl.slug != 'free' THEN 1 END) as usuarios_de_pago
+FROM auth.users u
+INNER JOIN profiles p ON u.id = p.id
+INNER JOIN planes pl ON p.plan_id = pl.id
+WHERE p.id IS NOT NULL AND p.plan_id IS NOT NULL;
 
 -- ============================================
 -- 💡 TIPS DE USO:
 -- ============================================
--- 1. Ejecuta la primera query (QUERY PRINCIPAL) regularmente para ver todos los registros
--- 2. Si ves algún registro con "❌ ERROR", ejecuta el script de corrección
--- 3. Usa "ESTADÍSTICAS DE REGISTROS" para ver el rendimiento de tu campaña por día
--- 4. Revisa "CONVERSIONES DE TU CAMPAÑA" para ver qué % de usuarios realmente usa la app
--- 5. Monitorea "REGISTROS DE LAS ÚLTIMAS 24 HORAS" cuando tengas campaña activa
+-- 1. ✅ Usa la primera query (QUERY PRINCIPAL) para ver SOLO los registros exitosos
+-- 2. ✅ Usa "CONTAR REGISTROS EXITOSOS TOTALES" para ver cuántos tienes funcionando
+-- 3. ✅ Usa "REGISTROS EXITOSOS DE LAS ÚLTIMAS 24 HORAS" para monitorear tu campaña activa
+-- 4. Si necesitas ver los que tienen errores, usa la query "DETECTAR PROBLEMAS"
+-- 5. Si ves registros con "❌ ERROR", ejecuta el script de corrección
+-- 6. Usa "ESTADÍSTICAS DE REGISTROS" para ver el rendimiento de tu campaña por día
+-- 7. Revisa "CONVERSIONES DE TU CAMPAÑA" para ver qué % de usuarios realmente usa la app
 
 -- ============================================
 -- 🔄 AUTOMATIZAR MONITOREO (OPCIONAL)

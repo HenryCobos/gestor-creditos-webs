@@ -5,6 +5,44 @@ interface EmailTemplate {
   html: string
 }
 
+// Función helper para generar footer con enlaces importantes
+function getEmailFooter(baseUrl: string): string {
+  const landingUrl = baseUrl
+  const registerUrl = `${baseUrl}/register`
+  const videoDemoUrl = 'https://www.youtube.com/watch?v=nc3M93QZkLA'
+  const loginUrl = `${baseUrl}/login`
+  
+  return `
+          <tr>
+            <td style="background: #f9fafb; padding: 30px; border-radius: 0 0 12px 12px; border-top: 2px solid #e5e7eb;">
+              <div style="text-align: center; margin-bottom: 20px;">
+                <p style="margin: 0 0 15px 0; color: #6b7280; font-size: 14px; font-weight: bold;">🔗 Enlaces Importantes</p>
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin: 0 auto;">
+                  <tr>
+                    <td align="center" style="padding: 5px;">
+                      <a href="${landingUrl}" style="display: inline-block; background: #3b82f6; color: white; padding: 12px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 14px; margin: 5px;">🏠 Inicio</a>
+                    </td>
+                    <td align="center" style="padding: 5px;">
+                      <a href="${registerUrl}" style="display: inline-block; background: #10b981; color: white; padding: 12px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 14px; margin: 5px;">📝 Registrarse</a>
+                    </td>
+                    <td align="center" style="padding: 5px;">
+                      <a href="${videoDemoUrl}" style="display: inline-block; background: #ef4444; color: white; padding: 12px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 14px; margin: 5px;">▶️ Ver Demo</a>
+                    </td>
+                    <td align="center" style="padding: 5px;">
+                      <a href="${loginUrl}" style="display: inline-block; background: #6366f1; color: white; padding: 12px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 14px; margin: 5px;">🔐 Iniciar Sesión</a>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+              <div style="text-align: center; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+                <p style="margin: 0 0 5px 0; color: #6b7280; font-size: 14px; font-weight: bold;">Henry - Gestor de Créditos</p>
+                <p style="margin: 0; color: #9ca3af; font-size: 12px;">Sistema profesional de gestión de préstamos y créditos</p>
+              </div>
+            </td>
+          </tr>
+  `
+}
+
 export function getEmailTemplate(day: number, userName: string, dashboardUrl: string): EmailTemplate | null {
   const templates: Record<number, EmailTemplate> = {
     1: {
@@ -78,11 +116,7 @@ function getDayOneEmail(userName: string, dashboardUrl: string): string {
               <p style="font-size: 16px; line-height: 1.6; color: #374151;">Nos vemos mañana 😊</p>
             </td>
           </tr>
-          <tr>
-            <td style="background: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 12px 12px;">
-              <p style="margin: 0; color: #6b7280; font-size: 14px;">Henry - Gestor de Créditos</p>
-            </td>
-          </tr>
+          ${getEmailFooter(dashboardUrl)}
         </table>
       </td>
     </tr>
@@ -131,11 +165,7 @@ function getDayTwoEmail(userName: string, dashboardUrl: string): string {
               <p style="font-size: 16px; line-height: 1.6; color: #374151;">Mañana te enseñaré el truco para nunca olvidar un cobro 😉</p>
             </td>
           </tr>
-          <tr>
-            <td style="background: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 12px 12px;">
-              <p style="margin: 0; color: #6b7280; font-size: 14px;">Henry - Gestor de Créditos</p>
-            </td>
-          </tr>
+          ${getEmailFooter(dashboardUrl)}
         </table>
       </td>
     </tr>
@@ -177,7 +207,7 @@ function getDayThreeEmail(userName: string, dashboardUrl: string): string {
 
               <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0;">
                 <p style="font-weight: bold; margin: 0 0 10px 0;">💡 TIP PRO:</p>
-                <p style="margin: 0;">Los usuarios del Plan Pro reciben un reporte en WhatsApp cada mañana con esta información.</p>
+                <p style="margin: 0;">Revisa tu dashboard cada mañana para mantener el control total de tus cobros.</p>
               </div>
 
               <div style="text-align: center; margin: 30px 0;">
@@ -187,11 +217,7 @@ function getDayThreeEmail(userName: string, dashboardUrl: string): string {
               <p style="font-size: 16px; line-height: 1.6; color: #374151;">Mañana: "Cómo cobrar sin ser insistente" 😊</p>
             </td>
           </tr>
-          <tr>
-            <td style="background: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 12px 12px;">
-              <p style="margin: 0; color: #6b7280; font-size: 14px;">Henry - Gestor de Créditos</p>
-            </td>
-          </tr>
+          ${getEmailFooter(dashboardUrl)}
         </table>
       </td>
     </tr>
@@ -238,18 +264,14 @@ function getDayFourEmail(userName: string, dashboardUrl: string): string {
               </div>
 
               <p style="font-size: 16px; line-height: 1.6; color: #374151;"><strong>🎯 CÓMO LO HACEMOS FÁCIL:</strong></p>
-              <p style="font-size: 16px; line-height: 1.6; color: #374151;">Plan Gratuito: Copias y pegas el mensaje<br>Plan Pro: El sistema envía automáticamente 🤖</p>
+              <p style="font-size: 16px; line-height: 1.6; color: #374151;">Tu dashboard te muestra quién debe y cuándo. Solo copia y pega el mensaje de recordatorio a tus clientes.</p>
 
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${dashboardUrl}/planes" style="display: inline-block; background: #8b5cf6; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">📊 Ver Planes</a>
+                <a href="${dashboardUrl}/subscription" style="display: inline-block; background: #8b5cf6; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">📊 Ver Planes</a>
               </div>
             </td>
           </tr>
-          <tr>
-            <td style="background: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 12px 12px;">
-              <p style="margin: 0; color: #6b7280; font-size: 14px;">Henry - Gestor de Créditos</p>
-            </td>
-          </tr>
+          ${getEmailFooter(dashboardUrl)}
         </table>
       </td>
     </tr>
@@ -293,22 +315,18 @@ function getDayFiveEmail(userName: string, dashboardUrl: string): string {
               </ul>
 
               <div style="background: #dcfce7; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <p style="font-weight: bold; margin: 0 0 10px 0;">⭐ HISTORIA REAL:</p>
-                <p style="margin: 0;">Luis pasó de 3 reclamos al mes a 0 solo por enviar comprobantes automáticos.</p>
+                <p style="font-weight: bold; margin: 0 0 10px 0;">⭐ TIP PROFESIONAL:</p>
+                <p style="margin: 0;">Enviar comprobantes genera confianza y reduce reclamos. Puedes generar recibos PDF desde tu dashboard.</p>
               </div>
 
-              <p style="font-size: 16px; line-height: 1.6; color: #374151;">Plan Pro/Premium: Click en "Enviar Comprobante" y listo! Se envía automático 🚀</p>
+              <p style="font-size: 16px; line-height: 1.6; color: #374151;">Desde tu dashboard puedes generar recibos PDF profesionales para cada pago recibido.</p>
 
               <div style="text-align: center; margin: 30px 0;">
                 <a href="${dashboardUrl}" style="display: inline-block; background: #ec4899; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">Ir al Dashboard</a>
               </div>
             </td>
           </tr>
-          <tr>
-            <td style="background: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 12px 12px;">
-              <p style="margin: 0; color: #6b7280; font-size: 14px;">Henry - Gestor de Créditos</p>
-            </td>
-          </tr>
+          ${getEmailFooter(dashboardUrl)}
         </table>
       </td>
     </tr>
@@ -347,7 +365,7 @@ function getDaySixEmail(userName: string, dashboardUrl: string): string {
               <div style="background: #dbeafe; padding: 20px; border-radius: 8px; margin: 20px 0;">
                 <p style="font-weight: bold; margin: 0 0 10px 0;">⏱️ RUTINA DE 15 MINUTOS:</p>
                 <p style="margin: 5px 0;">5 min: Revisar dashboard (quién debe hoy)</p>
-                <p style="margin: 5px 0;">5 min: Enviar recordatorios (automático en Pro)</p>
+                <p style="margin: 5px 0;">5 min: Enviar recordatorios a clientes con pagos pendientes</p>
                 <p style="margin: 5px 0;">5 min: Registrar pagos recibidos</p>
               </div>
 
@@ -357,26 +375,14 @@ function getDaySixEmail(userName: string, dashboardUrl: string): string {
                 <p style="margin: 10px 0 0 0; font-size: 14px; color: #047857;">Plan Pro cuesta $19/mes. Tu retorno: 263x 🚀</p>
               </div>
 
-              <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0; border: 2px solid #f59e0b;">
-                <p style="font-weight: bold; margin: 0 0 10px 0; font-size: 18px;">🎁 BONUS ESPECIAL (Solo hoy):</p>
-                <p style="margin: 5px 0;">✅ 1 mes extra gratis</p>
-                <p style="margin: 5px 0;">✅ Onboarding personalizado (30 min)</p>
-                <p style="margin: 5px 0;">✅ Plantillas de mensajes profesionales</p>
-                <p style="margin: 15px 0 5px 0; font-weight: bold;">Código: CONTROL7</p>
-              </div>
-
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${dashboardUrl}/planes" style="display: inline-block; background: #f59e0b; color: white; padding: 18px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 18px;">⚡ Actualizar a Pro</a>
+                <a href="${dashboardUrl}/subscription" style="display: inline-block; background: #f59e0b; color: white; padding: 18px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 18px;">⚡ Ver Planes Disponibles</a>
               </div>
 
               <p style="font-size: 16px; line-height: 1.6; color: #374151;">Mañana: Último email con sorpresa final 🎁</p>
             </td>
           </tr>
-          <tr>
-            <td style="background: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 12px 12px;">
-              <p style="margin: 0; color: #6b7280; font-size: 14px;">Henry - Gestor de Créditos</p>
-            </td>
-          </tr>
+          ${getEmailFooter(dashboardUrl)}
         </table>
       </td>
     </tr>
@@ -432,8 +438,8 @@ function getDaySevenEmail(userName: string, dashboardUrl: string): string {
                     <div style="background: #dbeafe; padding: 15px; border-radius: 8px; border: 2px solid #3b82f6; height: 100%;">
                       <p style="font-weight: bold; margin: 0 0 10px 0; color: #1e40af;">CAMINO B: Acelerar tu negocio</p>
                       <p style="margin: 5px 0; font-size: 14px; color: #1e3a8a;">• Plan Pro o Premium</p>
-                      <p style="margin: 5px 0; font-size: 14px; color: #1e3a8a;">• Recordatorios automáticos</p>
-                      <p style="margin: 5px 0; font-size: 14px; color: #1e3a8a;">• Más clientes sin más trabajo</p>
+                      <p style="margin: 5px 0; font-size: 14px; color: #1e3a8a;">• Más clientes y préstamos</p>
+                      <p style="margin: 5px 0; font-size: 14px; color: #1e3a8a;">• Exportación a PDF</p>
                     </div>
                   </td>
                 </tr>
@@ -441,14 +447,8 @@ function getDaySevenEmail(userName: string, dashboardUrl: string): string {
 
               <p style="font-size: 16px; line-height: 1.6; color: #374151; text-align: center;"><strong>No hay opción mala.</strong> Solo tú sabes dónde estás.</p>
 
-              <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0; border: 3px solid #f59e0b;">
-                <p style="font-weight: bold; margin: 0 0 10px 0; font-size: 18px; text-align: center;">⏰ ÚLTIMA OPORTUNIDAD:</p>
-                <p style="margin: 0; text-align: center;">El código <strong>CONTROL7</strong> expira esta noche</p>
-                <p style="margin: 10px 0; text-align: center; font-size: 14px;">✅ 1 mes gratis + Sesión personalizada</p>
-              </div>
-
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${dashboardUrl}/planes" style="display: inline-block; background: #6366f1; color: white; padding: 18px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 18px; margin-bottom: 10px;">🚀 Actualizar Ahora</a>
+                <a href="${dashboardUrl}/subscription" style="display: inline-block; background: #6366f1; color: white; padding: 18px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 18px; margin-bottom: 10px;">🚀 Ver Planes Disponibles</a>
               </div>
 
               <p style="font-size: 16px; line-height: 1.6; color: #374151;">Esto es el final de la serie de 7 días, pero no de nuestra relación 😊</p>
@@ -456,12 +456,7 @@ function getDaySevenEmail(userName: string, dashboardUrl: string): string {
               <p style="font-size: 16px; line-height: 1.6; color: #374151; margin-top: 30px;">🙏 <strong>GRACIAS</strong> por tomarte el tiempo de leer estos emails. Significa mucho para mí.</p>
             </td>
           </tr>
-          <tr>
-            <td style="background: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 12px 12px;">
-              <p style="margin: 0; color: #6b7280; font-size: 14px; font-weight: bold;">Henry - Fundador</p>
-              <p style="margin: 5px 0 0 0; color: #9ca3af; font-size: 12px;">Gestor de Créditos</p>
-            </td>
-          </tr>
+          ${getEmailFooter(dashboardUrl)}
         </table>
       </td>
     </tr>
