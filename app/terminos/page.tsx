@@ -77,12 +77,15 @@ export default function TerminosPage() {
               según su elección. El pago se procesa automáticamente al inicio de cada período.
             </p>
             <p className="text-slate-700 mb-4">
-              <strong>4.3 Reembolsos:</strong> Ofrecemos una garantía de devolución de dinero de 30 días 
-              para todos los planes de pago. Después de este período, no se realizarán reembolsos por 
-              períodos parciales.
+              <strong>4.3 Reembolsos:</strong> Ofrecemos una garantía incondicional de 7 días 
+              (o el periodo establecido por la ley local aplicable) procesada directamente a través de Hotmart.
             </p>
             <p className="text-slate-700 mb-4">
-              <strong>4.4 Cancelación:</strong> Puede cancelar su suscripción en cualquier momento desde 
+              <strong>4.4 Procesador de Pagos:</strong> Todas las transacciones son procesadas de forma segura 
+              por Hotmart B.V., quien actúa como el Comerciante Registrado (Merchant of Record) para estos servicios.
+            </p>
+            <p className="text-slate-700 mb-4">
+              <strong>4.5 Cancelación:</strong> Puede cancelar su suscripción en cualquier momento desde 
               su panel de control. La cancelación será efectiva al final del período de facturación actual.
             </p>
 

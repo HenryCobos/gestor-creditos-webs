@@ -224,8 +224,8 @@ function CheckoutContent() {
                 <div className="flex flex-wrap justify-center gap-2 opacity-60 grayscale transition-all hover:grayscale-0">
                   <div className="h-6 w-10 bg-gray-200 rounded flex items-center justify-center text-[10px] font-bold text-gray-500">VISA</div>
                   <div className="h-6 w-10 bg-gray-200 rounded flex items-center justify-center text-[10px] font-bold text-gray-500">MC</div>
-                  <div className="h-6 w-10 bg-gray-200 rounded flex items-center justify-center text-[10px] font-bold text-gray-500">PayPal</div>
-                  <div className="h-6 w-10 bg-gray-200 rounded flex items-center justify-center text-[10px] font-bold text-gray-500">OXXO</div>
+                  <div className="h-6 w-10 bg-gray-200 rounded flex items-center justify-center text-[10px] font-bold text-gray-500">AMEX</div>
+                  <div className="h-6 w-14 bg-gray-200 rounded flex items-center justify-center text-[10px] font-bold text-gray-500">EFECTIVO</div>
                 </div>
 
                 <div className="flex items-center justify-center gap-1 text-[10px] text-gray-400 mt-4">

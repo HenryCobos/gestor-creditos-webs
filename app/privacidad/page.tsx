@@ -140,7 +140,7 @@ export default function PrivacidadPage() {
             <ul className="list-disc pl-6 mb-4 text-slate-700 space-y-2">
               <li><strong>Supabase:</strong> Alojamiento de base de datos y autenticación</li>
               <li><strong>Vercel:</strong> Alojamiento de la aplicación web</li>
-              <li><strong>PayPal:</strong> Procesamiento de pagos</li>
+              <li><strong>Hotmart:</strong> Procesamiento de pagos y gestión de suscripciones (Comerciante Registrado)</li>
             </ul>
             <p className="text-slate-700 mb-4">
               Estos proveedores están obligados contractualmente a proteger su información.
