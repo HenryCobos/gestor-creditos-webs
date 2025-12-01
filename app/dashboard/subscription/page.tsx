@@ -14,7 +14,8 @@ import {
   Zap,
   Crown,
   Rocket,
-  Star
+  Star,
+  ShieldCheck
 } from 'lucide-react'
 import { useSubscriptionStore } from '@/lib/subscription-store'
 import { loadPlans, loadUserSubscription, loadUsageLimits, getPlanBenefits } from '@/lib/subscription-helpers'
@@ -298,19 +299,20 @@ export default function SubscriptionPage() {
         })}
       </div>
 
-      {/* Prueba Gratis */}
-      <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+      {/* Garantía de Satisfacción Hotmart */}
+      <Card className="bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200 shadow-sm">
         <CardContent className="pt-6">
-          <div className="flex items-center justify-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center">
-              <Zap className="w-8 h-8 text-blue-600" />
+          <div className="flex items-center justify-center gap-6">
+            <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+              <ShieldCheck className="w-8 h-8 text-emerald-600" />
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">
-                7 Días de Prueba GRATIS
+            <div className="text-left">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                Garantía de Satisfacción de 7 Días
+                <span className="px-2 py-0.5 bg-emerald-200 text-emerald-800 text-xs rounded-full font-bold uppercase">Garantizado</span>
               </h3>
-              <p className="text-gray-600">
-                Prueba cualquier plan sin costo. Cancela cuando quieras, sin compromisos.
+              <p className="text-gray-600 mt-1 max-w-xl">
+                Prueba cualquier plan con total tranquilidad. Si no estás 100% satisfecho en los primeros 7 días, solicita tu reembolso directamente en Hotmart. Sin preguntas.
               </p>
             </div>
           </div>

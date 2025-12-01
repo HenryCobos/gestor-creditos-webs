@@ -8,6 +8,11 @@
     "app/api/**/*.ts": {
       "maxDuration": 30
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/send-drip-emails",
+      "schedule": "0 14 * * *"
+    }
+  ]
 }
-
