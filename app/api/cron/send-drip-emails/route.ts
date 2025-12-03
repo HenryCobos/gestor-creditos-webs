@@ -40,7 +40,13 @@ export async function GET(request: Request) {
     const emailsSent: any[] = []
     const errors: any[] = []
 
+    // Función de espera para evitar rate limits de Resend (max 2 req/seg en plan gratis)
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
     for (const campaign of campaigns || []) {
+      // Esperar 1 segundo entre correos para no saturar la API
+      await delay(1000)
+      
       try {
         // Calcular días desde el registro
         const daysSinceRegistration = Math.floor(
