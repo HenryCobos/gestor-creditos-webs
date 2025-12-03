@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import GoogleAnalytics from "@/app/components/GoogleAnalytics";
 import GoogleAdsConversion from "@/app/components/GoogleAdsConversion";
 import { GoogleTagManager, GoogleTagManagerNoScript } from "@/components/GoogleTagManager";
+import { RouteChangeListener } from "@/components/RouteChangeListener";
 import WhatsAppButton from "@/components/whatsapp-button";
 import { whatsappConfig } from "@/lib/config/whatsapp";
 
@@ -101,6 +102,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <GoogleTagManagerNoScript gtmId={GTM_ID} />
         <GoogleTagManager gtmId={GTM_ID} />
+        <RouteChangeListener />
         <GoogleAnalytics />
         <GoogleAdsConversion />
         {children}
