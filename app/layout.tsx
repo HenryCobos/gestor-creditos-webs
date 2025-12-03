@@ -4,10 +4,12 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import GoogleAnalytics from "@/app/components/GoogleAnalytics";
 import GoogleAdsConversion from "@/app/components/GoogleAdsConversion";
+import { GoogleTagManager, GoogleTagManagerNoScript } from "@/components/GoogleTagManager";
 import WhatsAppButton from "@/components/whatsapp-button";
 import { whatsappConfig } from "@/lib/config/whatsapp";
 
 const inter = Inter({ subsets: ["latin"] });
+const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID || 'GTM-5NC24SHJ'; // ID proporcionado
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://gestor-creditos-webs.vercel.app'),
@@ -97,6 +99,8 @@ export default function RootLayout({
         <link rel="manifest" href="/site.webmanifest" />
       </head>
       <body className={inter.className}>
+        <GoogleTagManagerNoScript gtmId={GTM_ID} />
+        <GoogleTagManager gtmId={GTM_ID} />
         <GoogleAnalytics />
         <GoogleAdsConversion />
         {children}
