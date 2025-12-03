@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
@@ -102,7 +103,9 @@ export default function RootLayout({
       <body className={inter.className}>
         <GoogleTagManagerNoScript gtmId={GTM_ID} />
         <GoogleTagManager gtmId={GTM_ID} />
-        <RouteChangeListener />
+        <Suspense fallback={null}>
+          <RouteChangeListener />
+        </Suspense>
         <GoogleAnalytics />
         <GoogleAdsConversion />
         {children}
