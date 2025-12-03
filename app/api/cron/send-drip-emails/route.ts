@@ -13,9 +13,12 @@ export const runtime = 'nodejs'
 
 export async function GET(request: Request) {
   try {
-    // Verificar cron secret para seguridad
+    const { searchParams } = new URL(request.url)
+    const manualKey = searchParams.get('key')
+
+    // Verificar cron secret para seguridad (o clave manual para pruebas)
     const authHeader = request.headers.get('authorization')
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}` && manualKey !== 'test-drip-123') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -44,22 +47,22 @@ export async function GET(request: Request) {
           (now.getTime() - new Date(campaign.created_at).getTime()) / (1000 * 60 * 60 * 24)
         )
 
-        // Determinar qué email enviar
+        // Determinar qué email enviar (Lógica Catch-up: enviar en orden si se perdió alguno)
         let dayToSend: number | null = null
 
-        if (daysSinceRegistration === 1 && !campaign.day_1_sent_at) {
+        if (daysSinceRegistration >= 1 && !campaign.day_1_sent_at) {
           dayToSend = 1
-        } else if (daysSinceRegistration === 2 && !campaign.day_2_sent_at) {
+        } else if (daysSinceRegistration >= 2 && !campaign.day_2_sent_at) {
           dayToSend = 2
-        } else if (daysSinceRegistration === 3 && !campaign.day_3_sent_at) {
+        } else if (daysSinceRegistration >= 3 && !campaign.day_3_sent_at) {
           dayToSend = 3
-        } else if (daysSinceRegistration === 4 && !campaign.day_4_sent_at) {
+        } else if (daysSinceRegistration >= 4 && !campaign.day_4_sent_at) {
           dayToSend = 4
-        } else if (daysSinceRegistration === 5 && !campaign.day_5_sent_at) {
+        } else if (daysSinceRegistration >= 5 && !campaign.day_5_sent_at) {
           dayToSend = 5
-        } else if (daysSinceRegistration === 6 && !campaign.day_6_sent_at) {
+        } else if (daysSinceRegistration >= 6 && !campaign.day_6_sent_at) {
           dayToSend = 6
-        } else if (daysSinceRegistration === 7 && !campaign.day_7_sent_at) {
+        } else if (daysSinceRegistration >= 7 && !campaign.day_7_sent_at) {
           dayToSend = 7
         }
 
