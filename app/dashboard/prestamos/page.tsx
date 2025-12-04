@@ -338,13 +338,22 @@ export default function PrestamosPage() {
     // Para modo "solo intereses", cada cuota es solo el interés (excepto la última que incluye capital)
     // Para modo "amortización" o "empeño", cada cuota incluye capital + interés
     for (let i = 1; i <= cuotas; i++) {
-      // Para la primera cuota (i=1), usar i-1=0 períodos (vence en la fecha de inicio)
-      // Para la segunda cuota (i=2), usar i-1=1 período, etc.
-      const fechaVencimiento = calcularSiguienteFechaPago(
-        fechaInicio,
-        i - 1,
-        formData.frecuencia_pago
-      )
+      // Para la primera cuota, usar directamente la fecha de inicio para evitar problemas de zona horaria
+      // Para las demás cuotas, calcular sumando períodos desde la fecha de inicio
+      let fechaVencimientoString: string
+      
+      if (i === 1) {
+        // Primera cuota: usa la fecha de inicio tal cual (sin conversiones)
+        fechaVencimientoString = formData.fecha_inicio
+      } else {
+        // Cuotas 2 en adelante: calcular sumando períodos
+        const fechaVencimiento = calcularSiguienteFechaPago(
+          fechaInicio,
+          i - 1,
+          formData.frecuencia_pago
+        )
+        fechaVencimientoString = format(fechaVencimiento, 'yyyy-MM-dd')
+      }
       
       // Última cuota en modo "solo intereses" incluye el capital
       const esUltimaCuota = i === cuotas
@@ -360,7 +369,7 @@ export default function PrestamosPage() {
         prestamo_id: prestamo.id,
         numero_cuota: i,
         monto_cuota: montoCuotaFinal,
-        fecha_vencimiento: format(fechaVencimiento, 'yyyy-MM-dd'),
+        fecha_vencimiento: fechaVencimientoString,
         estado: 'pendiente',
         monto_pagado: 0,
       })
