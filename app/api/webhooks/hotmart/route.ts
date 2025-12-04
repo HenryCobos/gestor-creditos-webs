@@ -135,15 +135,17 @@ export async function POST(req: Request) {
       }
 
       // ACTUALIZAR PERFIL
+      const startDate = new Date()
       const { error: updateError } = await supabase
         .from('profiles')
         .update({
           plan_id: planDb.id,
           subscription_status: 'active',
           subscription_period: planInfo.period,
+          subscription_start_date: startDate.toISOString(),
           subscription_end_date: endDate.toISOString(),
           payment_method: 'hotmart',
-          hotmart_subscription_id: data.subscription?.subscriber?.code
+          hotmart_subscription_id: data.subscription?.subscriber?.code || data.purchase?.subscription?.subscriber_code
         })
         .eq('id', targetUserId)
 
