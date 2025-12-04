@@ -13,11 +13,30 @@ export function formatCurrency(amount: number, currency: string = 'USD'): string
 }
 
 export function formatDate(date: string | Date): string {
+  // Si es un string de fecha (YYYY-MM-DD), parsearlo correctamente para evitar problemas de zona horaria
+  if (typeof date === 'string') {
+    // Si tiene formato ISO con hora (YYYY-MM-DDTHH:mm:ss), usar directamente
+    if (date.includes('T')) {
+      return new Intl.DateTimeFormat('es-ES', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }).format(new Date(date))
+    }
+    // Si es solo fecha (YYYY-MM-DD), parsear los componentes para evitar conversión UTC
+    const [year, month, day] = date.split('-').map(Number)
+    return new Intl.DateTimeFormat('es-ES', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(new Date(year, month - 1, day))
+  }
+  // Si ya es un objeto Date, usarlo directamente
   return new Intl.DateTimeFormat('es-ES', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
-  }).format(new Date(date))
+  }).format(date)
 }
 
 export function calculateLoanDetails(
