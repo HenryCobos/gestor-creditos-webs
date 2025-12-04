@@ -265,6 +265,10 @@ export default function PrestamosPage() {
     }
 
     // Crear préstamo
+    // Agregar hora al mediodía para evitar problemas de zona horaria
+    const fechaInicioConHora = `${formData.fecha_inicio}T12:00:00`
+    const fechaFinConHora = fechaFin ? `${fechaFin}T12:00:00` : null
+    
     const { data: prestamo, error: prestamoError } = await supabase
       .from('prestamos')
       .insert([{
@@ -273,8 +277,8 @@ export default function PrestamosPage() {
         monto_prestado: monto,
         interes_porcentaje: interes,
         numero_cuotas: cuotas, // Calculado automáticamente
-        fecha_inicio: formData.fecha_inicio,
-        fecha_fin: fechaFin,
+        fecha_inicio: fechaInicioConHora,
+        fecha_fin: fechaFinConHora,
         monto_total: montoTotal,
         frecuencia_pago: formData.frecuencia_pago,
         tipo_interes: formData.tipo_interes,
@@ -364,12 +368,15 @@ export default function PrestamosPage() {
         montoCuotaFinal = montoCuota + monto
       }
 
+      // Agregar hora al mediodía para evitar problemas de zona horaria
+      const fechaVencimientoConHora = `${fechaVencimientoString}T12:00:00`
+      
       cuotasToCreate.push({
         user_id: user.id,
         prestamo_id: prestamo.id,
         numero_cuota: i,
         monto_cuota: montoCuotaFinal,
-        fecha_vencimiento: fechaVencimientoString,
+        fecha_vencimiento: fechaVencimientoConHora,
         estado: 'pendiente',
         monto_pagado: 0,
       })
