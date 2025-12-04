@@ -32,6 +32,14 @@ export function RouteChangeListener() {
           page_path: pathname
         })
       }
+
+      // Evento: Purchase (Usuario llegó a compra exitosa)
+      if (pathname === '/compra-exitosa') {
+        (window as any).dataLayer.push({
+          event: 'Purchase',
+          page_path: pathname
+        })
+      }
     }
   }, [pathname, searchParams])
 
