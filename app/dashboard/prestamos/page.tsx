@@ -137,7 +137,8 @@ export default function PrestamosPage() {
         
         // Calcular fecha_fin para modo solo intereses
         if (formData.tipo_prestamo === 'solo_intereses' && formData.fecha_inicio) {
-          const fechaInicio = new Date(formData.fecha_inicio)
+          const [year, month, day] = formData.fecha_inicio.split('-').map(Number)
+          const fechaInicio = new Date(year, month - 1, day)
           let fechaFin: Date
           
           if (formData.tipo_duracion === 'dias' && dias) {
@@ -248,7 +249,8 @@ export default function PrestamosPage() {
     // Calcular fecha_fin si es modo solo intereses
     let fechaFin: string | null = null
     if (formData.tipo_prestamo === 'solo_intereses') {
-      const fechaInicio = new Date(formData.fecha_inicio)
+      const [year, month, day] = formData.fecha_inicio.split('-').map(Number)
+      const fechaInicio = new Date(year, month - 1, day)
       let fechaFinDate: Date
       
       if (formData.tipo_duracion === 'dias' && dias) {
@@ -328,14 +330,19 @@ export default function PrestamosPage() {
 
     // Crear cuotas automáticamente con la frecuencia seleccionada
     const cuotasToCreate = []
-    const fechaInicio = new Date(formData.fecha_inicio)
+    // Parsear fecha localmente y ajustar para evitar desfase de zona horaria
+    const [year, month, day] = formData.fecha_inicio.split('-').map(Number)
+    // Crear fecha en UTC a partir de los componentes para evitar conversión a hora local que reste un día
+    const fechaInicio = new Date(year, month - 1, day, 12, 0, 0) // Mediodía para evitar bordes de día
 
     // Para modo "solo intereses", cada cuota es solo el interés (excepto la última que incluye capital)
     // Para modo "amortización" o "empeño", cada cuota incluye capital + interés
     for (let i = 1; i <= cuotas; i++) {
+      // Para la primera cuota (i=1), usar i-1=0 períodos (vence en la fecha de inicio)
+      // Para la segunda cuota (i=2), usar i-1=1 período, etc.
       const fechaVencimiento = calcularSiguienteFechaPago(
         fechaInicio,
-        i,
+        i - 1,
         formData.frecuencia_pago
       )
       

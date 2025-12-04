@@ -174,12 +174,16 @@ export function calculateLoanDetails(
 
 /**
  * Calcula la siguiente fecha de pago según la frecuencia
+ * Para la cuota 1, devuelve la fecha base más un período
+ * Para la cuota 2, devuelve la fecha base más dos períodos, etc.
  */
 export function calcularSiguienteFechaPago(
   fechaBase: Date,
   numeroCuota: number,
   frecuencia: FrecuenciaPago
 ): Date {
+  // La primera cuota vence un período después de la fecha de inicio
+  // numeroCuota ya viene con el valor correcto (1, 2, 3, etc.)
   switch (frecuencia) {
     case 'diario':
       return addDays(fechaBase, numeroCuota)
