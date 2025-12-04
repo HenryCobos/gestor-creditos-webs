@@ -3,7 +3,14 @@ import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { getEmailTemplate } from '@/lib/email-templates'
 
-const resend = new Resend(process.env.RESEND_API_KEY!)
+// Inicializar Resend de forma lazy para evitar errores durante el build
+const getResend = () => {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) {
+    throw new Error('RESEND_API_KEY is not configured')
+  }
+  return new Resend(apiKey)
+}
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -82,6 +89,7 @@ export async function GET(request: Request) {
 
           if (template) {
             // Enviar email con Resend
+            const resend = getResend()
             const { data: emailData, error: emailError } = await resend.emails.send({
               from: 'Henry - Gestor de Créditos <onboarding@resend.dev>',
               to: campaign.email,
