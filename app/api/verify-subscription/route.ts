@@ -112,23 +112,36 @@ export async function POST(request: Request) {
     }
 
     // Actualizar el perfil
-    const { error: updateError } = await supabase
+    console.log('🔄 Actualizando perfil:', {
+      userId: user.id,
+      planId: plan.id,
+      planSlug: planSlug,
+      period: period
+    })
+
+    const { data: updateData, error: updateError } = await supabase
       .from('profiles')
       .update({
         plan_id: plan.id,
         subscription_status: 'active',
         subscription_period: period,
+        subscription_start_date: new Date().toISOString(),
         subscription_end_date: endDate.toISOString(),
         payment_method: 'hotmart_manual'
       })
       .eq('id', user.id)
+      .select()
 
     if (updateError) {
+      console.error('❌ Error al actualizar plan:', updateError)
       return NextResponse.json({ 
         error: 'Error al actualizar plan',
-        details: updateError.message 
+        details: updateError.message,
+        code: updateError.code
       }, { status: 500 })
     }
+
+    console.log('✅ Plan actualizado exitosamente:', updateData)
 
     return NextResponse.json({
       success: true,
