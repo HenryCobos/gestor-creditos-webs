@@ -29,10 +29,23 @@ const EVENTS = {
 export async function POST(req: Request) {
   try {
     // 1. Verificación de Seguridad
-    const hotmartToken = req.headers.get('hottok')
+    // Hotmart puede enviar el token en diferentes headers según la versión
+    const hotmartToken = req.headers.get('x-hotmart-hottok') || 
+                        req.headers.get('hottok') || 
+                        req.headers.get('x-hotmart-security')
+    
+    // Log para debugging
+    console.log('🔍 Headers recibidos:', {
+      'x-hotmart-hottok': req.headers.get('x-hotmart-hottok'),
+      'hottok': req.headers.get('hottok'),
+      'x-hotmart-security': req.headers.get('x-hotmart-security'),
+      'HOTMART_SECRET configurado': HOTMART_SECRET ? 'Sí' : 'No'
+    })
     
     if (HOTMART_SECRET && hotmartToken !== HOTMART_SECRET) {
       console.error('🔴 Intento de acceso no autorizado al Webhook de Hotmart')
+      console.error('Token recibido:', hotmartToken)
+      console.error('Token esperado:', HOTMART_SECRET)
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
