@@ -62,8 +62,30 @@ export default function CompraExitosaPage() {
 
   const loadPlanData = async () => {
     try {
-      const data = await loadUserSubscription()
-      setSubscription(data)
+      // Intentar cargar hasta 3 veces con delay de 2 segundos
+      let attempts = 0
+      const maxAttempts = 3
+      
+      while (attempts < maxAttempts) {
+        const data = await loadUserSubscription()
+        
+        // Si ya no está en plan gratuito, significa que el webhook ya procesó
+        if (data?.plan?.slug !== 'free') {
+          setSubscription(data)
+          setLoading(false)
+          return
+        }
+        
+        attempts++
+        if (attempts < maxAttempts) {
+          console.log(`Intento ${attempts}: Plan aún no actualizado, reintentando en 3s...`)
+          await new Promise(resolve => setTimeout(resolve, 3000)) // Esperar 3 segundos
+        }
+      }
+      
+      // Después de 3 intentos, mostrar lo que sea que tengamos
+      const finalData = await loadUserSubscription()
+      setSubscription(finalData)
     } catch (error) {
       console.error('Error cargando suscripción:', error)
     } finally {
@@ -84,9 +106,10 @@ export default function CompraExitosaPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-        <div className="flex flex-col items-center gap-4">
+        <div className="flex flex-col items-center gap-4 text-center">
           <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-          <p className="text-gray-600">Cargando información de tu plan...</p>
+          <p className="text-gray-600 font-medium">Activando tu plan...</p>
+          <p className="text-sm text-gray-500">Esto puede tomar unos segundos</p>
         </div>
       </div>
     )
