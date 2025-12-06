@@ -8,14 +8,18 @@ const HOTMART_SECRET = process.env.HOTMART_WEBHOOK_SECRET
 // Mapeo de Códigos de Oferta (off) a slugs de planes en la tabla `planes`
 // IMPORTANTE: los slugs deben coincidir con los que usas en Supabase (free, pro, business, enterprise)
 const OFFER_CODE_TO_PLAN = {
-  // Profesional (plan PRO en tu base de datos)
-  'ik0qihyk': { slug: 'pro', period: 'monthly' },
-  'fsdgw81e': { slug: 'business', period: 'monthly' },
-  'axldy5u9': { slug: 'enterprise', period: 'monthly' },
+  // Planes Mensuales
+  'ik0qihyk': { slug: 'pro', period: 'monthly' },        // Profesional - $19
+  'fsdgw81e': { slug: 'business', period: 'monthly' },   // Business - $49
+  'axldy5u9': { slug: 'enterprise', period: 'monthly' }, // Enterprise - $179
   
-  'r73t9021': { slug: 'pro', period: 'yearly' },
-  '4x3wc2e7': { slug: 'business', period: 'yearly' },
-  '1kmzhadk': { slug: 'enterprise', period: 'yearly' },
+  // Planes Anuales
+  'r73t9021': { slug: 'pro', period: 'yearly' },         // Profesional Anual - $190
+  '4x3wc2e7': { slug: 'business', period: 'yearly' },    // Business Anual - $490
+  'lkmzhadk': { slug: 'enterprise', period: 'yearly' },  // Enterprise Anual - $1,790
+  
+  // Plan de Prueba (opcional)
+  'rsymwzo6': { slug: 'pro', period: 'monthly' },        // Profesional $1 (acceso de prueba)
 }
 
 const EVENTS = {
