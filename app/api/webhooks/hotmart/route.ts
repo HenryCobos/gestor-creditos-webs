@@ -27,7 +27,11 @@ const EVENTS = {
   CANCELLED: 'SUBSCRIPTION_CANCELLATION',
   SWITCH_PLAN: 'SWITCH_PLAN',
   REFUNDED: 'REFUND',
-  DISPUTE: 'DISPUTE_OPENED'
+  DISPUTE: 'DISPUTE_OPENED',
+  // Eventos de renovación automática
+  SUBSCRIPTION_RENEWED: 'SUBSCRIPTION_RENEWAL',
+  PAYMENT_APPROVED: 'PAYMENT_APPROVED', // Algunos webhooks usan este
+  SUBSCRIPTION_PAYMENT: 'SUBSCRIPTION_PAYMENT_APPROVED' // O este
 }
 
 export async function POST(req: Request) {
@@ -122,7 +126,8 @@ export async function POST(req: Request) {
     }
 
     // 3. Manejar el Evento
-    if (event === EVENTS.APPROVED) {
+    if (event === EVENTS.APPROVED || event === EVENTS.SUBSCRIPTION_RENEWED || event === EVENTS.PAYMENT_APPROVED || event === EVENTS.SUBSCRIPTION_PAYMENT) {
+      // Maneja tanto la primera compra como las renovaciones automáticas
       const offerCode = data.purchase?.offer?.code || data.purchase?.pricing?.offer?.code
       const planInfo = OFFER_CODE_TO_PLAN[offerCode as keyof typeof OFFER_CODE_TO_PLAN]
 
@@ -173,6 +178,24 @@ export async function POST(req: Request) {
       
       console.log(`✅ Usuario ${targetUserId} actualizado a plan ${planInfo.slug} (${planInfo.period})`)
       
+      // Registrar el pago en el historial
+      const amount = data.purchase?.price?.value || data.purchase?.original_offer_price?.value || 0
+      await supabase
+        .from('pagos_suscripcion')
+        .insert({
+          user_id: targetUserId,
+          plan_id: planDb.id,
+          monto: amount,
+          moneda: data.purchase?.price?.currency_code || 'USD',
+          periodo: planInfo.period,
+          metodo_pago: 'hotmart',
+          transaction_id: data.purchase?.transaction || data.purchase?.purchase_date,
+          estado: 'completado',
+          fecha_pago: new Date().toISOString()
+        })
+      
+      console.log(`💰 Pago registrado: $${amount} ${data.purchase?.price?.currency_code || 'USD'}`)
+      
       // Verificar que la actualización fue exitosa
       const { data: updatedProfile } = await supabase
         .from('profiles')
@@ -181,6 +204,11 @@ export async function POST(req: Request) {
         .single()
       
       console.log('✅ Verificación post-actualización:', updatedProfile)
+      
+      // Log especial para renovaciones
+      if (event !== EVENTS.APPROVED) {
+        console.log(`🔄 RENOVACIÓN AUTOMÁTICA procesada para usuario ${targetUserId}`)
+      }
     }
 
     else if (event === EVENTS.CANCELLED || event === EVENTS.REFUNDED || event === EVENTS.DISPUTE) {
