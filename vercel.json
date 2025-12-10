@@ -15,7 +15,8 @@
   "crons": [
     {
       "path": "/api/cron/send-drip-emails",
-      "schedule": "0 * * * *"
+      "schedule": "0 14 * * *"
     }
   ]
 }
+
