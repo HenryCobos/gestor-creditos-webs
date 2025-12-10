@@ -251,7 +251,9 @@ ORDER BY proname;
 -- Esto eliminará los 19 warnings de seguridad en Supabase
 -- =====================================================
 
-RAISE NOTICE '✅ Corrección de search_path completada';
-RAISE NOTICE '🔒 Vulnerabilidad de inyección de search_path corregida en 6 funciones';
-RAISE NOTICE '📊 Ejecuta la query de verificación para confirmar';
-
+DO $$
+BEGIN
+  RAISE NOTICE '✅ Corrección de search_path completada';
+  RAISE NOTICE '🔒 Vulnerabilidad de inyección de search_path corregida en 6 funciones';
+  RAISE NOTICE '📊 Ejecuta la query de verificación para confirmar';
+END $$;
