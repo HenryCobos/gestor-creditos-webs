@@ -1,0 +1,359 @@
+# 🎁 Oferta Especial Diciembre 2025 - 50% OFF
+
+## 📧 Email de Bienvenida con Promoción
+
+Este email se envía **automáticamente** cuando un usuario se registra en diciembre.
+
+---
+
+## 🎯 Detalles de la Oferta
+
+**Nombre del Cupón:** `50OFF`
+
+**Descuento:** 50% de descuento
+
+**Válido para:**
+- ✅ Todos los planes mensuales (Pro, Business, Enterprise)
+- ✅ Solo durante los **primeros 6 meses**
+- ✅ Válido hasta el 31 de diciembre de 2025
+
+**Ejemplo de Ahorro:**
+- Plan Pro: ~~$19/mes~~ → **$9.50/mes** x 6 meses
+- Plan Business: ~~$49/mes~~ → **$24.50/mes** x 6 meses
+- Plan Enterprise: ~~$179/mes~~ → **$89.50/mes** x 6 meses
+
+---
+
+## 📝 Template HTML del Email
+
+Este es el código HTML que debes copiar en Supabase:
+
+```html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>¡Bienvenido a Gestor de Créditos! 🎁</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6;">
+  
+  <!-- Container principal -->
+  <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f3f4f6; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        
+        <!-- Tarjeta del email -->
+        <table role="presentation" style="max-width: 600px; width: 100%; background-color: #ffffff; border-radius: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden;">
+          
+          <!-- Header con gradiente azul -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%); padding: 40px 30px; text-align: center;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 32px; font-weight: bold; letter-spacing: -0.5px;">
+                🎉 ¡Bienvenido!
+              </h1>
+              <p style="margin: 10px 0 0 0; color: #e0e7ff; font-size: 16px;">
+                Gestiona tus créditos como un profesional
+              </p>
+            </td>
+          </tr>
+          
+          <!-- Contenido principal -->
+          <tr>
+            <td style="padding: 40px 30px;">
+              
+              <!-- Saludo personalizado -->
+              <p style="margin: 0 0 20px 0; color: #1f2937; font-size: 16px; line-height: 1.6;">
+                Hola <strong>{{ .Data.full_name }}</strong>,
+              </p>
+              
+              <p style="margin: 0 0 20px 0; color: #1f2937; font-size: 16px; line-height: 1.6;">
+                ¡Gracias por unirte a <strong>Gestor de Créditos</strong>! Estamos emocionados de ayudarte a gestionar tus préstamos de manera profesional y sin complicaciones.
+              </p>
+              
+              <!-- Banner de oferta especial -->
+              <table role="presentation" style="width: 100%; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); border-radius: 12px; padding: 30px; margin: 30px 0; text-align: center;">
+                <tr>
+                  <td>
+                    <div style="background-color: #fef2f2; color: #991b1b; display: inline-block; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px;">
+                      🔥 OFERTA EXCLUSIVA DICIEMBRE
+                    </div>
+                    
+                    <h2 style="margin: 15px 0; color: #ffffff; font-size: 42px; font-weight: 900; line-height: 1;">
+                      50% OFF
+                    </h2>
+                    
+                    <p style="margin: 10px 0 0 0; color: #fecaca; font-size: 18px; font-weight: 600;">
+                      En cualquier plan mensual
+                    </p>
+                    
+                    <p style="margin: 5px 0 20px 0; color: #fef2f2; font-size: 14px;">
+                      ¡Los primeros 6 meses al 50% de descuento!
+                    </p>
+                    
+                    <!-- Cupón destacado -->
+                    <div style="background-color: #ffffff; border: 2px dashed #dc2626; border-radius: 8px; padding: 15px 25px; margin: 20px auto; max-width: 200px;">
+                      <p style="margin: 0; color: #6b7280; font-size: 12px; text-transform: uppercase; font-weight: 600;">
+                        Código del cupón:
+                      </p>
+                      <p style="margin: 5px 0 0 0; color: #dc2626; font-size: 24px; font-weight: 900; letter-spacing: 2px;">
+                        50OFF
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Beneficios de la oferta -->
+              <div style="background-color: #f9fafb; border-left: 4px solid #3b82f6; padding: 20px; margin: 25px 0; border-radius: 8px;">
+                <h3 style="margin: 0 0 15px 0; color: #1f2937; font-size: 18px; font-weight: 700;">
+                  💰 Tu Ahorro con 50OFF:
+                </h3>
+                
+                <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 8px 0; color: #4b5563; font-size: 14px;">
+                      <strong>Plan Pro:</strong>
+                    </td>
+                    <td style="padding: 8px 0; color: #4b5563; font-size: 14px; text-align: right;">
+                      <span style="text-decoration: line-through; color: #9ca3af;">$19/mes</span>
+                      <strong style="color: #059669; margin-left: 10px;">$9.50/mes</strong>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #4b5563; font-size: 14px;">
+                      <strong>Plan Business:</strong>
+                    </td>
+                    <td style="padding: 8px 0; color: #4b5563; font-size: 14px; text-align: right;">
+                      <span style="text-decoration: line-through; color: #9ca3af;">$49/mes</span>
+                      <strong style="color: #059669; margin-left: 10px;">$24.50/mes</strong>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #4b5563; font-size: 14px;">
+                      <strong>Plan Enterprise:</strong>
+                    </td>
+                    <td style="padding: 8px 0; color: #4b5563; font-size: 14px; text-align: right;">
+                      <span style="text-decoration: line-through; color: #9ca3af;">$179/mes</span>
+                      <strong style="color: #059669; margin-left: 10px;">$89.50/mes</strong>
+                    </td>
+                  </tr>
+                </table>
+                
+                <p style="margin: 15px 0 0 0; color: #6b7280; font-size: 13px; font-style: italic;">
+                  * Descuento válido durante los primeros 6 meses. Después del mes 6, se aplicará el precio regular.
+                </p>
+              </div>
+              
+              <!-- CTA Button -->
+              <table role="presentation" style="width: 100%; margin: 30px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="https://gestor-creditos-webs.vercel.app/dashboard/subscription?coupon=50OFF" 
+                       style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 8px; font-size: 16px; font-weight: 700; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3); transition: transform 0.2s;">
+                      🚀 Actualizar Ahora con 50% OFF
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Urgencia -->
+              <div style="background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px; padding: 15px; margin: 25px 0; text-align: center;">
+                <p style="margin: 0; color: #92400e; font-size: 14px; font-weight: 600;">
+                  ⏰ <strong>¡Solo válido hasta el 31 de diciembre!</strong>
+                </p>
+                <p style="margin: 5px 0 0 0; color: #92400e; font-size: 13px;">
+                  No pierdas esta oportunidad única de ahorrar un 50% durante 6 meses.
+                </p>
+              </div>
+              
+              <!-- Cómo usar el cupón -->
+              <div style="margin: 30px 0;">
+                <h3 style="margin: 0 0 15px 0; color: #1f2937; font-size: 16px; font-weight: 700;">
+                  📝 Cómo usar tu cupón:
+                </h3>
+                
+                <ol style="margin: 0; padding-left: 20px; color: #4b5563; font-size: 14px; line-height: 1.8;">
+                  <li>Inicia sesión en tu cuenta</li>
+                  <li>Ve a <strong>Dashboard → Suscripción</strong></li>
+                  <li>Selecciona tu plan favorito</li>
+                  <li>Ingresa el código <strong style="color: #dc2626;">50OFF</strong> al finalizar la compra</li>
+                  <li>¡Disfruta de tu descuento del 50%!</li>
+                </ol>
+              </div>
+              
+              <!-- Características del servicio -->
+              <div style="margin: 30px 0;">
+                <h3 style="margin: 0 0 15px 0; color: #1f2937; font-size: 16px; font-weight: 700;">
+                  ✨ Lo que incluye tu cuenta:
+                </h3>
+                
+                <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 8px 0; color: #4b5563; font-size: 14px;">
+                      ✅ Gestión ilimitada de clientes y préstamos
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #4b5563; font-size: 14px;">
+                      ✅ Control de cuotas y pagos en tiempo real
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #4b5563; font-size: 14px;">
+                      ✅ Reportes y estadísticas profesionales
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #4b5563; font-size: 14px;">
+                      ✅ Acceso desde cualquier dispositivo
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #4b5563; font-size: 14px;">
+                      ✅ Soporte técnico prioritario
+                    </td>
+                  </tr>
+                </table>
+              </div>
+              
+              <!-- CTA secundario -->
+              <table role="presentation" style="width: 100%; margin: 30px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="https://gestor-creditos-webs.vercel.app/dashboard" 
+                       style="display: inline-block; background-color: #f3f4f6; color: #3b82f6; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-size: 14px; font-weight: 600; border: 2px solid #3b82f6;">
+                      Ir al Dashboard
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Despedida -->
+              <div style="margin: 40px 0 0 0; padding-top: 30px; border-top: 1px solid #e5e7eb;">
+                <p style="margin: 0 0 10px 0; color: #1f2937; font-size: 14px;">
+                  ¡Bienvenido a bordo! 🚀
+                </p>
+                <p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
+                  El equipo de <strong>Gestor de Créditos</strong>
+                </p>
+              </div>
+              
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f9fafb; padding: 30px; text-align: center; border-top: 1px solid #e5e7eb;">
+              <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 12px;">
+                <a href="https://gestor-creditos-webs.vercel.app" style="color: #3b82f6; text-decoration: none;">Gestor de Créditos</a>
+              </p>
+              <p style="margin: 0 0 10px 0; color: #9ca3af; font-size: 11px;">
+                La forma más fácil de gestionar tus préstamos
+              </p>
+              <p style="margin: 0; color: #9ca3af; font-size: 11px;">
+                © 2025 Gestor de Créditos. Todos los derechos reservados.
+              </p>
+            </td>
+          </tr>
+          
+        </table>
+        
+      </td>
+    </tr>
+  </table>
+  
+</body>
+</html>
+```
+
+---
+
+## 🔧 Cómo Configurar en Supabase
+
+### **Paso 1: Ir a Email Templates**
+
+1. Ve a: [Supabase Dashboard](https://supabase.com/dashboard/project/zqnqtrkamfftyvvfpcvq/auth/templates)
+2. O navega: **Authentication** → **Email Templates**
+
+### **Paso 2: Configurar "Confirm Signup"**
+
+1. Click en **"Confirm signup"** (primer template de la lista)
+2. **Borra** todo el contenido actual
+3. **Copia** el HTML completo de arriba
+4. **Pégalo** en el editor
+5. Click en **"Save"**
+
+### **Paso 3: Configurar para que se Envíe Automáticamente**
+
+Tienes 2 opciones:
+
+#### **Opción A: Enviar sin Confirmación (Recomendado para tu caso)**
+
+1. Ve a: **Authentication** → **Settings**
+2. Busca **"Enable email confirmations"**
+3. **DESMARCA** la casilla (para que NO requiera confirmación)
+4. Click en **"Save"**
+
+✅ **Resultado:** El email se envía automáticamente y el usuario puede entrar directo al dashboard.
+
+#### **Opción B: Enviar con Confirmación**
+
+1. Ve a: **Authentication** → **Settings**
+2. **MARCA** la casilla "Enable email confirmations"
+3. Click en **"Save"**
+
+⚠️ **Resultado:** El email se envía pero el usuario debe confirmar antes de entrar.
+
+---
+
+## 🧪 Probar el Email
+
+### **Crear Usuario de Prueba:**
+
+1. Ve a: https://gestor-creditos-webs.vercel.app/register
+2. Registra un nuevo usuario con tu email personal
+3. Revisa tu bandeja de entrada
+4. ✅ Deberías recibir el email con la oferta del 50% OFF
+
+### **Vista Previa en Supabase:**
+
+1. En el SQL Editor de Supabase, ejecuta:
+
+```sql
+-- Ver el template configurado
+SELECT * FROM auth.config;
+```
+
+---
+
+## ⚙️ Implementar el Cupón en el Código
+
+Para que el cupón `50OFF` funcione realmente, necesitas:
+
+1. Detectar el parámetro `?coupon=50OFF` en la URL
+2. Aplicar el 50% de descuento en la página de suscripción
+3. Validar que sea diciembre y que el usuario sea nuevo (menos de 6 meses)
+
+---
+
+## 📋 Checklist de Implementación
+
+- [ ] Copiar el HTML del email
+- [ ] Configurar en Supabase → Email Templates → Confirm Signup
+- [ ] Decidir si usar confirmación o no (Opción A recomendada)
+- [ ] Guardar cambios en Supabase
+- [ ] Crear un usuario de prueba
+- [ ] Verificar que llegue el email
+- [ ] Implementar lógica del cupón en el código (siguiente paso)
+
+---
+
+## 🎯 Siguiente Paso
+
+Una vez que confirmes que el email se envía correctamente, te ayudo a implementar la lógica del cupón `50OFF` en la página de suscripción para que realmente aplique el descuento.
+
+---
+
+**¿Quieres que primero configure el email en Supabase o prefieres hacerlo tú?** 🚀
+
