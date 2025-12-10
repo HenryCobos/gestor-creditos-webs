@@ -17,14 +17,20 @@ Supabase detectó **19 warnings de seguridad** relacionados con:
 
 ---
 
-## 🎯 Funciones Afectadas (6 funciones)
+## 🎯 Funciones Afectadas (9 funciones en total)
 
+### **Primera corrección (6 funciones):**
 1. ✅ `get_empeños_vencidos` - Para verificar empeños vencidos
 2. ✅ `get_user_plan_limits` - Para obtener límites del plan del usuario
 3. ✅ `can_add_cliente` - Para verificar si el usuario puede añadir clientes
 4. ✅ `can_add_prestamo` - Para verificar si el usuario puede añadir préstamos
 5. ✅ `update_email_campaigns_updated_at` - Trigger para actualizar fecha de emails
 6. ✅ `handle_new_user_email_campaign` - Para registrar usuarios en campaña de emails
+
+### **Segunda corrección (3 funciones adicionales):**
+7. ✅ `delete_user_by_email` - Para eliminar usuarios de forma segura
+8. ✅ `handle_new_user` - Para crear perfiles de nuevos usuarios
+9. ✅ `update_updated_at_column` - Trigger genérico para actualizar timestamps
 
 ---
 
@@ -69,6 +75,8 @@ $$;
 
 ## 📋 Pasos para Ejecutar la Corrección
 
+### **PARTE 1: Primeras 6 funciones** ✅ (YA EJECUTADO)
+
 ### 1️⃣ Ve a Supabase SQL Editor
 
 URL: https://supabase.com/dashboard/project/YOUR_PROJECT/sql
@@ -102,6 +110,41 @@ get_empeños_vencidos                 | ✅ CORREGIDO
 get_user_plan_limits                 | ✅ CORREGIDO
 handle_new_user_email_campaign       | ✅ CORREGIDO
 update_email_campaigns_updated_at    | ✅ CORREGIDO
+```
+
+---
+
+### **PARTE 2: 3 funciones adicionales** 🔄 (PENDIENTE)
+
+### 1️⃣ En el mismo SQL Editor de Supabase
+
+### 2️⃣ Copia y pega el contenido del archivo
+
+```bash
+supabase/fix-security-search-path-parte2.sql
+```
+
+### 3️⃣ Ejecuta el script (botón "Run")
+
+Verás mensajes como:
+
+```
+✅ Corrección de search_path completada (Parte 2)
+🔒 3 funciones adicionales corregidas
+📊 Total de funciones con search_path seguro: 9
+🎉 Todos los warnings de seguridad deberían estar resueltos
+```
+
+### 4️⃣ Verifica que se aplicó correctamente
+
+Deberías ver:
+
+```
+funcion                      | estado
+-----------------------------|------------------
+delete_user_by_email         | ✅ CORREGIDO
+handle_new_user              | ✅ CORREGIDO
+update_updated_at_column     | ✅ CORREGIDO
 ```
 
 ---
@@ -168,10 +211,17 @@ Los **23 issues de performance** son:
 
 ## ✅ Checklist de Seguridad
 
-- [x] Script de corrección creado
+- [x] Script de corrección (Parte 1) creado - 6 funciones
+- [x] Script de corrección (Parte 2) creado - 3 funciones adicionales
 - [x] Commit y push a GitHub
-- [ ] **PENDIENTE: Ejecutar script en Supabase**
-- [ ] **PENDIENTE: Verificar que los 19 warnings desaparecieron**
+- [x] Ejecutar script Parte 1 en Supabase
+- [ ] **PENDIENTE: Ejecutar script Parte 2 en Supabase**
+- [ ] **PENDIENTE: Verificar que TODOS los warnings desaparecieron**
+
+### Progreso:
+- **Antes:** 33 issues → SECURITY: 19
+- **Después Parte 1:** 27 issues → SECURITY: 4
+- **Esperado Parte 2:** ~24 issues → SECURITY: 0-1 ✅
 
 ---
 
