@@ -11,7 +11,10 @@ export async function proxy(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   const isAuthPage = request.nextUrl.pathname.startsWith('/login') || 
-                     request.nextUrl.pathname.startsWith('/register')
+                     request.nextUrl.pathname.startsWith('/register') ||
+                     request.nextUrl.pathname.startsWith('/recuperar-contrasena') ||
+                     request.nextUrl.pathname.startsWith('/actualizar-contrasena') ||
+                     request.nextUrl.pathname.startsWith('/auth/callback')
   const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard')
 
   // Si no hay usuario y está intentando acceder a rutas protegidas
@@ -19,8 +22,12 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Si hay usuario y está en páginas de auth, redirigir al dashboard
-  if (user && isAuthPage) {
+  // Si hay usuario y está en páginas de auth (excepto recuperación de contraseña), redirigir al dashboard
+  const isPasswordRecovery = request.nextUrl.pathname.startsWith('/recuperar-contrasena') ||
+                              request.nextUrl.pathname.startsWith('/actualizar-contrasena') ||
+                              request.nextUrl.pathname.startsWith('/auth/callback')
+  
+  if (user && isAuthPage && !isPasswordRecovery) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 

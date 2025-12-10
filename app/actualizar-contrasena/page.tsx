@@ -20,14 +20,25 @@ export default function ActualizarContrasenaPage() {
   const supabase = createClient()
 
   useEffect(() => {
-    // Verificar que hay una sesión de recuperación válida
-    supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        // Usuario viene del email de recuperación
-        console.log('Recuperación de contraseña iniciada')
+    // Verificar que hay una sesión válida
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        // No hay sesión activa, redirigir al login
+        toast({
+          title: 'Error',
+          description: 'Sesión expirada. Solicita un nuevo link de recuperación.',
+          variant: 'destructive',
+        })
+        setTimeout(() => {
+          router.push('/recuperar-contrasena')
+        }, 2000)
       }
-    })
-  }, [])
+    }
+    
+    checkSession()
+  }, [supabase, router, toast])
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault()
