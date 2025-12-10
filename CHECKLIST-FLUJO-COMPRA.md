@@ -25,7 +25,7 @@
 - [x] Plan Business Mensual: `fsdgw81e` → slug `business`
 - [x] Plan Business Anual: `4x3wc2e7` → slug `business`
 - [x] Plan Enterprise Mensual: `axldy5u9` → slug `enterprise`
-- [x] Plan Enterprise Anual: `1kmzhadk` → slug `enterprise`
+- [x] Plan Enterprise Anual: `lkmzhadk` → slug `enterprise` ✅ CORREGIDO (era 1kmzhadk con número 1)
 
 ---
 

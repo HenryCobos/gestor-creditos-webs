@@ -16,7 +16,8 @@ const OFFER_CODE_TO_PLAN = {
   // Planes Anuales
   'r73t9021': { slug: 'pro', period: 'yearly' },         // Profesional Anual - $190
   '4x3wc2e7': { slug: 'business', period: 'yearly' },    // Business Anual - $490
-  'lkmzhadk': { slug: 'enterprise', period: 'yearly' },  // Enterprise Anual - $1,790
+  'lkmzhadk': { slug: 'enterprise', period: 'yearly' },  // Enterprise Anual - $1,790 (con L)
+  '1kmzhadk': { slug: 'enterprise', period: 'yearly' },  // Enterprise Anual - $1,790 (con 1) - Por seguridad
   
   // Plan de Prueba (opcional)
   'rsymwzo6': { slug: 'pro', period: 'monthly' },        // Profesional $1 (acceso de prueba)

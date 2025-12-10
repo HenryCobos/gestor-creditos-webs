@@ -12,7 +12,7 @@ export const HOTMART_CONFIG = {
     },
     enterprise: {
       monthly: 'https://pay.hotmart.com/C103126853X?off=axldy5u9',
-      yearly: 'https://pay.hotmart.com/C103126853X?off=1kmzhadk',
+      yearly: 'https://pay.hotmart.com/C103126853X?off=lkmzhadk',
     },
   },
 }
