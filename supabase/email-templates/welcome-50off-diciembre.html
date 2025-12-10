@@ -40,6 +40,28 @@
                 ¡Gracias por unirte a <strong>Gestor de Créditos</strong>! Estamos emocionados de ayudarte a gestionar tus préstamos de manera profesional y sin complicaciones.
               </p>
               
+              <!-- Botón de confirmación de email -->
+              <div style="background-color: #eff6ff; border: 2px solid #3b82f6; border-radius: 12px; padding: 25px; margin: 25px 0; text-align: center;">
+                <p style="margin: 0 0 15px 0; color: #1e40af; font-size: 16px; font-weight: 600;">
+                  ⚡ Primero, confirma tu email para activar tu cuenta:
+                </p>
+                
+                <table role="presentation" style="width: 100%; margin: 15px 0;">
+                  <tr>
+                    <td align="center">
+                      <a href="{{ .ConfirmationURL }}" 
+                         style="display: inline-block; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 8px; font-size: 16px; font-weight: 700; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);">
+                        ✅ Confirmar Mi Email
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+                
+                <p style="margin: 15px 0 0 0; color: #6b7280; font-size: 13px;">
+                  Este link expira en 24 horas
+                </p>
+              </div>
+              
               <!-- Banner de oferta especial -->
               <table role="presentation" style="width: 100%; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); border-radius: 12px; padding: 30px; margin: 30px 0; text-align: center;">
                 <tr>
@@ -66,7 +88,7 @@
                         Código del cupón:
                       </p>
                       <p style="margin: 5px 0 0 0; color: #dc2626; font-size: 24px; font-weight: 900; letter-spacing: 2px;">
-                        50OFF
+                        50 OFF
                       </p>
                     </div>
                   </td>
@@ -115,12 +137,18 @@
               </div>
               
               <!-- CTA Button -->
-              <table role="presentation" style="width: 100%; margin: 30px 0;">
+              <div style="background-color: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 15px; margin: 25px 0; text-align: center;">
+                <p style="margin: 0 0 10px 0; color: #166534; font-size: 13px; font-weight: 600;">
+                  💡 Después de confirmar tu email, podrás acceder a:
+                </p>
+              </div>
+              
+              <table role="presentation" style="width: 100%; margin: 20px 0;">
                 <tr>
                   <td align="center">
                     <a href="https://gestor-creditos-webs.vercel.app/dashboard/subscription?coupon=50OFF" 
                        style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 8px; font-size: 16px; font-weight: 700; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);">
-                      🚀 Actualizar Ahora con 50% OFF
+                      🚀 Ver Planes con 50% OFF
                     </a>
                   </td>
                 </tr>
@@ -146,7 +174,7 @@
                   <li>Inicia sesión en tu cuenta</li>
                   <li>Ve a <strong>Dashboard → Suscripción</strong></li>
                   <li>Selecciona tu plan favorito</li>
-                  <li>Ingresa el código <strong style="color: #dc2626;">50OFF</strong> al finalizar la compra</li>
+                  <li>Ingresa el código <strong style="color: #dc2626;">50 OFF</strong> al finalizar la compra</li>
                   <li>¡Disfruta de tu descuento del 50%!</li>
                 </ol>
               </div>
