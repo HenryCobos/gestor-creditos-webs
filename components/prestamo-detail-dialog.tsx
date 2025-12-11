@@ -21,7 +21,17 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useToast } from '@/components/ui/use-toast'
-import { CheckCircle, DollarSign, Eye, X, FileText, Package } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { CheckCircle, DollarSign, Eye, X, FileText, Package, XCircle } from 'lucide-react'
 import { formatCurrency, formatDate, isDateOverdue } from '@/lib/utils'
 import { format } from 'date-fns'
 import { useConfigStore } from '@/lib/config-store'
@@ -56,6 +66,8 @@ export function PrestamoDetailDialog({
   const [loading, setLoading] = useState(false)
   const [selectedCuota, setSelectedCuota] = useState<Cuota | null>(null)
   const [pagoDialogOpen, setPagoDialogOpen] = useState(false)
+  const [desmarcarDialogOpen, setDesmarcarDialogOpen] = useState(false)
+  const [cuotaADesmarcar, setCuotaADesmarcar] = useState<Cuota | null>(null)
   const [montoPago, setMontoPago] = useState('')
   const [metodoPago, setMetodoPago] = useState('')
   const [notas, setNotas] = useState('')
@@ -258,6 +270,70 @@ export function PrestamoDetailDialog({
     setNotas('')
     setSelectedCuota(null)
     setPagoDialogOpen(false)
+  }
+
+  const handleDesmarcarCuota = async () => {
+    if (!cuotaADesmarcar || !prestamo) return
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    // Eliminar todos los pagos asociados a esta cuota
+    const { error: deletePagosError } = await supabase
+      .from('pagos')
+      .delete()
+      .eq('cuota_id', cuotaADesmarcar.id)
+
+    if (deletePagosError) {
+      toast({
+        title: 'Error',
+        description: 'No se pudieron eliminar los pagos',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Determinar nuevo estado de la cuota
+    const nuevoEstado = isDateOverdue(cuotaADesmarcar.fecha_vencimiento) ? 'retrasada' : 'pendiente'
+
+    // Actualizar la cuota a estado pendiente
+    const { error: updateError } = await supabase
+      .from('cuotas')
+      .update({
+        monto_pagado: 0,
+        estado: nuevoEstado,
+        fecha_pago: null,
+      })
+      .eq('id', cuotaADesmarcar.id)
+
+    if (updateError) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo actualizar la cuota',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Si el préstamo estaba marcado como pagado, cambiarlo a activo
+    if (prestamo.estado === 'pagado') {
+      await supabase
+        .from('prestamos')
+        .update({ estado: 'activo' })
+        .eq('id', prestamo.id)
+      
+      if (onUpdate) onUpdate()
+    }
+
+    toast({
+      title: 'Éxito',
+      description: 'Cuota desmarcada correctamente',
+    })
+
+    // Recargar cuotas
+    loadCuotas()
+    setDesmarcarDialogOpen(false)
+    setCuotaADesmarcar(null)
   }
 
   if (!prestamo) return null
@@ -482,7 +558,7 @@ export function PrestamoDetailDialog({
                               </span>
                             </TableCell>
                             <TableCell className="text-right">
-                              {cuota.estado !== 'pagada' && (
+                              {cuota.estado !== 'pagada' ? (
                                 <Button
                                   size="sm"
                                   onClick={() => {
@@ -494,9 +570,19 @@ export function PrestamoDetailDialog({
                                   <DollarSign className="mr-1 h-3 w-3" />
                                   Pagar
                                 </Button>
-                              )}
-                              {cuota.estado === 'pagada' && (
-                                <CheckCircle className="h-5 w-5 text-green-600 inline" />
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => {
+                                    setCuotaADesmarcar(cuota)
+                                    setDesmarcarDialogOpen(true)
+                                  }}
+                                >
+                                  <XCircle className="mr-1 h-3 w-3" />
+                                  Desmarcar
+                                </Button>
                               )}
                             </TableCell>
                           </TableRow>
@@ -590,6 +676,33 @@ export function PrestamoDetailDialog({
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Dialog de Confirmación para Desmarcar */}
+      <AlertDialog open={desmarcarDialogOpen} onOpenChange={setDesmarcarDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Desmarcar esta cuota?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción desmarcará la cuota #{cuotaADesmarcar?.numero_cuota} como pagada y la volverá a estado pendiente.
+              <br /><br />
+              Se eliminarán todos los pagos registrados para esta cuota y el monto pagado volverá a {formatCurrency(0, config.currency)}.
+              <br /><br />
+              <strong>¿Estás seguro de que quieres desmarcar esta cuota?</strong>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setCuotaADesmarcar(null)}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDesmarcarCuota}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Sí, Desmarcar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }
