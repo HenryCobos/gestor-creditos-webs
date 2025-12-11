@@ -78,20 +78,24 @@ export default function ReportesPage() {
   const getFechasFiltro = () => {
     const hoy = new Date()
     let desde: Date | null = null
-    let hasta: Date = endOfDay(hoy)
+    let hasta: Date | null = null
 
     switch (rangoFecha) {
       case 'hoy':
         desde = startOfDay(hoy)
+        hasta = endOfDay(hoy)
         break
       case '7dias':
         desde = startOfDay(subDays(hoy, 7))
+        hasta = endOfDay(hoy)
         break
       case '30dias':
         desde = startOfDay(subDays(hoy, 30))
+        hasta = endOfDay(hoy)
         break
       case '3meses':
         desde = startOfDay(subMonths(hoy, 3))
+        hasta = endOfDay(hoy)
         break
       case 'personalizado':
         if (fechaDesde) desde = startOfDay(new Date(fechaDesde))
@@ -100,6 +104,7 @@ export default function ReportesPage() {
       case 'todo':
       default:
         desde = null
+        hasta = null
         break
     }
 
