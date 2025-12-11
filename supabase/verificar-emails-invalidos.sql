@@ -60,9 +60,10 @@ SELECT
   ec.id,
   ec.user_id,
   au.email,
-  ec.next_email_day,
-  ec.last_email_sent_at,
-  ec.status,
+  ec.day_0_sent_at,
+  ec.day_1_sent_at,
+  ec.unsubscribed,
+  ec.created_at,
   CASE 
     WHEN au.email LIKE '%test%' THEN '🧪 Email de prueba'
     WHEN au.email LIKE '%fake%' THEN '🚫 Email fake'

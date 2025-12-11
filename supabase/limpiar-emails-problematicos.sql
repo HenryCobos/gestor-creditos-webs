@@ -66,8 +66,8 @@ FROM auth.users;
 -- 4. Verificar que email_campaigns esté limpio
 SELECT 
   COUNT(*) as total_campaigns,
-  COUNT(CASE WHEN status = 'active' THEN 1 END) as activas,
-  COUNT(CASE WHEN status = 'completed' THEN 1 END) as completadas,
-  COUNT(CASE WHEN status = 'paused' THEN 1 END) as pausadas
+  COUNT(CASE WHEN unsubscribed = TRUE THEN 1 END) as unsubscribed,
+  COUNT(CASE WHEN unsubscribed = FALSE OR unsubscribed IS NULL THEN 1 END) as activas,
+  COUNT(CASE WHEN day_7_sent_at IS NOT NULL THEN 1 END) as completadas
 FROM email_campaigns;
 
