@@ -100,8 +100,7 @@ export function DashboardClient() {
   // Calcular métricas
   const prestamosActivos = prestamos?.filter(p => p.estado === 'activo').length || 0
   const totalPrestado = prestamos?.reduce((sum, p) => sum + parseFloat(String(p.monto_prestado)), 0) || 0
-  const totalRecuperado = cuotas?.filter(c => c.estado === 'pagada')
-    .reduce((sum, c) => sum + parseFloat(String(c.monto_pagado)), 0) || 0
+  const totalRecuperado = cuotas?.reduce((sum, c) => sum + parseFloat(String(c.monto_pagado)), 0) || 0
   const gananciaIntereses = prestamos?.reduce((sum, p) => {
     const interes = (parseFloat(String(p.monto_prestado)) * parseFloat(String(p.interes_porcentaje))) / 100
     return sum + interes

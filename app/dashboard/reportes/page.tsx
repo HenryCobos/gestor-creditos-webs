@@ -95,10 +95,12 @@ export default function ReportesPage() {
     // Calcular reporte general
     if (prestamos && cuotas) {
       const totalPrestado = prestamos.reduce((sum, p) => sum + parseFloat(p.monto_prestado), 0)
-      const totalRecuperado = cuotas.filter(c => c.estado === 'pagada')
-        .reduce((sum, c) => sum + parseFloat(c.monto_pagado), 0)
-      const totalPendiente = cuotas.filter(c => c.estado !== 'pagada')
-        .reduce((sum, c) => sum + (parseFloat(c.monto_cuota) - parseFloat(c.monto_pagado)), 0)
+      const totalRecuperado = cuotas.reduce((sum, c) => sum + parseFloat(c.monto_pagado), 0)
+      // Calcular total pendiente sumando la diferencia entre monto de cuota y monto pagado
+      const totalPendiente = cuotas.reduce((sum, c) => {
+        const pendiente = parseFloat(c.monto_cuota) - parseFloat(c.monto_pagado)
+        return sum + (pendiente > 0 ? pendiente : 0)
+      }, 0)
       const gananciaIntereses = prestamos.reduce((sum, p) => {
         const interes = (parseFloat(p.monto_prestado) * parseFloat(p.interes_porcentaje)) / 100
         return sum + interes
@@ -149,10 +151,12 @@ export default function ReportesPage() {
         if (prestamo) {
           const reporte = reportesPorCliente.get(prestamo.cliente_id)
           if (reporte) {
-            if (cuota.estado === 'pagada') {
-              reporte.total_pagado += parseFloat(cuota.monto_pagado)
-            } else {
-              reporte.total_pendiente += parseFloat(cuota.monto_cuota) - parseFloat(cuota.monto_pagado)
+            // Sumar el monto pagado independientemente del estado (incluye pagos parciales)
+            reporte.total_pagado += parseFloat(cuota.monto_pagado)
+            // Calcular pendiente como la diferencia entre el monto de la cuota y lo pagado
+            const montoPendiente = parseFloat(cuota.monto_cuota) - parseFloat(cuota.monto_pagado)
+            if (montoPendiente > 0) {
+              reporte.total_pendiente += montoPendiente
               reporte.cuotas_pendientes++
             }
           }
