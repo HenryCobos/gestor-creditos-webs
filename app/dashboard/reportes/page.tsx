@@ -20,11 +20,12 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Input } from '@/components/ui/input'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { FileText, Download, TrendingUp, DollarSign } from 'lucide-react'
+import { FileText, Download, TrendingUp, DollarSign, Calendar } from 'lucide-react'
 import { useConfigStore } from '@/lib/config-store'
 import { generarReporteGeneral, generarReporteCliente } from '@/lib/pdf-generator'
-import { format } from 'date-fns'
+import { format, subDays, subMonths, startOfDay, endOfDay } from 'date-fns'
 import { useToast } from '@/components/ui/use-toast'
 
 interface ReporteGeneral {
@@ -63,13 +64,47 @@ export default function ReportesPage() {
   const [clienteSeleccionado, setClienteSeleccionado] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('general')
+  const [rangoFecha, setRangoFecha] = useState<string>('todo')
+  const [fechaDesde, setFechaDesde] = useState<string>('')
+  const [fechaHasta, setFechaHasta] = useState<string>('')
   const supabase = createClient()
   const { config } = useConfigStore()
   const { toast } = useToast()
 
   useEffect(() => {
     loadReportes()
-  }, [])
+  }, [rangoFecha, fechaDesde, fechaHasta])
+
+  const getFechasFiltro = () => {
+    const hoy = new Date()
+    let desde: Date | null = null
+    let hasta: Date = endOfDay(hoy)
+
+    switch (rangoFecha) {
+      case 'hoy':
+        desde = startOfDay(hoy)
+        break
+      case '7dias':
+        desde = startOfDay(subDays(hoy, 7))
+        break
+      case '30dias':
+        desde = startOfDay(subDays(hoy, 30))
+        break
+      case '3meses':
+        desde = startOfDay(subMonths(hoy, 3))
+        break
+      case 'personalizado':
+        if (fechaDesde) desde = startOfDay(new Date(fechaDesde))
+        if (fechaHasta) hasta = endOfDay(new Date(fechaHasta))
+        break
+      case 'todo':
+      default:
+        desde = null
+        break
+    }
+
+    return { desde, hasta }
+  }
 
   const loadReportes = async () => {
     setLoading(true)
@@ -77,14 +112,27 @@ export default function ReportesPage() {
     
     if (!user) return
 
+    const { desde, hasta } = getFechasFiltro()
+
     // Cargar todos los datos necesarios
+    let prestamosQuery = supabase.from('prestamos').select('*').eq('user_id', user.id)
+    let cuotasQuery = supabase.from('cuotas').select('*').eq('user_id', user.id)
+
+    // Aplicar filtros de fecha si corresponde
+    if (desde) {
+      prestamosQuery = prestamosQuery.gte('fecha_inicio', desde.toISOString())
+    }
+    if (hasta) {
+      prestamosQuery = prestamosQuery.lte('fecha_inicio', hasta.toISOString())
+    }
+
     const [
       { data: prestamos },
       { data: cuotas },
       { data: clientesData }
     ] = await Promise.all([
-      supabase.from('prestamos').select('*').eq('user_id', user.id),
-      supabase.from('cuotas').select('*').eq('user_id', user.id),
+      prestamosQuery,
+      cuotasQuery,
       supabase.from('clientes').select('id, nombre, dni').eq('user_id', user.id)
     ])
 
@@ -94,10 +142,24 @@ export default function ReportesPage() {
 
     // Calcular reporte general
     if (prestamos && cuotas) {
+      // Filtrar cuotas por fecha de pago si hay filtro activo
+      let cuotasFiltradas = cuotas
+      if (desde || hasta) {
+        cuotasFiltradas = cuotas.filter(c => {
+          // Para el filtro, consideramos la fecha de pago si existe, sino la fecha de vencimiento
+          const fechaRef = c.fecha_pago || c.fecha_vencimiento
+          if (!fechaRef) return true
+          
+          const fechaCuota = new Date(fechaRef)
+          if (desde && fechaCuota < desde) return false
+          if (hasta && fechaCuota > hasta) return false
+          return true
+        })
+      }
       const totalPrestado = prestamos.reduce((sum, p) => sum + parseFloat(p.monto_prestado), 0)
-      const totalRecuperado = cuotas.reduce((sum, c) => sum + parseFloat(c.monto_pagado), 0)
+      const totalRecuperado = cuotasFiltradas.reduce((sum, c) => sum + parseFloat(c.monto_pagado), 0)
       // Calcular total pendiente sumando la diferencia entre monto de cuota y monto pagado
-      const totalPendiente = cuotas.reduce((sum, c) => {
+      const totalPendiente = cuotasFiltradas.reduce((sum, c) => {
         const pendiente = parseFloat(c.monto_cuota) - parseFloat(c.monto_pagado)
         return sum + (pendiente > 0 ? pendiente : 0)
       }, 0)
@@ -107,8 +169,8 @@ export default function ReportesPage() {
       }, 0)
       const prestamosActivos = prestamos.filter(p => p.estado === 'activo').length
       const prestamosPagados = prestamos.filter(p => p.estado === 'pagado').length
-      const cuotasPendientes = cuotas.filter(c => c.estado === 'pendiente').length
-      const cuotasRetrasadas = cuotas.filter(c => c.estado === 'retrasada').length
+      const cuotasPendientes = cuotasFiltradas.filter(c => c.estado === 'pendiente').length
+      const cuotasRetrasadas = cuotasFiltradas.filter(c => c.estado === 'retrasada').length
 
       setReporteGeneral({
         totalPrestado,
@@ -146,7 +208,7 @@ export default function ReportesPage() {
         }
       })
 
-      cuotas.forEach(cuota => {
+      cuotasFiltradas.forEach(cuota => {
         const prestamo = prestamos.find(p => p.id === cuota.prestamo_id)
         if (prestamo) {
           const reporte = reportesPorCliente.get(prestamo.cliente_id)
@@ -280,6 +342,69 @@ export default function ReportesPage() {
           Exportar
         </Button>
       </div>
+
+      {/* Filtros de Fecha */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            Filtrar por Fecha
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <label htmlFor="rango" className="text-sm font-medium">Rango de Fecha</label>
+              <Select value={rangoFecha} onValueChange={setRangoFecha}>
+                <SelectTrigger id="rango">
+                  <SelectValue placeholder="Seleccionar rango" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todo">Todo el tiempo</SelectItem>
+                  <SelectItem value="hoy">Hoy</SelectItem>
+                  <SelectItem value="7dias">Últimos 7 días</SelectItem>
+                  <SelectItem value="30dias">Últimos 30 días</SelectItem>
+                  <SelectItem value="3meses">Últimos 3 meses</SelectItem>
+                  <SelectItem value="personalizado">Personalizado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {rangoFecha === 'personalizado' && (
+              <>
+                <div className="space-y-2">
+                  <label htmlFor="desde" className="text-sm font-medium">Desde</label>
+                  <Input
+                    id="desde"
+                    type="date"
+                    value={fechaDesde}
+                    onChange={(e) => setFechaDesde(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="hasta" className="text-sm font-medium">Hasta</label>
+                  <Input
+                    id="hasta"
+                    type="date"
+                    value={fechaHasta}
+                    onChange={(e) => setFechaHasta(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          {rangoFecha !== 'todo' && (
+            <p className="text-sm text-gray-500 mt-3">
+              {rangoFecha === 'hoy' && '📅 Mostrando datos de hoy'}
+              {rangoFecha === '7dias' && '📅 Mostrando datos de los últimos 7 días'}
+              {rangoFecha === '30dias' && '📅 Mostrando datos de los últimos 30 días'}
+              {rangoFecha === '3meses' && '📅 Mostrando datos de los últimos 3 meses'}
+              {rangoFecha === 'personalizado' && fechaDesde && fechaHasta && 
+                `📅 Mostrando datos desde ${formatDate(fechaDesde)} hasta ${formatDate(fechaHasta)}`}
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="general" className="space-y-6" onValueChange={setActiveTab}>
         <TabsList>
