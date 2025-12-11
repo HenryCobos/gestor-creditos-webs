@@ -67,32 +67,37 @@ export default function BienvenidaPage() {
         </CardHeader>
 
         <CardContent className="space-y-6">
-          {/* Paso 1: Revisar Email */}
-          <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-5">
-            <div className="flex items-start gap-3">
-              <Mail className="w-6 h-6 text-blue-600 flex-shrink-0 mt-1" />
-              <div>
-                <h3 className="font-semibold text-blue-900 text-lg mb-1">
-                  Paso 1: Revisa tu email
-                </h3>
-                <p className="text-blue-800 text-sm">
-                  Te enviamos un correo de confirmación. Haz clic en el enlace para activar tu cuenta.
-                  <br />
-                  <span className="text-xs text-blue-600 italic">
-                    Si no lo ves, revisa tu carpeta de spam
-                  </span>
-                </p>
+          {/* PROMOCIÓN ESPECIAL DEL 50% OFF */}
+          <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl p-6 text-white shadow-lg">
+            <div className="text-center space-y-3">
+              <div className="inline-block bg-yellow-400 text-purple-900 font-bold px-4 py-2 rounded-full text-lg animate-pulse">
+                🎉 ¡OFERTA ESPECIAL DE DICIEMBRE! 🎉
               </div>
+              <h3 className="text-2xl font-bold">
+                50% DE DESCUENTO por 6 meses
+              </h3>
+              <p className="text-purple-100">
+                en TODOS nuestros planes de pago
+              </p>
+              <div className="bg-white/20 backdrop-blur rounded-lg p-4 inline-block">
+                <p className="text-sm mb-2">Usa el cupón:</p>
+                <div className="bg-white text-purple-900 px-6 py-3 rounded-lg font-mono text-xl font-bold tracking-wider">
+                  50 OFF
+                </div>
+              </div>
+              <p className="text-sm text-purple-100">
+                💡 Válido solo durante diciembre 2024
+              </p>
             </div>
           </div>
 
-          {/* Paso 2: Guarda esta URL - MUY IMPORTANTE */}
+          {/* Guarda esta URL - MUY IMPORTANTE */}
           <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-5">
             <div className="flex items-start gap-3">
               <Bookmark className="w-6 h-6 text-amber-600 flex-shrink-0 mt-1" />
               <div className="flex-1">
                 <h3 className="font-semibold text-amber-900 text-lg mb-2">
-                  Paso 2: ¡IMPORTANTE! Guarda este enlace
+                  ¡IMPORTANTE! Guarda este enlace
                 </h3>
                 <p className="text-amber-800 text-sm mb-3">
                   Para encontrar fácilmente la aplicación en el futuro:
@@ -168,16 +173,19 @@ export default function BienvenidaPage() {
           </div>
 
           {/* Botón para continuar */}
-          <div className="pt-4">
+          <div className="pt-4 space-y-3">
             <Button
               onClick={handleGoToLogin}
-              className="w-full text-lg py-6"
+              className="w-full text-lg py-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
               size="lg"
             >
-              Ir a Iniciar Sesión →
+              Iniciar Sesión Ahora →
             </Button>
-            <p className="text-center text-sm text-gray-500 mt-3">
-              Después de activar tu cuenta por email, podrás iniciar sesión
+            <p className="text-center text-sm text-gray-600">
+              Tu cuenta está lista. Puedes empezar a usar la aplicación de inmediato 🚀
+            </p>
+            <p className="text-center text-xs text-purple-600 font-medium">
+              💜 ¿Quieres más clientes y préstamos? Aprovecha el 50% OFF con el cupón "50 OFF"
             </p>
           </div>
         </CardContent>

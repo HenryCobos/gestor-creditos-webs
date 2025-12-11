@@ -100,7 +100,7 @@ export default function RegisterPage() {
       // Mostrar mensaje de éxito
       toast({
         title: '¡Cuenta creada con éxito! 🎉',
-        description: 'Revisa tu email para confirmar tu cuenta',
+        description: 'Tu cuenta está lista para usar',
       })
 
       // Redirigir a página de bienvenida con instrucciones
