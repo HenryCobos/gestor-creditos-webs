@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -76,6 +77,7 @@ export default function PrestamosPage() {
     tipo_interes: 'simple' as TipoInteres,
     tipo_prestamo: 'amortizacion' as TipoPrestamo,
     tipo_calculo_interes: 'por_periodo' as TipoCalculoInteres,
+    excluir_domingos: false, // Nueva opción para excluir domingos del cronograma
   })
 
   const [garantias, setGarantias] = useState<Array<{
@@ -284,6 +286,7 @@ export default function PrestamosPage() {
         tipo_interes: formData.tipo_interes,
         tipo_prestamo: formData.tipo_prestamo,
         tipo_calculo_interes: formData.tipo_calculo_interes,
+        excluir_domingos: formData.excluir_domingos, // Nueva opción
         estado: 'activo',
       }])
       .select(`
@@ -349,12 +352,22 @@ export default function PrestamosPage() {
       if (i === 1) {
         // Primera cuota: usa la fecha de inicio tal cual (sin conversiones)
         fechaVencimientoString = formData.fecha_inicio
+        // Si excluir domingos está activo, ajustar la primera cuota también
+        if (formData.excluir_domingos) {
+          const [y, m, d] = fechaVencimientoString.split('-').map(Number)
+          const fecha = new Date(y, m - 1, d)
+          if (fecha.getDay() === 0) { // Si es domingo
+            const fechaAjustada = addDays(fecha, 1) // Mover al lunes
+            fechaVencimientoString = format(fechaAjustada, 'yyyy-MM-dd')
+          }
+        }
       } else {
         // Cuotas 2 en adelante: calcular sumando períodos
         const fechaVencimiento = calcularSiguienteFechaPago(
           fechaInicio,
           i - 1,
-          formData.frecuencia_pago
+          formData.frecuencia_pago,
+          formData.excluir_domingos // Pasar la opción de excluir domingos
         )
         fechaVencimientoString = format(fechaVencimiento, 'yyyy-MM-dd')
       }
@@ -451,6 +464,7 @@ export default function PrestamosPage() {
       tipo_interes: 'simple',
       tipo_prestamo: 'amortizacion',
       tipo_calculo_interes: 'por_periodo',
+      excluir_domingos: false,
     })
     setGarantias([])
     setCalculatedDetails({
@@ -729,6 +743,22 @@ export default function PrestamosPage() {
                       <SelectItem value="mensual">Mensual</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="flex items-center space-x-2 pt-2">
+                  <Checkbox
+                    id="excluir_domingos"
+                    checked={formData.excluir_domingos}
+                    onCheckedChange={(checked: boolean) =>
+                      setFormData({ ...formData, excluir_domingos: checked === true })
+                    }
+                  />
+                  <Label
+                    htmlFor="excluir_domingos"
+                    className="text-sm font-normal cursor-pointer"
+                  >
+                    Excluir domingos del cronograma de cuotas
+                  </Label>
                 </div>
 
                 <div className="space-y-2">

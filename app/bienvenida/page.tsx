@@ -86,7 +86,7 @@ export default function BienvenidaPage() {
                 </div>
               </div>
               <p className="text-sm text-purple-100">
-                💡 Válido solo durante diciembre 2024
+                💡 Válido solo durante diciembre 2025
               </p>
             </div>
           </div>

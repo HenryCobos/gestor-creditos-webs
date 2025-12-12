@@ -173,29 +173,56 @@ export function calculateLoanDetails(
 }
 
 /**
+ * Ajusta una fecha al lunes siguiente si cae en domingo
+ */
+export function ajustarDomingo(fecha: Date): Date {
+  const diaSemana = fecha.getDay() // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
+  if (diaSemana === 0) {
+    // Si es domingo, mover al lunes (agregar 1 día)
+    return addDays(fecha, 1)
+  }
+  return fecha
+}
+
+/**
  * Calcula la siguiente fecha de pago según la frecuencia
  * Para la cuota 1, devuelve la fecha base más un período
  * Para la cuota 2, devuelve la fecha base más dos períodos, etc.
+ * @param excluirDomingos - Si es true, las fechas que caigan en domingo se moverán al lunes
  */
 export function calcularSiguienteFechaPago(
   fechaBase: Date,
   numeroCuota: number,
-  frecuencia: FrecuenciaPago
+  frecuencia: FrecuenciaPago,
+  excluirDomingos: boolean = false
 ): Date {
   // La primera cuota vence un período después de la fecha de inicio
   // numeroCuota ya viene con el valor correcto (1, 2, 3, etc.)
+  let fecha: Date
+  
   switch (frecuencia) {
     case 'diario':
-      return addDays(fechaBase, numeroCuota)
+      fecha = addDays(fechaBase, numeroCuota)
+      break
     case 'semanal':
-      return addWeeks(fechaBase, numeroCuota)
+      fecha = addWeeks(fechaBase, numeroCuota)
+      break
     case 'quincenal':
-      return addWeeks(fechaBase, numeroCuota * 2)
+      fecha = addWeeks(fechaBase, numeroCuota * 2)
+      break
     case 'mensual':
-      return addMonths(fechaBase, numeroCuota)
+      fecha = addMonths(fechaBase, numeroCuota)
+      break
     default:
-      return addMonths(fechaBase, numeroCuota)
+      fecha = addMonths(fechaBase, numeroCuota)
   }
+  
+  // Si se debe excluir domingos, ajustar la fecha
+  if (excluirDomingos) {
+    fecha = ajustarDomingo(fecha)
+  }
+  
+  return fecha
 }
 
 /**
