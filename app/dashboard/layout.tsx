@@ -10,7 +10,8 @@ import {
   CreditCard, 
   LogOut,
   Menu,
-  Settings
+  Settings,
+  PlayCircle
 } from 'lucide-react'
 import { CompanyHeader } from '@/components/company-header'
 import { MobileMenu } from '@/components/mobile-menu'
@@ -166,6 +167,12 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
               <Button variant="ghost" className="w-full justify-start">
                 <FileText className="mr-2 h-4 w-4" />
                 Reportes
+              </Button>
+            </Link>
+            <Link href="/dashboard/tutoriales">
+              <Button variant="ghost" className="w-full justify-start">
+                <PlayCircle className="mr-2 h-4 w-4" />
+                Tutoriales
               </Button>
             </Link>
             <Link href="/dashboard/configuracion">

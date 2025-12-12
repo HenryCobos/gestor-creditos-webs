@@ -19,7 +19,8 @@ import {
   LogOut,
   Menu,
   Settings,
-  X
+  X,
+  PlayCircle
 } from 'lucide-react'
 
 interface MobileMenuProps {
@@ -56,6 +57,11 @@ export function MobileMenu({ user, planName, onSignOut }: MobileMenuProps) {
       href: '/dashboard/reportes',
       icon: FileText,
       label: 'Reportes'
+    },
+    {
+      href: '/dashboard/tutoriales',
+      icon: PlayCircle,
+      label: 'Tutoriales'
     },
     {
       href: '/dashboard/configuracion',
