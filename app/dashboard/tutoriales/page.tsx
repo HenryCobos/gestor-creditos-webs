@@ -19,7 +19,7 @@ const tutoriales: Tutorial[] = [
     id: 1,
     titulo: 'Registrando un Cliente',
     descripcion: 'Aprende cómo agregar y gestionar clientes en el sistema de forma rápida y eficiente.',
-    videoId: 'BH00mHpEJks',
+    videoId: 'BH00nHpEJks',
     duracion: '5 min',
     categoria: 'Básico'
   },
