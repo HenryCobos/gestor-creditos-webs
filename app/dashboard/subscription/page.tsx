@@ -15,7 +15,10 @@ import {
   Crown,
   Rocket,
   Star,
-  ShieldCheck
+  ShieldCheck,
+  Gift,
+  Sparkles,
+  Tag
 } from 'lucide-react'
 import { useSubscriptionStore } from '@/lib/subscription-store'
 import { loadPlans, loadUserSubscription, loadUsageLimits, getPlanBenefits } from '@/lib/subscription-helpers'
@@ -121,6 +124,72 @@ export default function SubscriptionPage() {
             </span>
           </div>
         )}
+      </div>
+
+      {/* 🎄 Banner Promoción Navideña */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-red-600 via-green-600 to-red-600 p-1 animate-gradient">
+        <div className="bg-white rounded-xl p-6 md:p-8 relative overflow-hidden">
+          {/* Decoración de copos de nieve */}
+          <div className="absolute top-0 right-0 text-red-100 opacity-20">
+            <Sparkles className="w-32 h-32" />
+          </div>
+          <div className="absolute bottom-0 left-0 text-green-100 opacity-20">
+            <Gift className="w-24 h-24" />
+          </div>
+          
+          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+            {/* Contenido */}
+            <div className="flex-1 text-center md:text-left">
+              <div className="flex items-center justify-center md:justify-start gap-2 mb-3">
+                <Gift className="w-6 h-6 text-red-600 animate-bounce" />
+                <span className="px-3 py-1 bg-red-100 text-red-700 text-xs font-bold rounded-full uppercase tracking-wide">
+                  🎄 Oferta Navideña - Solo Diciembre
+                </span>
+              </div>
+              
+              <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-2">
+                <span className="text-red-600">50% OFF</span> en tus Primeros 6 Meses
+              </h2>
+              
+              <p className="text-lg text-gray-600 mb-4">
+                ¡Empieza 2025 transformando tu negocio! Usa el cupón especial al momento de pagar.
+              </p>
+              
+              {/* Cupón destacado */}
+              <div className="inline-flex items-center gap-3 bg-gradient-to-r from-yellow-50 to-yellow-100 border-2 border-dashed border-yellow-400 rounded-lg px-6 py-3">
+                <Tag className="w-5 h-5 text-yellow-700" />
+                <div className="text-left">
+                  <p className="text-xs text-yellow-700 font-medium uppercase tracking-wide">Código de Cupón</p>
+                  <p className="text-2xl font-black text-yellow-900 tracking-wider">50OFF</p>
+                </div>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText('50OFF')
+                    toast({
+                      title: '¡Copiado!',
+                      description: 'Cupón copiado al portapapeles',
+                    })
+                  }}
+                  className="ml-4 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-bold rounded-lg transition-colors"
+                >
+                  Copiar
+                </button>
+              </div>
+            </div>
+            
+            {/* Visual de regalo */}
+            <div className="flex-shrink-0">
+              <div className="relative">
+                <div className="w-32 h-32 md:w-40 md:h-40 bg-gradient-to-br from-red-500 to-green-500 rounded-2xl flex items-center justify-center transform hover:scale-110 transition-transform">
+                  <Gift className="w-16 h-16 md:w-20 md:h-20 text-white" />
+                </div>
+                <div className="absolute -top-2 -right-2 w-16 h-16 bg-yellow-400 rounded-full flex items-center justify-center animate-pulse">
+                  <span className="text-2xl font-black text-red-600">50%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Toggle Period */}

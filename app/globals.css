@@ -83,5 +83,20 @@
     scrollbar-width: thin;
     scrollbar-color: #cbd5e1 #f1f1f1;
   }
+  
+  /* Animación para el banner navideño */
+  @keyframes gradient-shift {
+    0%, 100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+  
+  .animate-gradient {
+    background-size: 200% 200%;
+    animation: gradient-shift 3s ease infinite;
+  }
 }
 
