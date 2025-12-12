@@ -342,35 +342,53 @@ export default function PrestamosPage() {
     // Crear fecha en UTC a partir de los componentes para evitar conversión a hora local que reste un día
     const fechaInicio = new Date(year, month - 1, day, 12, 0, 0) // Mediodía para evitar bordes de día
 
+    // Array temporal para almacenar las fechas y detectar duplicados
+    const fechasGeneradas: Date[] = []
+
     // Para modo "solo intereses", cada cuota es solo el interés (excepto la última que incluye capital)
     // Para modo "amortización" o "empeño", cada cuota incluye capital + interés
     for (let i = 1; i <= cuotas; i++) {
       // Para la primera cuota, usar directamente la fecha de inicio para evitar problemas de zona horaria
       // Para las demás cuotas, calcular sumando períodos desde la fecha de inicio
-      let fechaVencimientoString: string
+      let fechaVencimiento: Date
       
       if (i === 1) {
         // Primera cuota: usa la fecha de inicio tal cual (sin conversiones)
-        fechaVencimientoString = formData.fecha_inicio
+        const [y, m, d] = formData.fecha_inicio.split('-').map(Number)
+        fechaVencimiento = new Date(y, m - 1, d)
+        
         // Si excluir domingos está activo, ajustar la primera cuota también
-        if (formData.excluir_domingos) {
-          const [y, m, d] = fechaVencimientoString.split('-').map(Number)
-          const fecha = new Date(y, m - 1, d)
-          if (fecha.getDay() === 0) { // Si es domingo
-            const fechaAjustada = addDays(fecha, 1) // Mover al lunes
-            fechaVencimientoString = format(fechaAjustada, 'yyyy-MM-dd')
-          }
+        if (formData.excluir_domingos && fechaVencimiento.getDay() === 0) {
+          fechaVencimiento = addDays(fechaVencimiento, 1) // Mover al lunes
         }
       } else {
         // Cuotas 2 en adelante: calcular sumando períodos
-        const fechaVencimiento = calcularSiguienteFechaPago(
+        fechaVencimiento = calcularSiguienteFechaPago(
           fechaInicio,
           i - 1,
           formData.frecuencia_pago,
           formData.excluir_domingos // Pasar la opción de excluir domingos
         )
-        fechaVencimientoString = format(fechaVencimiento, 'yyyy-MM-dd')
       }
+
+      // Si excluir domingos está activo, verificar que no haya duplicados
+      if (formData.excluir_domingos && fechasGeneradas.length > 0) {
+        const fechaAnterior = fechasGeneradas[fechasGeneradas.length - 1]
+        const fechaVencimientoStr = format(fechaVencimiento, 'yyyy-MM-dd')
+        const fechaAnteriorStr = format(fechaAnterior, 'yyyy-MM-dd')
+        
+        // Si la fecha actual es igual a la anterior, mover un día adelante
+        if (fechaVencimientoStr === fechaAnteriorStr) {
+          fechaVencimiento = addDays(fechaVencimiento, 1)
+          // Si el nuevo día también es domingo, mover al lunes
+          if (fechaVencimiento.getDay() === 0) {
+            fechaVencimiento = addDays(fechaVencimiento, 1)
+          }
+        }
+      }
+
+      // Guardar la fecha generada para comparación
+      fechasGeneradas.push(fechaVencimiento)
       
       // Última cuota en modo "solo intereses" incluye el capital
       const esUltimaCuota = i === cuotas
@@ -381,7 +399,8 @@ export default function PrestamosPage() {
         montoCuotaFinal = montoCuota + monto
       }
 
-      // Agregar hora al mediodía para evitar problemas de zona horaria
+      // Convertir a string y agregar hora al mediodía para evitar problemas de zona horaria
+      const fechaVencimientoString = format(fechaVencimiento, 'yyyy-MM-dd')
       const fechaVencimientoConHora = `${fechaVencimientoString}T12:00:00`
       
       cuotasToCreate.push({
