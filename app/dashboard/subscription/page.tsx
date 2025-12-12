@@ -160,11 +160,11 @@ export default function SubscriptionPage() {
                 <Tag className="w-5 h-5 text-yellow-700" />
                 <div className="text-left">
                   <p className="text-xs text-yellow-700 font-medium uppercase tracking-wide">Código de Cupón</p>
-                  <p className="text-2xl font-black text-yellow-900 tracking-wider">50OFF</p>
+                  <p className="text-2xl font-black text-yellow-900 tracking-wider">50 OFF</p>
                 </div>
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText('50OFF')
+                    navigator.clipboard.writeText('50 OFF')
                     toast({
                       title: '¡Copiado!',
                       description: 'Cupón copiado al portapapeles',
