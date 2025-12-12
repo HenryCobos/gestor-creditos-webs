@@ -27,7 +27,7 @@ const tutoriales: Tutorial[] = [
     id: 2,
     titulo: 'Registrando un Préstamo',
     descripcion: 'Descubre cómo crear préstamos, calcular intereses y generar cuotas automáticamente.',
-    videoId: 'UbyH7fXrDGI',
+    videoId: 'UbyH7fXfDGI',
     duracion: '7 min',
     categoria: 'Básico'
   },
