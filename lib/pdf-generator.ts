@@ -21,7 +21,7 @@ interface PrestamoInfo {
   monto_total: number
   frecuencia_pago: string
   tipo_interes: string
-  tipo_prestamo?: 'amortizacion' | 'solo_intereses' | 'empeño'
+  tipo_prestamo?: 'amortizacion' | 'solo_intereses' | 'empeño' | 'venta_credito'
   tipo_calculo_interes?: 'por_periodo' | 'global' // Por defecto 'por_periodo' si no se especifica
 }
 
@@ -67,6 +67,8 @@ export function generarContratoPrestamo(
     tituloContrato = 'CONTRATO DE EMPEÑO'
   } else if (tipoPrestamo === 'solo_intereses') {
     tituloContrato = 'CONTRATO DE PRÉSTAMO (SOLO INTERESES)'
+  } else if (tipoPrestamo === 'venta_credito') {
+    tituloContrato = 'CONTRATO DE VENTA A CRÉDITO'
   }
   
   doc.setFontSize(16)

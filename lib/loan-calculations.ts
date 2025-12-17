@@ -4,7 +4,7 @@ import { addDays, addWeeks, addMonths } from 'date-fns'
 
 export type FrecuenciaPago = 'diario' | 'semanal' | 'quincenal' | 'mensual'
 export type TipoInteres = 'simple' | 'compuesto'
-export type TipoPrestamo = 'amortizacion' | 'solo_intereses' | 'empeño'
+export type TipoPrestamo = 'amortizacion' | 'solo_intereses' | 'empeño' | 'venta_credito'
 export type TipoCalculoInteres = 'por_periodo' | 'global' // Por período (20% mensual) o Global (20% total)
 
 export interface CalculoPrestamoParams {
@@ -106,8 +106,9 @@ export function calculateLoanDetails(
     ? convertirDiasAMeses(numeroDias)
     : (numeroMeses || 0)
   
-  // Modo "Solo Intereses": Solo se paga interés mensual, capital al final
-  if (tipoPrestamo === 'solo_intereses') {
+  // Modo "Solo Intereses" y "Empeño": Solo se paga interés, capital al final
+  // Empeño ahora funciona como solo_intereses pero con garantías
+  if (tipoPrestamo === 'solo_intereses' || tipoPrestamo === 'empeño') {
     // El interés se calcula mensualmente
     const tasaMensual = interesPorcentaje / 100
     const interesPorMes = monto * tasaMensual
@@ -124,11 +125,6 @@ export function calculateLoanDetails(
       montoInteresCuota: Number(montoInteresPorCuota.toFixed(2)),
       montoCapitalFinal: monto, // Capital a devolver al final
     }
-  }
-  
-  // Modo "Empeño": Similar a amortización pero con garantía
-  if (tipoPrestamo === 'empeño') {
-    // Usa la misma lógica de amortización
   }
   
   // Modo "Amortización" (por defecto): Pago de capital + interés
@@ -290,5 +286,163 @@ export function validarNumeroCuotas(
   }
   
   return { valido: true }
+}
+
+// ============================================
+// FUNCIONES PARA VENTAS A CRÉDITO
+// ============================================
+
+export interface CalculoVentaCreditoParams {
+  precioContado: number
+  enganche: number
+  cargosAdicionales: number // Seguros, comisiones, etc.
+  interesPorcentaje: number // Interés mensual
+  numeroMeses: number
+  frecuenciaPago: FrecuenciaPago
+}
+
+export interface CalculoVentaCreditoResult {
+  montoFinanciar: number // Precio - Enganche
+  montoTotalFinanciado: number // Monto a financiar + Cargos
+  interes: number
+  montoTotal: number // Total que pagará el cliente
+  montoCuota: number
+  numeroCuotas: number
+  precioFinalCliente: number // Enganche + Monto Total
+  interesImplicito: number // Diferencia entre precio final y precio contado
+  tasaInteresImplicita: number // Porcentaje real de interés sobre precio contado
+}
+
+/**
+ * Calcula los detalles de una venta a crédito
+ * Incluye enganche, cargos adicionales y calcula el interés implícito
+ */
+export function calcularVentaCredito(
+  params: CalculoVentaCreditoParams
+): CalculoVentaCreditoResult {
+  const {
+    precioContado,
+    enganche,
+    cargosAdicionales,
+    interesPorcentaje,
+    numeroMeses,
+    frecuenciaPago,
+  } = params
+
+  // 1. Calcular monto a financiar (precio - enganche)
+  const montoFinanciar = precioContado - enganche
+
+  // 2. Agregar cargos adicionales al monto a financiar
+  const montoTotalFinanciado = montoFinanciar + cargosAdicionales
+
+  // 3. Calcular interés sobre el monto financiado
+  const tasaMensual = interesPorcentaje / 100
+  const interes = montoTotalFinanciado * tasaMensual * numeroMeses
+
+  // 4. Monto total a pagar en cuotas (sin enganche)
+  const montoTotal = montoTotalFinanciado + interes
+
+  // 5. Número de cuotas según frecuencia
+  const numeroCuotas = calcularNumeroCuotas(numeroMeses, frecuenciaPago)
+
+  // 6. Monto por cuota
+  const montoCuota = montoTotal / numeroCuotas
+
+  // 7. Precio final que paga el cliente (enganche + cuotas)
+  const precioFinalCliente = enganche + montoTotal
+
+  // 8. Interés implícito (diferencia entre lo que paga y el precio de contado)
+  const interesImplicito = precioFinalCliente - precioContado
+
+  // 9. Tasa de interés implícita real
+  const tasaInteresImplicita = (interesImplicito / precioContado) * 100
+
+  return {
+    montoFinanciar: Number(montoFinanciar.toFixed(2)),
+    montoTotalFinanciado: Number(montoTotalFinanciado.toFixed(2)),
+    interes: Number(interes.toFixed(2)),
+    montoTotal: Number(montoTotal.toFixed(2)),
+    montoCuota: Number(montoCuota.toFixed(2)),
+    numeroCuotas,
+    precioFinalCliente: Number(precioFinalCliente.toFixed(2)),
+    interesImplicito: Number(interesImplicito.toFixed(2)),
+    tasaInteresImplicita: Number(tasaInteresImplicita.toFixed(2)),
+  }
+}
+
+// ============================================
+// FUNCIONES PARA ABONOS A CAPITAL (EMPEÑOS)
+// ============================================
+
+export interface CalculoAbonoCapitalParams {
+  saldoActual: number // Capital pendiente actual
+  montoAbono: number // Cuánto está abonando
+  interesPorcentaje: number // Tasa de interés mensual
+  mesesRestantes: number // Cuántos meses/período faltan
+  frecuenciaPago: FrecuenciaPago
+}
+
+export interface CalculoAbonoCapitalResult {
+  nuevoSaldo: number // Nuevo saldo de capital
+  interesAnterior: number // Interés que pagaba antes
+  nuevoInteres: number // Nuevo interés a pagar
+  ahorroInteres: number // Cuánto ahorra en intereses
+  nuevaCuotaInteres: number // Nueva cuota de solo interés
+  cuotasRestantes: number // Número de cuotas que faltan
+}
+
+/**
+ * Calcula el nuevo interés después de un abono a capital en un empeño
+ * Solo para préstamos tipo "solo_intereses" o "empeño"
+ */
+export function calcularAbonoCapital(
+  params: CalculoAbonoCapitalParams
+): CalculoAbonoCapitalResult {
+  const {
+    saldoActual,
+    montoAbono,
+    interesPorcentaje,
+    mesesRestantes,
+    frecuenciaPago,
+  } = params
+
+  // 1. Calcular nuevo saldo
+  const nuevoSaldo = saldoActual - montoAbono
+
+  // 2. Calcular interés anterior (sobre saldo actual)
+  const tasaMensual = interesPorcentaje / 100
+  const interesAnterior = saldoActual * tasaMensual * mesesRestantes
+
+  // 3. Calcular nuevo interés (sobre nuevo saldo)
+  const nuevoInteres = nuevoSaldo * tasaMensual * mesesRestantes
+
+  // 4. Ahorro en intereses
+  const ahorroInteres = interesAnterior - nuevoInteres
+
+  // 5. Calcular cuotas restantes y nueva cuota de interés
+  const cuotasRestantes = calcularNumeroCuotas(mesesRestantes, frecuenciaPago)
+  const nuevaCuotaInteres = nuevoInteres / cuotasRestantes
+
+  return {
+    nuevoSaldo: Number(nuevoSaldo.toFixed(2)),
+    interesAnterior: Number(interesAnterior.toFixed(2)),
+    nuevoInteres: Number(nuevoInteres.toFixed(2)),
+    ahorroInteres: Number(ahorroInteres.toFixed(2)),
+    nuevaCuotaInteres: Number(nuevaCuotaInteres.toFixed(2)),
+    cuotasRestantes,
+  }
+}
+
+/**
+ * Calcula el interés de renovación de un empeño
+ */
+export function calcularRenovacionEmpeno(
+  capitalPendiente: number,
+  interesPorcentaje: number,
+  mesesExtension: number
+): number {
+  const tasaMensual = interesPorcentaje / 100
+  const interesRenovacion = capitalPendiente * tasaMensual * mesesExtension
+  return Number(interesRenovacion.toFixed(2))
 }
 

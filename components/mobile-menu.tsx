@@ -20,7 +20,8 @@ import {
   Menu,
   Settings,
   X,
-  PlayCircle
+  PlayCircle,
+  Package
 } from 'lucide-react'
 
 interface MobileMenuProps {
@@ -47,6 +48,11 @@ export function MobileMenu({ user, planName, onSignOut }: MobileMenuProps) {
       href: '/dashboard/prestamos',
       icon: DollarSign,
       label: 'Préstamos'
+    },
+    {
+      href: '/dashboard/productos',
+      icon: Package,
+      label: 'Productos'
     },
     {
       href: '/dashboard/cuotas',

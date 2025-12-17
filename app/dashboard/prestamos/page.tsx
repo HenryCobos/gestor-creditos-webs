@@ -78,6 +78,12 @@ export default function PrestamosPage() {
     tipo_prestamo: 'amortizacion' as TipoPrestamo,
     tipo_calculo_interes: 'por_periodo' as TipoCalculoInteres,
     excluir_domingos: false, // Nueva opción para excluir domingos del cronograma
+    // Campos nuevos para Venta a Crédito
+    producto_id: '',
+    precio_contado: '',
+    enganche: '',
+    cargos_adicionales: '',
+    descripcion_producto: '',
   })
 
   const [garantias, setGarantias] = useState<Array<{
@@ -137,8 +143,8 @@ export default function PrestamosPage() {
         })
         setCalculatedDetails(details)
         
-        // Calcular fecha_fin para modo solo intereses
-        if (formData.tipo_prestamo === 'solo_intereses' && formData.fecha_inicio) {
+        // Calcular fecha_fin para modo solo intereses y empeño
+        if ((formData.tipo_prestamo === 'solo_intereses' || formData.tipo_prestamo === 'empeño') && formData.fecha_inicio) {
           const [year, month, day] = formData.fecha_inicio.split('-').map(Number)
           const fechaInicio = new Date(year, month - 1, day)
           let fechaFin: Date
@@ -248,9 +254,9 @@ export default function PrestamosPage() {
       tipoCalculoInteres: formData.tipo_calculo_interes,
     })
 
-    // Calcular fecha_fin si es modo solo intereses
+    // Calcular fecha_fin si es modo solo intereses o empeño
     let fechaFin: string | null = null
-    if (formData.tipo_prestamo === 'solo_intereses') {
+    if (formData.tipo_prestamo === 'solo_intereses' || formData.tipo_prestamo === 'empeño') {
       const [year, month, day] = formData.fecha_inicio.split('-').map(Number)
       const fechaInicio = new Date(year, month - 1, day)
       let fechaFinDate: Date
@@ -286,7 +292,12 @@ export default function PrestamosPage() {
         tipo_interes: formData.tipo_interes,
         tipo_prestamo: formData.tipo_prestamo,
         tipo_calculo_interes: formData.tipo_calculo_interes,
-        excluir_domingos: formData.excluir_domingos, // Nueva opción
+        excluir_domingos: formData.excluir_domingos,
+        // Campos adicionales para Venta a Crédito
+        precio_contado: formData.tipo_prestamo === 'venta_credito' && formData.precio_contado ? parseFloat(formData.precio_contado) : null,
+        enganche: formData.tipo_prestamo === 'venta_credito' && formData.enganche ? parseFloat(formData.enganche) : null,
+        cargos_adicionales: formData.tipo_prestamo === 'venta_credito' && formData.cargos_adicionales ? parseFloat(formData.cargos_adicionales) : null,
+        descripcion_producto: formData.tipo_prestamo === 'venta_credito' && formData.descripcion_producto ? formData.descripcion_producto : null,
         estado: 'activo',
       }])
       .select(`
@@ -484,6 +495,12 @@ export default function PrestamosPage() {
       tipo_prestamo: 'amortizacion',
       tipo_calculo_interes: 'por_periodo',
       excluir_domingos: false,
+      // Campos de venta a crédito
+      producto_id: '',
+      precio_contado: '',
+      enganche: '',
+      cargos_adicionales: '',
+      descripcion_producto: '',
     })
     setGarantias([])
     setCalculatedDetails({
@@ -557,9 +574,10 @@ export default function PrestamosPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="amortizacion">Amortización (Capital + Interés)</SelectItem>
-                      <SelectItem value="solo_intereses">Solo Intereses (Capital al final)</SelectItem>
-                      <SelectItem value="empeño">Empeño (Con garantías)</SelectItem>
+                      <SelectItem value="amortizacion">💰 Amortización (Capital + Interés)</SelectItem>
+                      <SelectItem value="solo_intereses">📊 Solo Intereses (Capital al final)</SelectItem>
+                      <SelectItem value="empeño">💎 Empeño (Con garantías)</SelectItem>
+                      <SelectItem value="venta_credito">🛍️ Venta a Crédito (Con enganche)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -586,20 +604,127 @@ export default function PrestamosPage() {
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="monto_prestado">Monto Prestado *</Label>
-                  <Input
-                    id="monto_prestado"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.monto_prestado}
-                    onChange={(e) =>
-                      setFormData({ ...formData, monto_prestado: e.target.value })
-                    }
-                    required
-                  />
-                </div>
+                {/* Campos específicos para Venta a Crédito */}
+                {formData.tipo_prestamo === 'venta_credito' && (
+                  <>
+                    <div className="col-span-2 space-y-2">
+                      <Label htmlFor="descripcion_producto">Descripción del Producto/Servicio *</Label>
+                      <Input
+                        id="descripcion_producto"
+                        value={formData.descripcion_producto}
+                        onChange={(e) =>
+                          setFormData({ ...formData, descripcion_producto: e.target.value })
+                        }
+                        placeholder="Ej: Moto Honda XR 150, Sala 3 piezas..."
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="precio_contado">Precio de Contado *</Label>
+                      <Input
+                        id="precio_contado"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.precio_contado}
+                        onChange={(e) => {
+                          const precioContado = parseFloat(e.target.value) || 0
+                          const enganche = parseFloat(formData.enganche) || 0
+                          const montoFinanciar = precioContado - enganche
+                          setFormData({ 
+                            ...formData, 
+                            precio_contado: e.target.value,
+                            monto_prestado: montoFinanciar > 0 ? montoFinanciar.toString() : ''
+                          })
+                        }}
+                        required
+                      />
+                      <p className="text-xs text-gray-500">
+                        Precio original del producto al contado
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="enganche">Enganche/Cuota Inicial *</Label>
+                      <Input
+                        id="enganche"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.enganche}
+                        onChange={(e) => {
+                          const precioContado = parseFloat(formData.precio_contado) || 0
+                          const enganche = parseFloat(e.target.value) || 0
+                          const montoFinanciar = precioContado - enganche
+                          setFormData({ 
+                            ...formData, 
+                            enganche: e.target.value,
+                            monto_prestado: montoFinanciar > 0 ? montoFinanciar.toString() : ''
+                          })
+                        }}
+                        required
+                      />
+                      {formData.precio_contado && formData.enganche && (
+                        <p className="text-xs text-green-700">
+                          {((parseFloat(formData.enganche) / parseFloat(formData.precio_contado)) * 100).toFixed(1)}% del precio total
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="col-span-2 space-y-2">
+                      <Label htmlFor="cargos_adicionales">Cargos Adicionales (Seguro, Comisiones, etc.)</Label>
+                      <Input
+                        id="cargos_adicionales"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.cargos_adicionales}
+                        onChange={(e) =>
+                          setFormData({ ...formData, cargos_adicionales: e.target.value })
+                        }
+                        placeholder="0.00"
+                      />
+                      <p className="text-xs text-gray-500">
+                        Costos adicionales que se suman al monto a financiar
+                      </p>
+                    </div>
+
+                    {formData.precio_contado && formData.enganche && (
+                      <div className="col-span-2 bg-blue-50 p-3 rounded-lg space-y-1">
+                        <p className="text-sm text-blue-900 font-medium">Cálculo de Financiamiento:</p>
+                        <div className="text-xs text-blue-800 space-y-1">
+                          <p>Precio de contado: {formatCurrency(parseFloat(formData.precio_contado), config.currency)}</p>
+                          <p>Enganche: -{formatCurrency(parseFloat(formData.enganche), config.currency)}</p>
+                          {formData.cargos_adicionales && parseFloat(formData.cargos_adicionales) > 0 && (
+                            <p>Cargos adicionales: +{formatCurrency(parseFloat(formData.cargos_adicionales), config.currency)}</p>
+                          )}
+                          <p className="font-semibold pt-1 border-t border-blue-200">
+                            Monto a financiar: {formatCurrency(parseFloat(formData.monto_prestado || '0'), config.currency)}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Campo de Monto Prestado (oculto para venta_credito, calculado automáticamente) */}
+                {formData.tipo_prestamo !== 'venta_credito' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="monto_prestado">Monto Prestado *</Label>
+                    <Input
+                      id="monto_prestado"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.monto_prestado}
+                      onChange={(e) =>
+                        setFormData({ ...formData, monto_prestado: e.target.value })
+                      }
+                      required
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="tipo_calculo_interes">Tipo de Cálculo de Interés *</Label>
@@ -1065,10 +1190,13 @@ export default function PrestamosPage() {
                           ? 'bg-purple-100 text-purple-800'
                           : prestamo.tipo_prestamo === 'solo_intereses'
                           ? 'bg-orange-100 text-orange-800'
+                          : prestamo.tipo_prestamo === 'venta_credito'
+                          ? 'bg-green-100 text-green-800'
                           : 'bg-gray-100 text-gray-800'
                       }`}>
                         {prestamo.tipo_prestamo === 'empeño' ? 'Empeño' :
                          prestamo.tipo_prestamo === 'solo_intereses' ? 'Solo Interés' :
+                         prestamo.tipo_prestamo === 'venta_credito' ? 'Venta a Crédito' :
                          'Amortización'}
                       </span>
                     </TableCell>

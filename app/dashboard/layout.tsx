@@ -11,7 +11,8 @@ import {
   LogOut,
   Menu,
   Settings,
-  PlayCircle
+  PlayCircle,
+  Package
 } from 'lucide-react'
 import { CompanyHeader } from '@/components/company-header'
 import { MobileMenu } from '@/components/mobile-menu'
@@ -155,6 +156,12 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
               <Button variant="ghost" className="w-full justify-start">
                 <DollarSign className="mr-2 h-4 w-4" />
                 Préstamos
+              </Button>
+            </Link>
+            <Link href="/dashboard/productos">
+              <Button variant="ghost" className="w-full justify-start">
+                <Package className="mr-2 h-4 w-4" />
+                Productos
               </Button>
             </Link>
             <Link href="/dashboard/cuotas">

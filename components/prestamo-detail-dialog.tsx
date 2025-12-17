@@ -31,12 +31,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { CheckCircle, DollarSign, Eye, X, FileText, Package, XCircle } from 'lucide-react'
+import { CheckCircle, DollarSign, Eye, X, FileText, Package, XCircle, Repeat, TrendingDown } from 'lucide-react'
 import { formatCurrency, formatDate, isDateOverdue } from '@/lib/utils'
 import { format } from 'date-fns'
 import { useConfigStore } from '@/lib/config-store'
 import type { Prestamo, Garantia } from '@/lib/store'
 import { generarContratoPrestamo } from '@/lib/pdf-generator'
+import { AbonoCapitalDialog } from '@/components/abono-capital-dialog'
+import { RenovarEmpenoDialog } from '@/components/renovar-empeno-dialog'
 
 interface Cuota {
   id: string
@@ -71,6 +73,8 @@ export function PrestamoDetailDialog({
   const [montoPago, setMontoPago] = useState('')
   const [metodoPago, setMetodoPago] = useState('')
   const [notas, setNotas] = useState('')
+  const [abonoCapitalDialogOpen, setAbonoCapitalDialogOpen] = useState(false)
+  const [renovarEmpenoDialogOpen, setRenovarEmpenoDialogOpen] = useState(false)
   const { toast } = useToast()
   const supabase = createClient()
   const { config } = useConfigStore()
@@ -336,6 +340,20 @@ export function PrestamoDetailDialog({
     setCuotaADesmarcar(null)
   }
 
+  const handleAbonoSuccess = () => {
+    loadCuotas()
+    if (prestamo && prestamo.tipo_prestamo === 'empeño') {
+      loadGarantias()
+    }
+    if (onUpdate) onUpdate()
+  }
+
+  const handleRenovacionSuccess = () => {
+    loadCuotas()
+    loadGarantias()
+    if (onUpdate) onUpdate()
+  }
+
   if (!prestamo) return null
 
   const cuotasPagadas = cuotas.filter(c => c.estado === 'pagada').length
@@ -354,14 +372,38 @@ export function PrestamoDetailDialog({
                   Cliente: {prestamo.cliente?.nombre || '-'}
                 </DialogDescription>
               </div>
-              <Button
-                variant="outline"
-                onClick={handleGenerarContrato}
-                className="gap-2"
-              >
-                <FileText className="h-4 w-4" />
-                Generar Contrato PDF
-              </Button>
+              <div className="flex gap-2">
+                {/* Botón de Abonar a Capital (solo para empeños y solo_intereses) */}
+                {(prestamo.tipo_prestamo === 'empeño' || prestamo.tipo_prestamo === 'solo_intereses') && prestamo.estado === 'activo' && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setAbonoCapitalDialogOpen(true)}
+                    className="gap-2 text-green-700 border-green-300 hover:bg-green-50"
+                  >
+                    <TrendingDown className="h-4 w-4" />
+                    Abonar a Capital
+                  </Button>
+                )}
+                {/* Botón de Renovar Empeño (solo para empeños) */}
+                {prestamo.tipo_prestamo === 'empeño' && prestamo.estado === 'activo' && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setRenovarEmpenoDialogOpen(true)}
+                    className="gap-2 text-purple-700 border-purple-300 hover:bg-purple-50"
+                  >
+                    <Repeat className="h-4 w-4" />
+                    Renovar Empeño
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={handleGenerarContrato}
+                  className="gap-2"
+                >
+                  <FileText className="h-4 w-4" />
+                  Generar Contrato PDF
+                </Button>
+              </div>
             </div>
           </DialogHeader>
 
@@ -703,6 +745,22 @@ export function PrestamoDetailDialog({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Dialog de Abono a Capital */}
+      <AbonoCapitalDialog
+        prestamo={prestamo}
+        open={abonoCapitalDialogOpen}
+        onOpenChange={setAbonoCapitalDialogOpen}
+        onSuccess={handleAbonoSuccess}
+      />
+
+      {/* Dialog de Renovar Empeño */}
+      <RenovarEmpenoDialog
+        prestamo={prestamo}
+        open={renovarEmpenoDialogOpen}
+        onOpenChange={setRenovarEmpenoDialogOpen}
+        onSuccess={handleRenovacionSuccess}
+      />
     </>
   )
 }
