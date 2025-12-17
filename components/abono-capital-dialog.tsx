@@ -201,15 +201,16 @@ export function AbonoCapitalDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>Abonar a Capital - Empeño</DialogTitle>
           <DialogDescription>
             Reduce el capital pendiente y los intereses futuros
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
           {/* Estado actual */}
           <div className="bg-blue-50 p-4 rounded-lg space-y-2">
             <h4 className="font-semibold text-sm text-blue-900">Estado Actual</h4>
@@ -336,8 +337,10 @@ export function AbonoCapitalDialog({
             </div>
           )}
 
+          </div>
+          
           {/* Botones */}
-          <div className="flex justify-end space-x-2 pt-4">
+          <div className="flex-shrink-0 flex justify-end space-x-2 pt-4 border-t mt-4">
             <Button type="button" variant="outline" onClick={handleClose}>
               Cancelar
             </Button>

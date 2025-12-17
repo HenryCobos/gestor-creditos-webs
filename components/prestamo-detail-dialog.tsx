@@ -65,6 +65,7 @@ export function PrestamoDetailDialog({
 }: PrestamoDetailDialogProps) {
   const [cuotas, setCuotas] = useState<Cuota[]>([])
   const [garantias, setGarantias] = useState<Garantia[]>([])
+  const [abonosCapital, setAbonosCapital] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedCuota, setSelectedCuota] = useState<Cuota | null>(null)
   const [pagoDialogOpen, setPagoDialogOpen] = useState(false)
@@ -82,8 +83,9 @@ export function PrestamoDetailDialog({
   useEffect(() => {
     if (prestamo && open) {
       loadCuotas()
-      if (prestamo.tipo_prestamo === 'empeño') {
+      if (prestamo.tipo_prestamo === 'empeño' || prestamo.tipo_prestamo === 'solo_intereses') {
         loadGarantias()
+        loadAbonosCapital()
       }
     }
   }, [prestamo, open])
@@ -130,6 +132,26 @@ export function PrestamoDetailDialog({
       console.error('Error cargando garantías:', error)
     } else {
       setGarantias(data || [])
+    }
+  }
+
+  const loadAbonosCapital = async () => {
+    if (!prestamo) return
+    
+    const { data, error } = await supabase
+      .from('abonos_capital')
+      .select('*')
+      .eq('prestamo_id', prestamo.id)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error('Error cargando abonos:', error)
+    } else {
+      setAbonosCapital(data || [])
+      // Actualizar el préstamo con los abonos cargados
+      if (prestamo) {
+        prestamo.abonos_capital = data || []
+      }
     }
   }
 
@@ -342,6 +364,7 @@ export function PrestamoDetailDialog({
 
   const handleAbonoSuccess = () => {
     loadCuotas()
+    loadAbonosCapital()
     if (prestamo && prestamo.tipo_prestamo === 'empeño') {
       loadGarantias()
     }

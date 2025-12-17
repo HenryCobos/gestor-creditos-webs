@@ -60,7 +60,7 @@ export default function PrestamosPage() {
   const [limiteDialogOpen, setLimiteDialogOpen] = useState(false)
   const { toast } = useToast()
   const supabase = createClient()
-  const { clientes, setClientes, prestamos, setPrestamos, addPrestamo, updatePrestamo, deletePrestamo } = useStore()
+  const { clientes, setClientes, prestamos, setPrestamos, addPrestamo, updatePrestamo, deletePrestamo, productos, setProductos } = useStore()
   const { config } = useConfigStore()
   const { canAddPrestamo, setUserSubscription, setUsageLimits } = useSubscriptionStore()
 
@@ -181,6 +181,18 @@ export default function PrestamosPage() {
 
     if (clientesData) {
       setClientes(clientesData)
+    }
+
+    // Cargar productos (para ventas a crédito)
+    const { data: productosData } = await supabase
+      .from('productos')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('activo', true)
+      .order('nombre', { ascending: true })
+
+    if (productosData) {
+      setProductos(productosData)
     }
 
     // Cargar préstamos con información del cliente
@@ -440,6 +452,26 @@ export default function PrestamosPage() {
       return
     }
 
+    // Decrementar stock si es venta a crédito con producto del catálogo
+    if (formData.tipo_prestamo === 'venta_credito' && formData.producto_id && formData.producto_id !== '') {
+      const producto = productos.find(p => p.id === formData.producto_id)
+      if (producto && producto.stock > 0) {
+        const { error: stockError } = await supabase
+          .from('productos')
+          .update({ stock: producto.stock - 1 })
+          .eq('id', formData.producto_id)
+
+        if (stockError) {
+          console.error('Error actualizando stock:', stockError)
+          toast({
+            title: 'Advertencia',
+            description: 'Préstamo creado pero no se pudo actualizar el stock del producto',
+            variant: 'destructive',
+          })
+        }
+      }
+    }
+
     addPrestamo(prestamo)
     const duracionTexto = formData.tipo_duracion === 'meses' && meses
       ? `${meses} mes${meses > 1 ? 'es' : ''}`
@@ -452,8 +484,9 @@ export default function PrestamosPage() {
       description: `Préstamo creado con ${cuotas} cuotas ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}${cuotas > 1 ? 'es' : ''} ${duracionTexto ? `(${duracionTexto})` : ''}`,
     })
     
-    // Recargar límites después de agregar
+    // Recargar límites y productos después de agregar
     loadSubscriptionData()
+    loadData() // Recargar también los productos para actualizar stock
     resetForm()
   }
 
@@ -608,17 +641,66 @@ export default function PrestamosPage() {
                 {formData.tipo_prestamo === 'venta_credito' && (
                   <>
                     <div className="col-span-2 space-y-2">
-                      <Label htmlFor="descripcion_producto">Descripción del Producto/Servicio *</Label>
-                      <Input
-                        id="descripcion_producto"
-                        value={formData.descripcion_producto}
-                        onChange={(e) =>
-                          setFormData({ ...formData, descripcion_producto: e.target.value })
-                        }
-                        placeholder="Ej: Moto Honda XR 150, Sala 3 piezas..."
+                      <Label htmlFor="producto_id">Seleccionar Producto *</Label>
+                      <Select
+                        value={formData.producto_id}
+                        onValueChange={(value) => {
+                          if (value === 'otro') {
+                            setFormData({
+                              ...formData,
+                              producto_id: '',
+                              descripcion_producto: '',
+                              precio_contado: '',
+                              monto_prestado: ''
+                            })
+                          } else {
+                            const producto = productos.find(p => p.id === value)
+                            if (producto) {
+                              const enganche = parseFloat(formData.enganche) || 0
+                              const montoFinanciar = producto.precio_contado - enganche
+                              setFormData({
+                                ...formData,
+                                producto_id: value,
+                                descripcion_producto: producto.nombre + (producto.descripcion ? ` - ${producto.descripcion}` : ''),
+                                precio_contado: producto.precio_contado.toString(),
+                                monto_prestado: montoFinanciar > 0 ? montoFinanciar.toString() : ''
+                              })
+                            }
+                          }
+                        }}
                         required
-                      />
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar del catálogo..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="otro">➕ Otro (producto no catalogado)</SelectItem>
+                          {productos.filter(p => p.stock > 0).map((producto) => (
+                            <SelectItem key={producto.id} value={producto.id}>
+                              {producto.nombre} - {formatCurrency(producto.precio_contado, config.currency)} (Stock: {producto.stock})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-gray-500">
+                        Selecciona del catálogo o elige "Otro" para productos no catalogados
+                      </p>
                     </div>
+
+                    {formData.producto_id === '' && formData.tipo_prestamo === 'venta_credito' && (
+                      <div className="col-span-2 space-y-2">
+                        <Label htmlFor="descripcion_producto">Descripción del Producto/Servicio *</Label>
+                        <Input
+                          id="descripcion_producto"
+                          value={formData.descripcion_producto}
+                          onChange={(e) =>
+                            setFormData({ ...formData, descripcion_producto: e.target.value })
+                          }
+                          placeholder="Ej: Moto Honda XR 150, Sala 3 piezas..."
+                          required
+                        />
+                      </div>
+                    )}
 
                     <div className="space-y-2">
                       <Label htmlFor="precio_contado">Precio de Contado *</Label>
