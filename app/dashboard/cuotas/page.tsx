@@ -33,10 +33,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { DollarSign, CheckCircle, AlertCircle, History, Undo2 } from 'lucide-react'
+import { DollarSign, CheckCircle, AlertCircle, History, Undo2, Filter } from 'lucide-react'
 import { formatCurrency, formatDate, isDateOverdue } from '@/lib/utils'
-import { format } from 'date-fns'
+import { format, startOfDay, endOfDay, isSameDay, parseISO } from 'date-fns'
 import { useConfigStore } from '@/lib/config-store'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 interface Pago {
   id: string
@@ -64,8 +71,11 @@ interface CuotaExtended {
   }
 }
 
+type FiltroFecha = 'hoy' | 'anteriores' | 'posteriores' | 'personalizado'
+
 export default function CuotasPage() {
   const [cuotas, setCuotas] = useState<CuotaExtended[]>([])
+  const [cuotasFiltradas, setCuotasFiltradas] = useState<CuotaExtended[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedCuota, setSelectedCuota] = useState<CuotaExtended | null>(null)
   const [pagoDialogOpen, setPagoDialogOpen] = useState(false)
@@ -77,6 +87,9 @@ export default function CuotasPage() {
   const [montoPago, setMontoPago] = useState('')
   const [metodoPago, setMetodoPago] = useState('')
   const [notas, setNotas] = useState('')
+  const [filtroFecha, setFiltroFecha] = useState<FiltroFecha>('hoy')
+  const [fechaDesde, setFechaDesde] = useState('')
+  const [fechaHasta, setFechaHasta] = useState('')
   const { toast } = useToast()
   const supabase = createClient()
   const { config } = useConfigStore()
@@ -84,6 +97,10 @@ export default function CuotasPage() {
   useEffect(() => {
     loadCuotas()
   }, [])
+
+  useEffect(() => {
+    aplicarFiltroFecha()
+  }, [cuotas, filtroFecha, fechaDesde, fechaHasta])
 
   const loadCuotas = async () => {
     setLoading(true)
@@ -334,9 +351,66 @@ export default function CuotasPage() {
     setPagoARevertir(null)
   }
 
-  const cuotasPendientes = cuotas.filter(c => c.estado === 'pendiente' || c.estado === 'retrasada')
-  const cuotasPagadas = cuotas.filter(c => c.estado === 'pagada')
-  const cuotasRetrasadas = cuotas.filter(c => c.estado === 'retrasada')
+  const aplicarFiltroFecha = () => {
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+
+    let filtradas = cuotas
+
+    switch (filtroFecha) {
+      case 'hoy':
+        filtradas = cuotas.filter(cuota => {
+          const fechaVencimiento = parseISO(cuota.fecha_vencimiento)
+          fechaVencimiento.setHours(0, 0, 0, 0)
+          return isSameDay(fechaVencimiento, hoy)
+        })
+        break
+      case 'anteriores':
+        filtradas = cuotas.filter(cuota => {
+          const fechaVencimiento = parseISO(cuota.fecha_vencimiento)
+          fechaVencimiento.setHours(0, 0, 0, 0)
+          return fechaVencimiento < hoy
+        })
+        break
+      case 'posteriores':
+        filtradas = cuotas.filter(cuota => {
+          const fechaVencimiento = parseISO(cuota.fecha_vencimiento)
+          fechaVencimiento.setHours(0, 0, 0, 0)
+          return fechaVencimiento > hoy
+        })
+        break
+      case 'personalizado':
+        if (fechaDesde && fechaHasta) {
+          const desde = parseISO(fechaDesde)
+          const hasta = parseISO(fechaHasta)
+          hasta.setHours(23, 59, 59, 999)
+          filtradas = cuotas.filter(cuota => {
+            const fechaVencimiento = parseISO(cuota.fecha_vencimiento)
+            return fechaVencimiento >= desde && fechaVencimiento <= hasta
+          })
+        } else if (fechaDesde) {
+          const desde = parseISO(fechaDesde)
+          filtradas = cuotas.filter(cuota => {
+            const fechaVencimiento = parseISO(cuota.fecha_vencimiento)
+            return fechaVencimiento >= desde
+          })
+        } else if (fechaHasta) {
+          const hasta = parseISO(fechaHasta)
+          hasta.setHours(23, 59, 59, 999)
+          filtradas = cuotas.filter(cuota => {
+            const fechaVencimiento = parseISO(cuota.fecha_vencimiento)
+            return fechaVencimiento <= hasta
+          })
+        }
+        break
+    }
+
+    setCuotasFiltradas(filtradas)
+  }
+
+  const cuotasPendientes = cuotasFiltradas.filter(c => c.estado === 'pendiente' || c.estado === 'retrasada')
+  const cuotasPagadas = cuotasFiltradas.filter(c => c.estado === 'pagada')
+  const cuotasRetrasadas = cuotasFiltradas.filter(c => c.estado === 'retrasada')
 
   return (
     <div className="space-y-6">
@@ -400,7 +474,62 @@ export default function CuotasPage() {
       {/* Cuotas Pendientes y Retrasadas */}
       <Card>
         <CardHeader>
-          <CardTitle>Cuotas Por Cobrar</CardTitle>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Cuotas Por Cobrar</CardTitle>
+                {filtroFecha !== 'hoy' && (
+                  <p className="text-sm text-gray-500 mt-1">
+                    Mostrando {cuotasPendientes.length} de {cuotas.filter(c => c.estado === 'pendiente' || c.estado === 'retrasada').length} cuotas
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-4">
+                {/* Filtro de Fecha */}
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-gray-500" />
+                  <Select value={filtroFecha} onValueChange={(value: FiltroFecha) => {
+                    setFiltroFecha(value)
+                    if (value !== 'personalizado') {
+                      setFechaDesde('')
+                      setFechaHasta('')
+                    }
+                  }}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Filtrar por fecha" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="hoy">Hoy</SelectItem>
+                      <SelectItem value="anteriores">Días anteriores</SelectItem>
+                      <SelectItem value="posteriores">Días posteriores</SelectItem>
+                      <SelectItem value="personalizado">Personalizado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {/* Rango de fechas personalizado */}
+                {filtroFecha === 'personalizado' && (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="date"
+                      value={fechaDesde}
+                      onChange={(e) => setFechaDesde(e.target.value)}
+                      placeholder="Desde"
+                      className="w-[150px]"
+                    />
+                    <span className="text-gray-500">-</span>
+                    <Input
+                      type="date"
+                      value={fechaHasta}
+                      onChange={(e) => setFechaHasta(e.target.value)}
+                      placeholder="Hasta"
+                      className="w-[150px]"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
