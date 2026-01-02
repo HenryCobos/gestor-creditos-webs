@@ -29,16 +29,32 @@ export default function ConfiguracionPage() {
   })
 
   const currencies = [
+    // Monedas Internacionales
     { code: 'USD', name: 'Dólar Estadounidense', symbol: '$' },
     { code: 'EUR', name: 'Euro', symbol: '€' },
     { code: 'GBP', name: 'Libra Esterlina', symbol: '£' },
+    
+    // América del Norte
     { code: 'MXN', name: 'Peso Mexicano', symbol: '$' },
+    
+    // América Central
+    { code: 'GTQ', name: 'Quetzal Guatemalteco', symbol: 'Q' },
+    { code: 'CRC', name: 'Colón Costarricense', symbol: '₡' },
+    { code: 'PAB', name: 'Balboa Panameño', symbol: 'B/.' },
+    { code: 'NIO', name: 'Córdoba Nicaragüense', symbol: 'C$' },
+    { code: 'HNL', name: 'Lempira Hondureño', symbol: 'L' },
+    { code: 'DOP', name: 'Peso Dominicano', symbol: '$' },
+    
+    // América del Sur
     { code: 'COP', name: 'Peso Colombiano', symbol: '$' },
     { code: 'ARS', name: 'Peso Argentino', symbol: '$' },
     { code: 'CLP', name: 'Peso Chileno', symbol: '$' },
     { code: 'PEN', name: 'Sol Peruano', symbol: 'S/' },
     { code: 'BRL', name: 'Real Brasileño', symbol: 'R$' },
     { code: 'UYU', name: 'Peso Uruguayo', symbol: '$' },
+    { code: 'PYG', name: 'Guaraní Paraguayo', symbol: '₲' },
+    { code: 'BOB', name: 'Boliviano', symbol: 'Bs.' },
+    { code: 'VES', name: 'Bolívar Venezolano', symbol: 'Bs.S.' },
   ]
 
   const handleSave = () => {
