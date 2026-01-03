@@ -66,7 +66,20 @@ export async function POST(req: Request) {
     console.log('📦 Datos completos del webhook:', JSON.stringify(body, null, 2))
     console.log('👤 Email del comprador:', data?.buyer?.email)
     console.log('🔑 sck (Source Key):', data?.purchase?.sck)
-    console.log('🎫 Código de oferta:', data?.purchase?.offer?.code || data?.purchase?.pricing?.offer?.code)
+    
+    // Logging mejorado para cupones
+    const offerCode1 = data?.purchase?.offer?.code
+    const offerCode2 = data?.purchase?.pricing?.offer?.code
+    const hasCoupon = !!(data?.purchase?.pricing?.discount || data?.purchase?.coupon || data?.purchase?.discount)
+    const originalPrice = data?.purchase?.original_offer_price?.value
+    const finalPrice = data?.purchase?.price?.value
+    
+    console.log('🎫 Código de oferta (offer.code):', offerCode1)
+    console.log('🎫 Código de oferta (pricing.offer.code):', offerCode2)
+    console.log('💰 Tiene cupón:', hasCoupon)
+    console.log('💰 Precio original:', originalPrice)
+    console.log('💰 Precio final:', finalPrice)
+    console.log('💰 Descuento aplicado:', originalPrice && finalPrice ? (originalPrice - finalPrice) : 'N/A')
 
     // Inicializar Supabase Admin (necesario para escribir en profiles de otros usuarios)
     const supabase = createClient(
@@ -129,12 +142,71 @@ export async function POST(req: Request) {
     // 3. Manejar el Evento
     if (event === EVENTS.APPROVED || event === EVENTS.SUBSCRIPTION_RENEWED || event === EVENTS.PAYMENT_APPROVED || event === EVENTS.SUBSCRIPTION_PAYMENT) {
       // Maneja tanto la primera compra como las renovaciones automáticas
-      const offerCode = data.purchase?.offer?.code || data.purchase?.pricing?.offer?.code
-      const planInfo = OFFER_CODE_TO_PLAN[offerCode as keyof typeof OFFER_CODE_TO_PLAN]
+      let offerCode = data.purchase?.offer?.code || data.purchase?.pricing?.offer?.code
+      
+      // Función para extraer código base (remover sufijos de cupón si existen)
+      const extractBaseOfferCode = (code: string | undefined): string | undefined => {
+        if (!code) return undefined
+        // Si el código tiene formato "ik0qihyk_COUPON_50" o similar, extraer solo la parte base
+        // También manejar códigos con guiones o otros separadores
+        const baseCode = code.split('_')[0].split('-')[0].split(' ')[0]
+        return baseCode || code
+      }
+      
+      // Intentar primero con el código completo
+      let planInfo = OFFER_CODE_TO_PLAN[offerCode as keyof typeof OFFER_CODE_TO_PLAN]
+      
+      // Si no se encuentra, intentar con el código base (sin sufijos de cupón)
+      if (!planInfo && offerCode) {
+        const baseCode = extractBaseOfferCode(offerCode)
+        if (baseCode && baseCode !== offerCode) {
+          console.log(`🔄 Intentando con código base: ${baseCode} (original: ${offerCode})`)
+          planInfo = OFFER_CODE_TO_PLAN[baseCode as keyof typeof OFFER_CODE_TO_PLAN]
+        }
+      }
+      
+      // Si aún no se encuentra, intentar identificar por monto pagado (fallback)
+      if (!planInfo) {
+        const amount = data.purchase?.price?.value || data.purchase?.original_offer_price?.value || 0
+        console.log(`💰 Fallback: Intentando identificar plan por monto: $${amount}`)
+        
+        // Mapeo por rangos de precio (considerando descuentos)
+        if (amount >= 9 && amount <= 10) {
+          // $9.50 = Plan Profesional con 50% descuento
+          planInfo = { slug: 'pro', period: 'monthly' }
+          console.log('✅ Plan identificado por monto: Profesional (con cupón 50%)')
+        } else if (amount >= 19 && amount <= 20) {
+          // $19 = Plan Profesional normal
+          planInfo = { slug: 'pro', period: 'monthly' }
+          console.log('✅ Plan identificado por monto: Profesional')
+        } else if (amount >= 24 && amount <= 25) {
+          // $24.50 = Plan Business con 50% descuento
+          planInfo = { slug: 'business', period: 'monthly' }
+          console.log('✅ Plan identificado por monto: Business (con cupón 50%)')
+        } else if (amount >= 49 && amount <= 50) {
+          // $49 = Plan Business normal
+          planInfo = { slug: 'business', period: 'monthly' }
+          console.log('✅ Plan identificado por monto: Business')
+        } else if (amount >= 89 && amount <= 90) {
+          // $89.50 = Plan Enterprise con 50% descuento
+          planInfo = { slug: 'enterprise', period: 'monthly' }
+          console.log('✅ Plan identificado por monto: Enterprise (con cupón 50%)')
+        } else if (amount >= 179 && amount <= 180) {
+          // $179 = Plan Enterprise normal
+          planInfo = { slug: 'enterprise', period: 'monthly' }
+          console.log('✅ Plan identificado por monto: Enterprise')
+        }
+      }
 
       if (!planInfo) {
-        console.warn(`⚠️ Código de oferta desconocido: ${offerCode}`)
-        return NextResponse.json({ warning: 'Unknown offer code' })
+        console.error(`❌ No se pudo identificar el plan. Código de oferta: ${offerCode}, Monto: ${data.purchase?.price?.value || 'N/A'}`)
+        console.error('📦 Datos completos de purchase:', JSON.stringify(data.purchase, null, 2))
+        return NextResponse.json({ 
+          error: 'Unknown offer code and amount', 
+          offerCode,
+          amount: data.purchase?.price?.value,
+          details: 'Could not identify plan from offer code or amount'
+        }, { status: 400 })
       }
 
       // Buscar el ID del plan en la base de datos
