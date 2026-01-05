@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { ThemeProvider } from "@/components/theme-provider";
 import GoogleAnalytics from "@/app/components/GoogleAnalytics";
 import GoogleAdsConversion from "@/app/components/GoogleAdsConversion";
 import { GoogleTagManager, GoogleTagManagerNoScript } from "@/components/GoogleTagManager";
@@ -89,7 +90,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="es">
+    <html lang="es" suppressHydrationWarning>
       <head>
         <meta name="google-site-verification" content="7uSR0O1iKcIUd_3DOaAOmBXnu-EHVj0KFw_1hMj_KDc" />
         <link rel="canonical" href="https://gestor-creditos-webs.vercel.app" />
@@ -101,20 +102,27 @@ export default function RootLayout({
         <link rel="manifest" href="/site.webmanifest" />
       </head>
       <body className={inter.className}>
-        <GoogleTagManagerNoScript gtmId={GTM_ID} />
-        <GoogleTagManager gtmId={GTM_ID} />
-        <Suspense fallback={null}>
-          <RouteChangeListener />
-        </Suspense>
-        <GoogleAnalytics />
-        <GoogleAdsConversion />
-        {children}
-        <Toaster />
-        <WhatsAppButton 
-          phoneNumber={whatsappConfig.phoneNumber} 
-          message={whatsappConfig.defaultMessage}
-          position={whatsappConfig.position}
-        />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <GoogleTagManagerNoScript gtmId={GTM_ID} />
+          <GoogleTagManager gtmId={GTM_ID} />
+          <Suspense fallback={null}>
+            <RouteChangeListener />
+          </Suspense>
+          <GoogleAnalytics />
+          <GoogleAdsConversion />
+          {children}
+          <Toaster />
+          <WhatsAppButton 
+            phoneNumber={whatsappConfig.phoneNumber} 
+            message={whatsappConfig.defaultMessage}
+            position={whatsappConfig.position}
+          />
+        </ThemeProvider>
       </body>
     </html>
   );

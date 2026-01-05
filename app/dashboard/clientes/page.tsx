@@ -50,6 +50,7 @@ export default function ClientesPage() {
     dni: '',
     telefono: '',
     direccion: '',
+    cuenta_bancaria: '',
   })
 
   useEffect(() => {
@@ -169,6 +170,7 @@ export default function ClientesPage() {
       dni: cliente.dni,
       telefono: cliente.telefono || '',
       direccion: cliente.direccion || '',
+      cuenta_bancaria: cliente.cuenta_bancaria || '',
     })
     setOpen(true)
   }
@@ -202,6 +204,7 @@ export default function ClientesPage() {
       dni: '',
       telefono: '',
       direccion: '',
+      cuenta_bancaria: '',
     })
     setEditingCliente(null)
     setOpen(false)
@@ -217,7 +220,8 @@ export default function ClientesPage() {
         cliente.nombre.toLowerCase().includes(searchLower) ||
         cliente.dni.toLowerCase().includes(searchLower) ||
         cliente.telefono?.toLowerCase().includes(searchLower) ||
-        cliente.direccion?.toLowerCase().includes(searchLower)
+        cliente.direccion?.toLowerCase().includes(searchLower) ||
+        cliente.cuenta_bancaria?.toLowerCase().includes(searchLower)
     )
   }, [clientes, searchTerm])
 
@@ -250,9 +254,11 @@ export default function ClientesPage() {
                   : 'Ingresa los datos del nuevo cliente'}
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="nombre">Nombre Completo *</Label>
+                <Label htmlFor="nombre" className="text-sm font-medium text-gray-700">
+                  Nombre Completo *
+                </Label>
                 <Input
                   id="nombre"
                   value={formData.nombre}
@@ -260,10 +266,14 @@ export default function ClientesPage() {
                     setFormData({ ...formData, nombre: e.target.value })
                   }
                   required
+                  className="h-11 border-gray-300 focus:border-blue-500 focus:ring-blue-500 transition-colors duration-200"
+                  placeholder="Ej: Juan Pérez"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="dni">DNI *</Label>
+                <Label htmlFor="dni" className="text-sm font-medium text-gray-700">
+                  DNI *
+                </Label>
                 <Input
                   id="dni"
                   value={formData.dni}
@@ -271,33 +281,66 @@ export default function ClientesPage() {
                     setFormData({ ...formData, dni: e.target.value })
                   }
                   required
+                  className="h-11 border-gray-300 focus:border-blue-500 focus:ring-blue-500 transition-colors duration-200"
+                  placeholder="Ej: 12345678"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="telefono">Teléfono</Label>
+                <Label htmlFor="telefono" className="text-sm font-medium text-gray-700">
+                  Teléfono
+                </Label>
                 <Input
                   id="telefono"
+                  type="tel"
                   value={formData.telefono}
                   onChange={(e) =>
                     setFormData({ ...formData, telefono: e.target.value })
                   }
+                  className="h-11 border-gray-300 focus:border-blue-500 focus:ring-blue-500 transition-colors duration-200"
+                  placeholder="Ej: +1234567890"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="direccion">Dirección</Label>
+                <Label htmlFor="direccion" className="text-sm font-medium text-gray-700">
+                  Dirección
+                </Label>
                 <Input
                   id="direccion"
                   value={formData.direccion}
                   onChange={(e) =>
                     setFormData({ ...formData, direccion: e.target.value })
                   }
+                  className="h-11 border-gray-300 focus:border-blue-500 focus:ring-blue-500 transition-colors duration-200"
+                  placeholder="Ej: Calle Principal 123"
                 />
               </div>
-              <div className="flex justify-end space-x-2">
-                <Button type="button" variant="outline" onClick={resetForm}>
+              <div className="space-y-2">
+                <Label htmlFor="cuenta_bancaria" className="text-sm font-medium text-gray-700">
+                  Número de Cuenta Bancaria
+                </Label>
+                <Input
+                  id="cuenta_bancaria"
+                  value={formData.cuenta_bancaria}
+                  onChange={(e) =>
+                    setFormData({ ...formData, cuenta_bancaria: e.target.value })
+                  }
+                  className="h-11 border-gray-300 focus:border-blue-500 focus:ring-blue-500 transition-colors duration-200"
+                  placeholder="Ej: 1234567890123456"
+                />
+              </div>
+              <div className="flex justify-end space-x-3 pt-2">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={resetForm}
+                  className="px-6 border-gray-300 hover:bg-gray-50"
+                >
                   Cancelar
                 </Button>
-                <Button type="submit">
+                <Button 
+                  type="submit"
+                  className="px-6 bg-blue-600 hover:bg-blue-700"
+                >
                   {editingCliente ? 'Actualizar' : 'Crear'}
                 </Button>
               </div>

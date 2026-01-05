@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { CompanyHeader } from '@/components/company-header'
 import { MobileMenu } from '@/components/mobile-menu'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -190,7 +191,11 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
             </Link>
           </nav>
 
-          <div className="p-4 border-t border-gray-200">
+          <div className="p-4 border-t border-gray-200 space-y-2">
+            <div className="flex items-center justify-between px-2 py-1">
+              <span className="text-sm text-gray-600">Tema</span>
+              <ThemeToggle />
+            </div>
             <form action={handleSignOut}>
               <Button variant="outline" className="w-full justify-start" type="submit">
                 <LogOut className="mr-2 h-4 w-4" />

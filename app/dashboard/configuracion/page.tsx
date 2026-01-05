@@ -1,13 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { useConfigStore } from '@/lib/config-store'
-import { Palette, Building2, Image as ImageIcon, RotateCcw, DollarSign } from 'lucide-react'
+import { ThemeToggle } from '@/components/theme-toggle'
+import { createClient } from '@/lib/supabase/client'
+import { uploadLogo, deleteLogo, validateLogoFile } from '@/lib/utils/logo-upload'
+import { Palette, Building2, Image as ImageIcon, RotateCcw, DollarSign, Moon, Sun, Upload, X, Loader2 } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -19,6 +22,8 @@ import {
 export default function ConfiguracionPage() {
   const { config, updateConfig, resetConfig } = useConfigStore()
   const { toast } = useToast()
+  const supabase = createClient()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   
   const [formData, setFormData] = useState({
     companyName: config.companyName,
@@ -27,6 +32,9 @@ export default function ConfiguracionPage() {
     currency: config.currency,
     currencySymbol: config.currencySymbol,
   })
+  
+  const [logoPreview, setLogoPreview] = useState<string | null>(config.companyLogo)
+  const [logoUploading, setLogoUploading] = useState(false)
 
   const currencies = [
     // Monedas Internacionales
@@ -58,7 +66,10 @@ export default function ConfiguracionPage() {
   ]
 
   const handleSave = () => {
-    updateConfig(formData)
+    updateConfig({
+      ...formData,
+      companyLogo: logoPreview || config.companyLogo,
+    })
     toast({
       title: 'Configuración Guardada',
       description: 'Los cambios se aplicarán en toda la aplicación',
@@ -75,9 +86,87 @@ export default function ConfiguracionPage() {
         currency: 'USD',
         currencySymbol: '$',
       })
+      setLogoPreview(null)
       toast({
         title: 'Configuración Restaurada',
         description: 'Se restauró la configuración por defecto',
+      })
+    }
+  }
+
+  const handleLogoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validar archivo
+    const validation = validateLogoFile(file)
+    if (!validation.valid) {
+      toast({
+        title: 'Error',
+        description: validation.error,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Crear preview
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setLogoPreview(reader.result as string)
+    }
+    reader.readAsDataURL(file)
+
+    // Subir logo
+    setLogoUploading(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (!user) {
+      toast({
+        title: 'Error',
+        description: 'Debes estar autenticado para subir el logo',
+        variant: 'destructive',
+      })
+      setLogoUploading(false)
+      return
+    }
+
+    const result = await uploadLogo(file, user.id)
+
+    if (result.success && result.url) {
+      updateConfig({ companyLogo: result.url })
+      toast({
+        title: 'Logo Subido',
+        description: 'El logo se ha subido correctamente',
+      })
+    } else {
+      toast({
+        title: 'Error',
+        description: result.error || 'No se pudo subir el logo',
+        variant: 'destructive',
+      })
+      setLogoPreview(config.companyLogo)
+    }
+
+    setLogoUploading(false)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleLogoRemove = async () => {
+    if (!config.companyLogo) return
+
+    if (confirm('¿Estás seguro de eliminar el logo?')) {
+      // Intentar eliminar del storage
+      await deleteLogo(config.companyLogo)
+      
+      // Actualizar configuración
+      updateConfig({ companyLogo: null })
+      setLogoPreview(null)
+      
+      toast({
+        title: 'Logo Eliminado',
+        description: 'El logo se ha eliminado correctamente',
       })
     }
   }
@@ -262,6 +351,48 @@ export default function ConfiguracionPage() {
         </CardContent>
       </Card>
 
+      {/* Configuración de Tema */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Sun className="h-5 w-5" />
+            <CardTitle>Tema de la Aplicación</CardTitle>
+          </div>
+          <CardDescription>
+            Cambia entre tema claro, oscuro o sigue la preferencia de tu sistema
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+            <div className="space-y-1">
+              <Label className="text-base font-medium">Modo de Tema</Label>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Elige cómo quieres que se vea la aplicación
+              </p>
+            </div>
+            <ThemeToggle />
+          </div>
+          
+          <div className="grid grid-cols-3 gap-4 mt-4">
+            <div className="p-4 border rounded-lg text-center space-y-2">
+              <Sun className="h-8 w-8 mx-auto text-yellow-500" />
+              <p className="font-medium">Claro</p>
+              <p className="text-xs text-gray-500">Fondo blanco</p>
+            </div>
+            <div className="p-4 border rounded-lg text-center space-y-2 bg-gray-900 text-white">
+              <Moon className="h-8 w-8 mx-auto text-blue-400" />
+              <p className="font-medium">Oscuro</p>
+              <p className="text-xs text-gray-400">Fondo oscuro</p>
+            </div>
+            <div className="p-4 border rounded-lg text-center space-y-2">
+              <span className="text-2xl">💻</span>
+              <p className="font-medium">Sistema</p>
+              <p className="text-xs text-gray-500">Sigue tu sistema</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Configuración de Moneda */}
       <Card>
         <CardHeader>
@@ -328,7 +459,7 @@ export default function ConfiguracionPage() {
         </CardContent>
       </Card>
 
-      {/* Logo (Próximamente) */}
+      {/* Logo de la Empresa */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -336,15 +467,91 @@ export default function ConfiguracionPage() {
             <CardTitle>Logo de la Empresa</CardTitle>
           </div>
           <CardDescription>
-            Sube el logo de tu empresa (Próximamente)
+            Sube el logo de tu empresa para personalizar el sistema
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-            <ImageIcon className="mx-auto h-12 w-12 text-gray-400 mb-2" />
-            <p className="text-sm text-gray-600">
-              La función de subir logo estará disponible próximamente
+        <CardContent className="space-y-4">
+          {/* Vista Previa del Logo */}
+          {logoPreview && (
+            <div className="space-y-3">
+              <Label>Vista Previa</Label>
+              <div className="relative inline-block p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border-2 border-gray-200 dark:border-gray-700">
+                <img
+                  src={logoPreview}
+                  alt="Logo de la empresa"
+                  className="max-h-32 max-w-full object-contain"
+                />
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="icon"
+                  className="absolute top-2 right-2 h-8 w-8"
+                  onClick={handleLogoRemove}
+                  disabled={logoUploading}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Área de Subida */}
+          <div className="space-y-2">
+            <Label htmlFor="logo-upload">Subir Logo</Label>
+            <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6">
+              <input
+                ref={fileInputRef}
+                id="logo-upload"
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp"
+                onChange={handleLogoSelect}
+                className="hidden"
+                disabled={logoUploading}
+              />
+              <div className="text-center space-y-3">
+                {logoUploading ? (
+                  <>
+                    <Loader2 className="mx-auto h-12 w-12 text-gray-400 animate-spin" />
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Subiendo logo...
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon className="mx-auto h-12 w-12 text-gray-400" />
+                    <div className="space-y-2">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Haz clic para seleccionar un archivo o arrastra y suelta
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-500">
+                        PNG, JPG, SVG o WebP (máx. 2MB)
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="mt-2"
+                    >
+                      <Upload className="mr-2 h-4 w-4" />
+                      Seleccionar Archivo
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Información */}
+          <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+            <p className="text-sm text-blue-800 dark:text-blue-200">
+              <strong>Recomendaciones:</strong>
             </p>
+            <ul className="text-xs text-blue-700 dark:text-blue-300 mt-2 space-y-1 list-disc list-inside">
+              <li>Usa un logo con fondo transparente (PNG) para mejor resultado</li>
+              <li>Dimensiones recomendadas: 200x200px o mayor</li>
+              <li>El logo aparecerá en el header del dashboard</li>
+            </ul>
           </div>
         </CardContent>
       </Card>

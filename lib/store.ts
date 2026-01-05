@@ -9,6 +9,7 @@ export interface Cliente {
   dni: string
   telefono: string | null
   direccion: string | null
+  cuenta_bancaria: string | null
   created_at: string
   updated_at: string
 }

@@ -414,6 +414,12 @@ export function ClienteDetailDialog({
                 <p className="text-sm text-gray-600">Dirección</p>
                 <p className="font-semibold">{cliente.direccion || '-'}</p>
               </div>
+              {cliente.cuenta_bancaria && (
+                <div className="col-span-2">
+                  <p className="text-sm text-gray-600">Número de Cuenta Bancaria</p>
+                  <p className="font-semibold">{cliente.cuenta_bancaria}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
