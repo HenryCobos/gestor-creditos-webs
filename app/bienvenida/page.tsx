@@ -67,30 +67,6 @@ export default function BienvenidaPage() {
         </CardHeader>
 
         <CardContent className="space-y-6">
-          {/* PROMOCIÓN ESPECIAL DEL 50% OFF */}
-          <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl p-6 text-white shadow-lg">
-            <div className="text-center space-y-3">
-              <div className="inline-block bg-yellow-400 text-purple-900 font-bold px-4 py-2 rounded-full text-lg animate-pulse">
-                🎉 ¡OFERTA ESPECIAL DE DICIEMBRE! 🎉
-              </div>
-              <h3 className="text-2xl font-bold">
-                50% DE DESCUENTO por 6 meses
-              </h3>
-              <p className="text-purple-100">
-                en TODOS nuestros planes de pago
-              </p>
-              <div className="bg-white/20 backdrop-blur rounded-lg p-4 inline-block">
-                <p className="text-sm mb-2">Usa el cupón:</p>
-                <div className="bg-white text-purple-900 px-6 py-3 rounded-lg font-mono text-xl font-bold tracking-wider">
-                  50 OFF
-                </div>
-              </div>
-              <p className="text-sm text-purple-100">
-                💡 Válido solo durante diciembre 2025
-              </p>
-            </div>
-          </div>
-
           {/* Guarda esta URL - MUY IMPORTANTE */}
           <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-5">
             <div className="flex items-start gap-3">
@@ -183,9 +159,6 @@ export default function BienvenidaPage() {
             </Button>
             <p className="text-center text-sm text-gray-600">
               Tu cuenta está lista. Puedes empezar a usar la aplicación de inmediato 🚀
-            </p>
-            <p className="text-center text-xs text-purple-600 font-medium">
-              💜 ¿Quieres más clientes y préstamos? Aprovecha el 50% OFF con el cupón "50 OFF"
             </p>
           </div>
         </CardContent>
