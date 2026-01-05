@@ -184,7 +184,7 @@ export default function ConfiguracionPage() {
   ]
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-4xl pb-24 sm:pb-6">
       <div>
         <h1 className="text-3xl font-bold text-foreground">Configuración</h1>
         <p className="text-muted-foreground mt-1">Personaliza la apariencia de tu sistema</p>
@@ -560,12 +560,31 @@ export default function ConfiguracionPage() {
       </Card>
 
       {/* Botones de Acción */}
-      <div className="flex justify-between">
-        <Button variant="outline" onClick={handleReset}>
+      <div className="flex flex-col sm:flex-row gap-4 sm:justify-between">
+        <Button 
+          variant="outline" 
+          onClick={handleReset}
+          className="w-full sm:w-auto"
+        >
           <RotateCcw className="mr-2 h-4 w-4" />
           Restaurar Valores por Defecto
         </Button>
-        <Button onClick={handleSave} style={{ backgroundColor: formData.primaryColor }}>
+        <Button 
+          onClick={handleSave} 
+          style={{ backgroundColor: formData.primaryColor }}
+          className="w-full sm:w-auto hidden sm:inline-flex"
+        >
+          Guardar Configuración
+        </Button>
+      </div>
+      
+      {/* Botón sticky en móvil - siempre visible */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/95 backdrop-blur-sm border-t border-border sm:hidden z-50 shadow-lg">
+        <Button 
+          onClick={handleSave} 
+          style={{ backgroundColor: formData.primaryColor }}
+          className="w-full"
+        >
           Guardar Configuración
         </Button>
       </div>
