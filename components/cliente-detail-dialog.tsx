@@ -319,7 +319,10 @@ export function ClienteDetailDialog({
           direccion: cliente.direccion || undefined,
         },
         prestamo,
-        config.companyName
+        config.companyName,
+        undefined,
+        config.currency,
+        config.currencySymbol
       )
 
       toast({

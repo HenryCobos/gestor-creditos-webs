@@ -16,7 +16,6 @@ import {
 } from 'lucide-react'
 import { CompanyHeader } from '@/components/company-header'
 import { MobileMenu } from '@/components/mobile-menu'
-import { ThemeToggle } from '@/components/theme-toggle'
 
 async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -109,7 +108,7 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen bg-background overflow-hidden">
       {/* Mobile Header */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-card border-b border-border px-4 py-3">
         <div className="flex items-center justify-between">
@@ -123,9 +122,9 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Sidebar - Desktop */}
-      <aside className="w-64 bg-card border-r border-border hidden md:block">
+      <aside className="w-64 bg-card border-r border-border hidden md:block overflow-hidden flex-shrink-0">
         <div className="h-full flex flex-col">
-          <div className="p-6 border-b border-border">
+          <div className="p-6 border-b border-border flex-shrink-0">
             <CompanyHeader />
             <p className="text-sm text-muted-foreground mt-2">
               {profile?.full_name || user.email}
@@ -140,7 +139,7 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
             )}
           </div>
 
-          <nav className="flex-1 p-4 space-y-1">
+          <nav className="flex-1 p-4 space-y-1 overflow-y-auto overflow-x-hidden">
             <Link href="/dashboard">
               <Button variant="ghost" className="w-full justify-start">
                 <Home className="mr-2 h-4 w-4" />
@@ -191,11 +190,7 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
             </Link>
           </nav>
 
-          <div className="p-4 border-t border-border space-y-2">
-            <div className="flex items-center justify-between px-2 py-1">
-              <span className="text-sm text-muted-foreground">Tema</span>
-              <ThemeToggle />
-            </div>
+          <div className="p-4 border-t border-border flex-shrink-0">
             <form action={handleSignOut}>
               <Button variant="outline" className="w-full justify-start" type="submit">
                 <LogOut className="mr-2 h-4 w-4" />
@@ -207,7 +202,7 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden min-w-0">
         <div className="p-4 md:p-8 pt-20 md:pt-8">
           {children}
         </div>

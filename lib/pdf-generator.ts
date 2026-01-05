@@ -2,7 +2,7 @@
 
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 
 interface ClienteInfo {
   nombre: string
@@ -51,9 +51,31 @@ export function generarContratoPrestamo(
   cliente: ClienteInfo,
   prestamo: PrestamoInfo,
   companyName: string = 'Gestor de Créditos',
-  garantias?: GarantiaInfo[]
+  garantias?: GarantiaInfo[],
+  currency: string = 'USD',
+  currencySymbol: string = '$'
 ) {
   const doc = new jsPDF()
+  
+  // Función helper para formatear fecha sin problemas de zona horaria
+  const formatDateSafe = (dateString: string) => {
+    if (!dateString) return ''
+    // Si la fecha viene en formato ISO o tiene hora, usar parseISO
+    // Si viene solo como fecha (YYYY-MM-DD), crear Date directamente
+    try {
+      if (dateString.includes('T') || dateString.includes(' ')) {
+        return format(parseISO(dateString), 'dd/MM/yyyy')
+      } else {
+        // Formato YYYY-MM-DD, crear Date en UTC para evitar cambios de día
+        const [year, month, day] = dateString.split('-').map(Number)
+        const date = new Date(Date.UTC(year, month - 1, day))
+        return format(date, 'dd/MM/yyyy')
+      }
+    } catch {
+      // Fallback al método anterior si hay error
+      return format(new Date(dateString), 'dd/MM/yyyy')
+    }
+  }
   
   // Encabezado
   doc.setFontSize(20)
@@ -118,7 +140,7 @@ export function generarContratoPrestamo(
     mensual: 'Mensual'
   }
   
-  doc.text(`Monto Prestado: $${prestamo.monto_prestado.toFixed(2)}`, 20, yPos)
+  doc.text(`Monto Prestado: ${currencySymbol}${prestamo.monto_prestado.toFixed(2)}`, 20, yPos)
   yPos += 7
   
   const frecuenciaNombre = frecuencias[prestamo.frecuencia_pago] || 'Mensual'
@@ -155,33 +177,33 @@ export function generarContratoPrestamo(
   }
   doc.setFontSize(12)
   yPos += 12
-  
+
   // Mostrar detalles según tipo de préstamo
   if (tipoPrestamo === 'solo_intereses') {
     const montoInteresCuota = prestamo.monto_prestado * (prestamo.interes_porcentaje / 100)
     doc.text(`Tipo: Solo Intereses (Capital al final)`, 20, yPos)
     yPos += 7
-    doc.text(`Monto por Cuota (Solo Interés): $${montoInteresCuota.toFixed(2)}`, 20, yPos)
+    doc.text(`Monto por Cuota (Solo Interés): ${currencySymbol}${montoInteresCuota.toFixed(2)}`, 20, yPos)
     yPos += 7
-    doc.text(`Capital a Pagar al Final: $${prestamo.monto_prestado.toFixed(2)}`, 20, yPos)
+    doc.text(`Capital a Pagar al Final: ${currencySymbol}${prestamo.monto_prestado.toFixed(2)}`, 20, yPos)
     yPos += 7
-    doc.text(`Interés Total: $${(montoInteresCuota * prestamo.numero_cuotas).toFixed(2)}`, 20, yPos)
+    doc.text(`Interés Total: ${currencySymbol}${(montoInteresCuota * prestamo.numero_cuotas).toFixed(2)}`, 20, yPos)
     yPos += 7
     if (prestamo.fecha_fin) {
-      doc.text(`Fecha de Vencimiento: ${format(new Date(prestamo.fecha_fin), 'dd/MM/yyyy')}`, 20, yPos)
+      doc.text(`Fecha de Vencimiento: ${formatDateSafe(prestamo.fecha_fin)}`, 20, yPos)
       yPos += 7
     }
   } else if (tipoPrestamo === 'empeño') {
     doc.text(`Tipo: Empeño`, 20, yPos)
     yPos += 7
-    doc.text(`Monto Total a Pagar: $${prestamo.monto_total.toFixed(2)}`, 20, yPos)
+    doc.text(`Monto Total a Pagar: ${currencySymbol}${prestamo.monto_total.toFixed(2)}`, 20, yPos)
     yPos += 7
-    doc.text(`Monto por Cuota: $${(prestamo.monto_total / prestamo.numero_cuotas).toFixed(2)}`, 20, yPos)
+    doc.text(`Monto por Cuota: ${currencySymbol}${(prestamo.monto_total / prestamo.numero_cuotas).toFixed(2)}`, 20, yPos)
     yPos += 7
   } else {
-    doc.text(`Monto Total a Pagar: $${prestamo.monto_total.toFixed(2)}`, 20, yPos)
+    doc.text(`Monto Total a Pagar: ${currencySymbol}${prestamo.monto_total.toFixed(2)}`, 20, yPos)
     yPos += 7
-    doc.text(`Monto por Cuota: $${(prestamo.monto_total / prestamo.numero_cuotas).toFixed(2)}`, 20, yPos)
+    doc.text(`Monto por Cuota: ${currencySymbol}${(prestamo.monto_total / prestamo.numero_cuotas).toFixed(2)}`, 20, yPos)
     yPos += 7
   }
   
@@ -189,7 +211,7 @@ export function generarContratoPrestamo(
   yPos += 7
   doc.text(`Frecuencia de Pago: ${frecuenciaNombre}`, 20, yPos)
   yPos += 7
-  doc.text(`Fecha de Inicio: ${format(new Date(prestamo.fecha_inicio), 'dd/MM/yyyy')}`, 20, yPos)
+  doc.text(`Fecha de Inicio: ${formatDateSafe(prestamo.fecha_inicio)}`, 20, yPos)
   yPos += 12
   
   // Sección de Garantías (solo para empeños)
@@ -207,11 +229,11 @@ export function generarContratoPrestamo(
         yPos += 7
       }
       if (garantia.valor_estimado) {
-        doc.text(`   Valor Estimado: $${garantia.valor_estimado.toFixed(2)}`, 25, yPos)
+        doc.text(`   Valor Estimado: ${currencySymbol}${garantia.valor_estimado.toFixed(2)}`, 25, yPos)
         yPos += 7
       }
       if (garantia.fecha_vencimiento) {
-        doc.text(`   Fecha de Vencimiento: ${format(new Date(garantia.fecha_vencimiento), 'dd/MM/yyyy')}`, 25, yPos)
+        doc.text(`   Fecha de Vencimiento: ${formatDateSafe(garantia.fecha_vencimiento)}`, 25, yPos)
         yPos += 7
       }
       yPos += 3

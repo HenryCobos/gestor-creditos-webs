@@ -10,13 +10,15 @@
 -- Luego ejecuta este script para configurar las políticas RLS
 
 -- Política 1: Permitir lectura pública de logos
-CREATE POLICY IF NOT EXISTS "Logos are publicly readable"
+DROP POLICY IF EXISTS "Logos are publicly readable" ON storage.objects;
+CREATE POLICY "Logos are publicly readable"
 ON storage.objects
 FOR SELECT
 USING (bucket_id = 'company-logos');
 
 -- Política 2: Permitir que usuarios autenticados suban logos
-CREATE POLICY IF NOT EXISTS "Authenticated users can upload logos"
+DROP POLICY IF EXISTS "Authenticated users can upload logos" ON storage.objects;
+CREATE POLICY "Authenticated users can upload logos"
 ON storage.objects
 FOR INSERT
 WITH CHECK (
@@ -25,7 +27,8 @@ WITH CHECK (
 );
 
 -- Política 3: Permitir que usuarios autenticados actualicen sus propios logos
-CREATE POLICY IF NOT EXISTS "Users can update their own logos"
+DROP POLICY IF EXISTS "Users can update their own logos" ON storage.objects;
+CREATE POLICY "Users can update their own logos"
 ON storage.objects
 FOR UPDATE
 USING (
@@ -40,7 +43,8 @@ WITH CHECK (
 );
 
 -- Política 4: Permitir que usuarios autenticados eliminen sus propios logos
-CREATE POLICY IF NOT EXISTS "Users can delete their own logos"
+DROP POLICY IF EXISTS "Users can delete their own logos" ON storage.objects;
+CREATE POLICY "Users can delete their own logos"
 ON storage.objects
 FOR DELETE
 USING (
@@ -54,7 +58,8 @@ USING (
 
 /*
 -- Política simplificada: Cualquier usuario autenticado puede hacer todo
-CREATE POLICY IF NOT EXISTS "Authenticated users full access to logos"
+DROP POLICY IF EXISTS "Authenticated users full access to logos" ON storage.objects;
+CREATE POLICY "Authenticated users full access to logos"
 ON storage.objects
 FOR ALL
 USING (

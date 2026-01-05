@@ -186,7 +186,9 @@ export function PrestamoDetailDialog({
         tipo_calculo_interes: prestamo.tipo_calculo_interes,
       },
       config.companyName,
-      garantiasInfo.length > 0 ? garantiasInfo : undefined
+      garantiasInfo.length > 0 ? garantiasInfo : undefined,
+      config.currency,
+      config.currencySymbol
     )
 
     toast({

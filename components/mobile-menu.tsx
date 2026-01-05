@@ -89,14 +89,14 @@ export function MobileMenu({ user, planName, onSignOut }: MobileMenuProps) {
         </SheetHeader>
 
         {/* User Info */}
-        <div className="mt-6 mb-4 p-4 bg-gray-50 rounded-lg">
-          <p className="text-sm font-medium text-gray-900">
+        <div className="mt-6 mb-4 p-4 bg-muted rounded-lg">
+          <p className="text-sm font-medium text-foreground">
             {user?.full_name || user?.email || 'Usuario'}
           </p>
           <Link href="/dashboard/subscription" onClick={() => setOpen(false)}>
-            <div className="mt-2 px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-              <p className="text-xs text-blue-600 font-medium">Plan Actual</p>
-              <p className="text-sm font-bold text-blue-900">{planName}</p>
+            <div className="mt-2 px-3 py-2 bg-primary/10 dark:bg-primary/20 rounded-lg border border-primary/20">
+              <p className="text-xs text-primary font-medium">Plan Actual</p>
+              <p className="text-sm font-bold text-primary">{planName}</p>
             </div>
           </Link>
         </div>
