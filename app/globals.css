@@ -55,12 +55,6 @@
   }
   html, body {
     @apply bg-background text-foreground;
-    height: 100%;
-    overflow: hidden;
-  }
-  #__next, [data-nextjs-scroll-focus-boundary] {
-    height: 100%;
-    overflow: hidden;
   }
 }
 
