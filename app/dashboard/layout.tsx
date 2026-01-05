@@ -109,9 +109,9 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-background">
       {/* Mobile Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 px-4 py-3">
+      <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-card border-b border-border px-4 py-3">
         <div className="flex items-center justify-between">
           <CompanyHeader />
           <MobileMenu 
@@ -123,18 +123,18 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Sidebar - Desktop */}
-      <aside className="w-64 bg-white border-r border-gray-200 hidden md:block">
+      <aside className="w-64 bg-card border-r border-border hidden md:block">
         <div className="h-full flex flex-col">
-          <div className="p-6 border-b border-gray-200">
+          <div className="p-6 border-b border-border">
             <CompanyHeader />
-            <p className="text-sm text-gray-500 mt-2">
+            <p className="text-sm text-muted-foreground mt-2">
               {profile?.full_name || user.email}
             </p>
             {profile?.plan && (
               <Link href="/dashboard/subscription">
-                <div className="mt-3 px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 hover:shadow-md transition-all cursor-pointer">
-                  <p className="text-xs text-blue-600 font-medium">Plan Actual</p>
-                  <p className="text-sm font-bold text-blue-900">{profile.plan.nombre}</p>
+                <div className="mt-3 px-3 py-2 bg-primary/10 dark:bg-primary/20 rounded-lg border border-primary/20 hover:shadow-md transition-all cursor-pointer">
+                  <p className="text-xs text-primary font-medium">Plan Actual</p>
+                  <p className="text-sm font-bold text-primary">{profile.plan.nombre}</p>
                 </div>
               </Link>
             )}
@@ -191,9 +191,9 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
             </Link>
           </nav>
 
-          <div className="p-4 border-t border-gray-200 space-y-2">
+          <div className="p-4 border-t border-border space-y-2">
             <div className="flex items-center justify-between px-2 py-1">
-              <span className="text-sm text-gray-600">Tema</span>
+              <span className="text-sm text-muted-foreground">Tema</span>
               <ThemeToggle />
             </div>
             <form action={handleSignOut}>

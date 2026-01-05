@@ -27,7 +27,7 @@ export function CompanyHeader() {
         >
           {config.companyName}
         </h1>
-        <p className="text-xs text-gray-500">Sistema de Gestión</p>
+        <p className="text-xs text-muted-foreground">Sistema de Gestión</p>
       </div>
     </div>
   )

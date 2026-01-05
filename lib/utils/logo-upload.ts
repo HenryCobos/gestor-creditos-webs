@@ -36,10 +36,11 @@ export async function uploadLogo(
 
     const supabase = createClient()
 
-    // Crear nombre único para el archivo
+    // Crear nombre único para el archivo con estructura de carpetas por usuario
     const fileExt = file.name.split('.').pop()
     const fileName = `${userId}-${Date.now()}.${fileExt}`
-    const filePath = `${fileName}`
+    // Usar carpeta por usuario para facilitar RLS
+    const filePath = `${userId}/${fileName}`
 
     // Subir el archivo
     const { data, error } = await supabase.storage
@@ -83,17 +84,19 @@ export async function uploadLogo(
 /**
  * Elimina el logo de Supabase Storage
  */
-export async function deleteLogo(logoUrl: string): Promise<boolean> {
+export async function deleteLogo(logoUrl: string, userId: string): Promise<boolean> {
   try {
     const supabase = createClient()
     
     // Extraer el nombre del archivo de la URL
     const urlParts = logoUrl.split('/')
     const fileName = urlParts[urlParts.length - 1]
+    // Usar la misma estructura de carpetas
+    const filePath = `${userId}/${fileName}`
     
     const { error } = await supabase.storage
       .from(LOGO_BUCKET)
-      .remove([fileName])
+      .remove([filePath])
 
     return !error
   } catch {

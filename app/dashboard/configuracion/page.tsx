@@ -157,8 +157,11 @@ export default function ConfiguracionPage() {
     if (!config.companyLogo) return
 
     if (confirm('¿Estás seguro de eliminar el logo?')) {
-      // Intentar eliminar del storage
-      await deleteLogo(config.companyLogo)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        // Intentar eliminar del storage
+        await deleteLogo(config.companyLogo, user.id)
+      }
       
       // Actualizar configuración
       updateConfig({ companyLogo: null })
@@ -183,8 +186,8 @@ export default function ConfiguracionPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Configuración</h1>
-        <p className="text-gray-500 mt-1">Personaliza la apariencia de tu sistema</p>
+        <h1 className="text-3xl font-bold text-foreground">Configuración</h1>
+        <p className="text-muted-foreground mt-1">Personaliza la apariencia de tu sistema</p>
       </div>
 
       {/* Información de la Empresa */}
@@ -211,13 +214,13 @@ export default function ConfiguracionPage() {
             />
           </div>
 
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <p className="text-sm text-gray-600 mb-2">Vista previa:</p>
-            <div className="bg-white p-4 rounded border">
+          <div className="bg-muted p-4 rounded-lg">
+            <p className="text-sm text-muted-foreground mb-2">Vista previa:</p>
+            <div className="bg-card p-4 rounded border border-border">
               <h2 className="text-xl font-bold" style={{ color: formData.primaryColor }}>
                 {formData.companyName || 'Nombre de tu empresa'}
               </h2>
-              <p className="text-sm text-gray-600">Sistema de Gestión de Créditos</p>
+              <p className="text-sm text-muted-foreground">Sistema de Gestión de Créditos</p>
             </div>
           </div>
         </CardContent>
@@ -249,7 +252,7 @@ export default function ConfiguracionPage() {
                       accentColor: preset.accent,
                     })
                   }
-                  className="flex items-center gap-3 p-3 border rounded-lg hover:border-gray-400 transition-colors"
+                  className="flex items-center gap-3 p-3 border border-border rounded-lg hover:border-primary/50 transition-colors bg-card"
                 >
                   <div className="flex gap-1">
                     <div
@@ -317,8 +320,8 @@ export default function ConfiguracionPage() {
           </div>
 
           {/* Vista Previa de Colores */}
-          <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-            <p className="text-sm text-gray-600 mb-2">Vista previa de elementos:</p>
+          <div className="bg-muted p-4 rounded-lg space-y-3">
+            <p className="text-sm text-muted-foreground mb-2">Vista previa de elementos:</p>
             <div className="space-y-2">
               <button
                 className="px-4 py-2 rounded-md text-white font-medium"
@@ -363,10 +366,10 @@ export default function ConfiguracionPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <div className="flex items-center justify-between p-4 bg-muted rounded-lg border border-border">
             <div className="space-y-1">
               <Label className="text-base font-medium">Modo de Tema</Label>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              <p className="text-sm text-muted-foreground">
                 Elige cómo quieres que se vea la aplicación
               </p>
             </div>
@@ -374,20 +377,20 @@ export default function ConfiguracionPage() {
           </div>
           
           <div className="grid grid-cols-3 gap-4 mt-4">
-            <div className="p-4 border rounded-lg text-center space-y-2">
+            <div className="p-4 border border-border rounded-lg text-center space-y-2 bg-card">
               <Sun className="h-8 w-8 mx-auto text-yellow-500" />
-              <p className="font-medium">Claro</p>
-              <p className="text-xs text-gray-500">Fondo blanco</p>
+              <p className="font-medium text-foreground">Claro</p>
+              <p className="text-xs text-muted-foreground">Fondo blanco</p>
             </div>
-            <div className="p-4 border rounded-lg text-center space-y-2 bg-gray-900 text-white">
+            <div className="p-4 border border-border rounded-lg text-center space-y-2 bg-card dark:bg-muted">
               <Moon className="h-8 w-8 mx-auto text-blue-400" />
-              <p className="font-medium">Oscuro</p>
-              <p className="text-xs text-gray-400">Fondo oscuro</p>
+              <p className="font-medium text-foreground">Oscuro</p>
+              <p className="text-xs text-muted-foreground">Fondo oscuro</p>
             </div>
-            <div className="p-4 border rounded-lg text-center space-y-2">
+            <div className="p-4 border border-border rounded-lg text-center space-y-2 bg-card">
               <span className="text-2xl">💻</span>
-              <p className="font-medium">Sistema</p>
-              <p className="text-xs text-gray-500">Sigue tu sistema</p>
+              <p className="font-medium text-foreground">Sistema</p>
+              <p className="text-xs text-muted-foreground">Sigue tu sistema</p>
             </div>
           </div>
         </CardContent>
@@ -433,8 +436,8 @@ export default function ConfiguracionPage() {
             </Select>
           </div>
 
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <p className="text-sm text-gray-600 mb-2">Vista previa de montos:</p>
+          <div className="bg-primary/10 dark:bg-primary/20 p-4 rounded-lg border border-primary/20">
+            <p className="text-sm text-muted-foreground mb-2">Vista previa de montos:</p>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span>Monto de Ejemplo:</span>
@@ -475,7 +478,7 @@ export default function ConfiguracionPage() {
           {logoPreview && (
             <div className="space-y-3">
               <Label>Vista Previa</Label>
-              <div className="relative inline-block p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border-2 border-gray-200 dark:border-gray-700">
+              <div className="relative inline-block p-4 bg-muted rounded-lg border-2 border-border">
                 <img
                   src={logoPreview}
                   alt="Logo de la empresa"
@@ -498,7 +501,7 @@ export default function ConfiguracionPage() {
           {/* Área de Subida */}
           <div className="space-y-2">
             <Label htmlFor="logo-upload">Subir Logo</Label>
-            <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6">
+            <div className="border-2 border-dashed border-border rounded-lg p-6 bg-muted/50">
               <input
                 ref={fileInputRef}
                 id="logo-upload"
@@ -511,19 +514,19 @@ export default function ConfiguracionPage() {
               <div className="text-center space-y-3">
                 {logoUploading ? (
                   <>
-                    <Loader2 className="mx-auto h-12 w-12 text-gray-400 animate-spin" />
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <Loader2 className="mx-auto h-12 w-12 text-muted-foreground animate-spin" />
+                    <p className="text-sm text-muted-foreground">
                       Subiendo logo...
                     </p>
                   </>
                 ) : (
                   <>
-                    <ImageIcon className="mx-auto h-12 w-12 text-gray-400" />
+                    <ImageIcon className="mx-auto h-12 w-12 text-muted-foreground" />
                     <div className="space-y-2">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm text-muted-foreground">
                         Haz clic para seleccionar un archivo o arrastra y suelta
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-500">
+                      <p className="text-xs text-muted-foreground">
                         PNG, JPG, SVG o WebP (máx. 2MB)
                       </p>
                     </div>
@@ -543,11 +546,11 @@ export default function ConfiguracionPage() {
           </div>
 
           {/* Información */}
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-            <p className="text-sm text-blue-800 dark:text-blue-200">
+          <div className="bg-primary/10 dark:bg-primary/20 p-4 rounded-lg border border-primary/20">
+            <p className="text-sm text-primary">
               <strong>Recomendaciones:</strong>
             </p>
-            <ul className="text-xs text-blue-700 dark:text-blue-300 mt-2 space-y-1 list-disc list-inside">
+            <ul className="text-xs text-primary/80 mt-2 space-y-1 list-disc list-inside">
               <li>Usa un logo con fondo transparente (PNG) para mejor resultado</li>
               <li>Dimensiones recomendadas: 200x200px o mayor</li>
               <li>El logo aparecerá en el header del dashboard</li>

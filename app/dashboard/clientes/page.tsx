@@ -230,8 +230,8 @@ export default function ClientesPage() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Clientes</h1>
-            <p className="text-gray-500 mt-1">Gestiona tu base de clientes</p>
+            <h1 className="text-3xl font-bold text-foreground">Clientes</h1>
+            <p className="text-muted-foreground mt-1">Gestiona tu base de clientes</p>
           </div>
           <Dialog open={open} onOpenChange={(isOpen) => {
           setOpen(isOpen)
@@ -333,7 +333,7 @@ export default function ClientesPage() {
                   type="button" 
                   variant="outline" 
                   onClick={resetForm}
-                  className="px-6 border-gray-300 hover:bg-gray-50"
+                  className="px-6"
                 >
                   Cancelar
                 </Button>
@@ -363,13 +363,13 @@ export default function ClientesPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <p className="text-center py-8 text-gray-500">Cargando...</p>
+            <p className="text-center py-8 text-muted-foreground">Cargando...</p>
           ) : clientes.length === 0 ? (
-            <p className="text-center py-8 text-gray-500">
+            <p className="text-center py-8 text-muted-foreground">
               No hay clientes registrados aún
             </p>
           ) : filteredClientes.length === 0 ? (
-            <p className="text-center py-8 text-gray-500">
+            <p className="text-center py-8 text-muted-foreground">
               No se encontraron clientes con "{searchTerm}"
             </p>
           ) : (
