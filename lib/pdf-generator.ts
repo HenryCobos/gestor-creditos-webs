@@ -58,21 +58,28 @@ export function generarContratoPrestamo(
   const doc = new jsPDF()
   
   // Función helper para formatear fecha sin problemas de zona horaria
+  // Usa el mismo método que formatDate en lib/utils.ts para mantener consistencia
   const formatDateSafe = (dateString: string) => {
     if (!dateString) return ''
-    // Si la fecha viene en formato ISO o tiene hora, usar parseISO
-    // Si viene solo como fecha (YYYY-MM-DD), crear Date directamente
     try {
+      // Si la fecha viene en formato ISO con hora, usar parseISO
       if (dateString.includes('T') || dateString.includes(' ')) {
         return format(parseISO(dateString), 'dd/MM/yyyy')
       } else {
-        // Formato YYYY-MM-DD, crear Date en UTC para evitar cambios de día
+        // Formato YYYY-MM-DD, crear Date en zona horaria local (no UTC)
+        // para que coincida con cómo se muestra en la UI (formatDate usa new Date(year, month - 1, day))
         const [year, month, day] = dateString.split('-').map(Number)
-        const date = new Date(Date.UTC(year, month - 1, day))
+        const date = new Date(year, month - 1, day)
         return format(date, 'dd/MM/yyyy')
       }
     } catch {
-      // Fallback al método anterior si hay error
+      // Fallback: formatear directamente desde el string si es YYYY-MM-DD
+      // Esto evita cualquier problema de zona horaria
+      if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        const [year, month, day] = dateString.split('-')
+        return `${day}/${month}/${year}`
+      }
+      // Último fallback
       return format(new Date(dateString), 'dd/MM/yyyy')
     }
   }
@@ -411,12 +418,24 @@ export function generarPlanPagos(
   autoTable(doc, {
     startY: 60,
     head: [['Cuota', 'Monto', 'Fecha Vencimiento', 'Estado']],
-    body: cuotas.map(c => [
-      c.numero_cuota,
-      `$${c.monto_cuota.toFixed(2)}`,
-      format(new Date(c.fecha_vencimiento), 'dd/MM/yyyy'),
-      c.estado.toUpperCase()
-    ]),
+    body: cuotas.map(c => {
+      // Formatear fecha de forma segura (mismo método que formatDateSafe)
+      let fechaFormateada = ''
+      if (c.fecha_vencimiento) {
+        if (c.fecha_vencimiento.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          const [year, month, day] = c.fecha_vencimiento.split('-')
+          fechaFormateada = `${day}/${month}/${year}`
+        } else {
+          fechaFormateada = format(new Date(c.fecha_vencimiento), 'dd/MM/yyyy')
+        }
+      }
+      return [
+        c.numero_cuota,
+        `$${c.monto_cuota.toFixed(2)}`,
+        fechaFormateada,
+        c.estado.toUpperCase()
+      ]
+    }),
     theme: 'grid',
     headStyles: { fillColor: [59, 130, 246] },
     styles: { fontSize: 9 },
@@ -636,9 +655,26 @@ export function generarReporteCliente(
     }).format(amount)
   }
   
-  // Función helper para formatear fecha
+  // Función helper para formatear fecha (mismo método que formatDateSafe)
   const formatDate = (dateString: string) => {
-    return format(new Date(dateString), 'dd/MM/yyyy')
+    if (!dateString) return ''
+    try {
+      // Si es formato YYYY-MM-DD, formatear directamente para evitar problemas de zona horaria
+      if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        const [year, month, day] = dateString.split('-')
+        return `${day}/${month}/${year}`
+      }
+      // Si tiene hora, usar parseISO
+      if (dateString.includes('T') || dateString.includes(' ')) {
+        return format(parseISO(dateString), 'dd/MM/yyyy')
+      }
+      // Crear Date en zona horaria local
+      const [year, month, day] = dateString.split('-').map(Number)
+      const date = new Date(year, month - 1, day)
+      return format(date, 'dd/MM/yyyy')
+    } catch {
+      return format(new Date(dateString), 'dd/MM/yyyy')
+    }
   }
   
   // Función helper para nombre de frecuencia
