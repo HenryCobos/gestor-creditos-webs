@@ -58,6 +58,7 @@ export default function PrestamosPage() {
   const [detailDialogOpen, setDetailDialogOpen] = useState(false)
   const [selectedPrestamo, setSelectedPrestamo] = useState<Prestamo | null>(null)
   const [limiteDialogOpen, setLimiteDialogOpen] = useState(false)
+  const [editingPrestamo, setEditingPrestamo] = useState<Prestamo | null>(null)
   const { toast } = useToast()
   const supabase = createClient()
   const { clientes, setClientes, prestamos, setPrestamos, addPrestamo, updatePrestamo, deletePrestamo, productos, setProductos } = useStore()
@@ -222,14 +223,90 @@ export default function PrestamosPage() {
       setLimiteDialogOpen(true)
       return
     }
+    setEditingPrestamo(null)
+    setOpen(true)
+  }
+
+  const handleEditPrestamo = async (prestamo: Prestamo) => {
+    // Cargar garantías si es empeño
+    let garantiasData: any[] = []
+    if (prestamo.tipo_prestamo === 'empeño') {
+      const { data } = await supabase
+        .from('garantias')
+        .select('*')
+        .eq('prestamo_id', prestamo.id)
+      garantiasData = data || []
+    }
+
+    // Determinar tipo de duración basado en fecha_fin o número de cuotas
+    // Para simplificar, usaremos meses basado en número de cuotas y frecuencia
+    const frecuencia = prestamo.frecuencia_pago || 'mensual'
+    let tipoDuracion: 'meses' | 'dias' = 'meses'
+    let numeroMeses = ''
+    let numeroDias = ''
+
+    // Calcular duración aproximada
+    if (frecuencia === 'mensual') {
+      tipoDuracion = 'meses'
+      numeroMeses = prestamo.numero_cuotas.toString()
+    } else if (frecuencia === 'semanal') {
+      tipoDuracion = 'meses'
+      numeroMeses = (prestamo.numero_cuotas / 4).toFixed(1)
+    } else if (frecuencia === 'quincenal') {
+      tipoDuracion = 'meses'
+      numeroMeses = (prestamo.numero_cuotas / 2).toFixed(1)
+    } else if (frecuencia === 'diario') {
+      tipoDuracion = 'dias'
+      numeroDias = prestamo.numero_cuotas.toString()
+    }
+
+    // Formatear fecha de inicio
+    const fechaInicio = prestamo.fecha_inicio.split('T')[0] || format(new Date(), 'yyyy-MM-dd')
+    const fechaFin = prestamo.fecha_fin ? prestamo.fecha_fin.split('T')[0] : ''
+
+    setFormData({
+      cliente_id: prestamo.cliente_id,
+      monto_prestado: prestamo.monto_prestado.toString(),
+      interes_porcentaje: prestamo.interes_porcentaje.toString(),
+      tipo_duracion: tipoDuracion,
+      numero_meses: numeroMeses,
+      numero_dias: numeroDias,
+      fecha_inicio: fechaInicio,
+      fecha_fin: fechaFin,
+      frecuencia_pago: prestamo.frecuencia_pago || 'mensual',
+      tipo_interes: prestamo.tipo_interes || 'simple',
+      tipo_prestamo: prestamo.tipo_prestamo || 'amortizacion',
+      tipo_calculo_interes: prestamo.tipo_calculo_interes || 'por_periodo',
+      excluir_domingos: prestamo.excluir_domingos || false,
+      producto_id: prestamo.producto_id || '',
+      precio_contado: prestamo.precio_contado?.toString() || '',
+      enganche: prestamo.enganche?.toString() || '',
+      cargos_adicionales: prestamo.cargos_adicionales?.toString() || '',
+      descripcion_producto: prestamo.descripcion_producto || '',
+    })
+
+    // Cargar garantías en el formato del formulario
+    if (garantiasData.length > 0) {
+      setGarantias(garantiasData.map(g => ({
+        descripcion: g.descripcion,
+        categoria: g.categoria || '',
+        valor_estimado: g.valor_estimado?.toString() || '',
+        fecha_vencimiento: g.fecha_vencimiento ? g.fecha_vencimiento.split('T')[0] : '',
+        observaciones: g.observaciones || '',
+      })))
+    } else {
+      setGarantias([])
+    }
+
+    setEditingPrestamo(prestamo)
     setOpen(true)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Verificar límite antes de crear
-    if (!canAddPrestamo()) {
+    // Verificar límite antes de crear (solo para nuevos préstamos)
+    if (!editingPrestamo && !canAddPrestamo()) {
       setLimiteDialogOpen(true)
       setOpen(false)
       return
@@ -284,76 +361,177 @@ export default function PrestamosPage() {
       fechaFin = format(fechaFinDate, 'yyyy-MM-dd')
     }
 
-    // Crear préstamo
     // Agregar hora al mediodía para evitar problemas de zona horaria
     const fechaInicioConHora = `${formData.fecha_inicio}T12:00:00`
     const fechaFinConHora = fechaFin ? `${fechaFin}T12:00:00` : null
-    
-    const { data: prestamo, error: prestamoError } = await supabase
-      .from('prestamos')
-      .insert([{
-        user_id: user.id,
-        cliente_id: formData.cliente_id,
-        monto_prestado: monto,
-        interes_porcentaje: interes,
-        numero_cuotas: cuotas, // Calculado automáticamente
-        fecha_inicio: fechaInicioConHora,
-        fecha_fin: fechaFinConHora,
-        monto_total: montoTotal,
-        frecuencia_pago: formData.frecuencia_pago,
-        tipo_interes: formData.tipo_interes,
-        tipo_prestamo: formData.tipo_prestamo,
-        tipo_calculo_interes: formData.tipo_calculo_interes,
-        excluir_domingos: formData.excluir_domingos,
-        // Campos adicionales para Venta a Crédito
-        precio_contado: formData.tipo_prestamo === 'venta_credito' && formData.precio_contado ? parseFloat(formData.precio_contado) : null,
-        enganche: formData.tipo_prestamo === 'venta_credito' && formData.enganche ? parseFloat(formData.enganche) : null,
-        cargos_adicionales: formData.tipo_prestamo === 'venta_credito' && formData.cargos_adicionales ? parseFloat(formData.cargos_adicionales) : null,
-        descripcion_producto: formData.tipo_prestamo === 'venta_credito' && formData.descripcion_producto ? formData.descripcion_producto : null,
-        estado: 'activo',
-      }])
-      .select(`
-        *,
-        cliente:clientes(*)
-      `)
-      .single()
 
-    if (prestamoError) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo crear el préstamo',
-        variant: 'destructive',
-      })
-      return
+    let prestamo: any
+    let ultimoNumeroCuota = 0
+
+    if (editingPrestamo) {
+      // Actualizar préstamo existente
+      const { data: updatedPrestamo, error: prestamoError } = await supabase
+        .from('prestamos')
+        .update({
+          cliente_id: formData.cliente_id,
+          monto_prestado: monto,
+          interes_porcentaje: interes,
+          numero_cuotas: cuotas,
+          fecha_inicio: fechaInicioConHora,
+          fecha_fin: fechaFinConHora,
+          monto_total: montoTotal,
+          frecuencia_pago: formData.frecuencia_pago,
+          tipo_interes: formData.tipo_interes,
+          tipo_prestamo: formData.tipo_prestamo,
+          tipo_calculo_interes: formData.tipo_calculo_interes,
+          excluir_domingos: formData.excluir_domingos,
+          precio_contado: formData.tipo_prestamo === 'venta_credito' && formData.precio_contado ? parseFloat(formData.precio_contado) : null,
+          enganche: formData.tipo_prestamo === 'venta_credito' && formData.enganche ? parseFloat(formData.enganche) : null,
+          cargos_adicionales: formData.tipo_prestamo === 'venta_credito' && formData.cargos_adicionales ? parseFloat(formData.cargos_adicionales) : null,
+          descripcion_producto: formData.tipo_prestamo === 'venta_credito' && formData.descripcion_producto ? formData.descripcion_producto : null,
+        })
+        .eq('id', editingPrestamo.id)
+        .select(`
+          *,
+          cliente:clientes(*)
+        `)
+        .single()
+
+      if (prestamoError) {
+        toast({
+          title: 'Error',
+          description: 'No se pudo actualizar el préstamo',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      prestamo = updatedPrestamo
+
+      // Obtener todas las cuotas existentes con sus pagos
+      const { data: cuotasExistentes } = await supabase
+        .from('cuotas')
+        .select('id, estado, monto_pagado, numero_cuota')
+        .eq('prestamo_id', editingPrestamo.id)
+        .order('numero_cuota', { ascending: true })
+
+      // Identificar cuotas que no tienen pagos (monto_pagado === 0)
+      // Estas son las que podemos eliminar y regenerar
+      const cuotasSinPagos = cuotasExistentes?.filter(c => c.monto_pagado === 0) || []
+      
+      if (cuotasSinPagos.length > 0) {
+        // Eliminar pagos asociados a estas cuotas primero (por si acaso)
+        const cuotasIds = cuotasSinPagos.map(c => c.id)
+        await supabase
+          .from('pagos')
+          .delete()
+          .in('cuota_id', cuotasIds)
+
+        // Eliminar las cuotas sin pagos
+        await supabase
+          .from('cuotas')
+          .delete()
+          .in('id', cuotasIds)
+      }
+
+      // Determinar el número de cuota desde donde empezar a crear nuevas
+      // Si hay cuotas con pagos, empezar desde la siguiente a la última existente
+      // Si no hay cuotas con pagos, empezar desde 1
+      const cuotasConPagos = cuotasExistentes?.filter(c => c.monto_pagado > 0) || []
+      ultimoNumeroCuota = cuotasConPagos.length > 0
+        ? Math.max(...cuotasConPagos.map(c => c.numero_cuota))
+        : 0
+
+      // Validar que el nuevo número de cuotas no sea menor que las cuotas ya pagadas
+      if (ultimoNumeroCuota > cuotas) {
+        toast({
+          title: 'Error',
+          description: `No se puede reducir el número de cuotas a ${cuotas} porque ya hay ${ultimoNumeroCuota} cuota(s) con pagos registrados.`,
+          variant: 'destructive',
+        })
+        return
+      }
+    } else {
+      // Crear nuevo préstamo
+      const { data: newPrestamo, error: prestamoError } = await supabase
+        .from('prestamos')
+        .insert([{
+          user_id: user.id,
+          cliente_id: formData.cliente_id,
+          monto_prestado: monto,
+          interes_porcentaje: interes,
+          numero_cuotas: cuotas,
+          fecha_inicio: fechaInicioConHora,
+          fecha_fin: fechaFinConHora,
+          monto_total: montoTotal,
+          frecuencia_pago: formData.frecuencia_pago,
+          tipo_interes: formData.tipo_interes,
+          tipo_prestamo: formData.tipo_prestamo,
+          tipo_calculo_interes: formData.tipo_calculo_interes,
+          excluir_domingos: formData.excluir_domingos,
+          precio_contado: formData.tipo_prestamo === 'venta_credito' && formData.precio_contado ? parseFloat(formData.precio_contado) : null,
+          enganche: formData.tipo_prestamo === 'venta_credito' && formData.enganche ? parseFloat(formData.enganche) : null,
+          cargos_adicionales: formData.tipo_prestamo === 'venta_credito' && formData.cargos_adicionales ? parseFloat(formData.cargos_adicionales) : null,
+          descripcion_producto: formData.tipo_prestamo === 'venta_credito' && formData.descripcion_producto ? formData.descripcion_producto : null,
+          estado: 'activo',
+        }])
+        .select(`
+          *,
+          cliente:clientes(*)
+        `)
+        .single()
+
+      if (prestamoError) {
+        toast({
+          title: 'Error',
+          description: 'No se pudo crear el préstamo',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      prestamo = newPrestamo
     }
 
-    // Crear garantías si es empeño
-    if (formData.tipo_prestamo === 'empeño' && garantias.length > 0) {
-      const garantiasToCreate = garantias
-        .filter(g => g.descripcion.trim() !== '')
-        .map(garantia => ({
-          user_id: user.id,
-          prestamo_id: prestamo.id,
-          descripcion: garantia.descripcion,
-          categoria: garantia.categoria || null,
-          valor_estimado: garantia.valor_estimado ? parseFloat(garantia.valor_estimado) : null,
-          fecha_vencimiento: garantia.fecha_vencimiento || null,
-          observaciones: garantia.observaciones || null,
-          estado: 'activo',
-          numero_renovaciones: 0,
-        }))
-
-      if (garantiasToCreate.length > 0) {
-        const { error: garantiasError } = await supabase
+    // Manejar garantías si es empeño
+    if (formData.tipo_prestamo === 'empeño') {
+      if (editingPrestamo) {
+        // Eliminar garantías existentes y crear nuevas
+        await supabase
           .from('garantias')
-          .insert(garantiasToCreate)
+          .delete()
+          .eq('prestamo_id', prestamo.id)
+      }
 
-        if (garantiasError) {
-          toast({
-            title: 'Advertencia',
-            description: 'Préstamo creado pero no se pudieron crear las garantías',
-            variant: 'destructive',
-          })
+      if (garantias.length > 0) {
+        const garantiasToCreate = garantias
+          .filter(g => g.descripcion.trim() !== '')
+          .map(garantia => ({
+            user_id: user.id,
+            prestamo_id: prestamo.id,
+            descripcion: garantia.descripcion,
+            categoria: garantia.categoria || null,
+            valor_estimado: garantia.valor_estimado ? parseFloat(garantia.valor_estimado) : null,
+            fecha_vencimiento: garantia.fecha_vencimiento || null,
+            observaciones: garantia.observaciones || null,
+            estado: 'activo',
+            numero_renovaciones: 0,
+          }))
+
+        if (garantiasToCreate.length > 0) {
+          const { error: garantiasError } = await supabase
+            .from('garantias')
+            .insert(garantiasToCreate)
+
+          if (garantiasError) {
+            toast({
+              title: 'Advertencia',
+              description: editingPrestamo 
+                ? 'Préstamo actualizado pero no se pudieron actualizar las garantías'
+                : 'Préstamo creado pero no se pudieron crear las garantías',
+              variant: 'destructive',
+            })
+          }
         }
       }
     }
@@ -368,9 +546,14 @@ export default function PrestamosPage() {
     // Array temporal para almacenar las fechas y detectar duplicados
     const fechasGeneradas: Date[] = []
 
+    // Determinar desde qué cuota empezar (solo para edición)
+    const inicioCuota = editingPrestamo && ultimoNumeroCuota > 0 
+      ? ultimoNumeroCuota + 1 
+      : 1
+
     // Para modo "solo intereses", cada cuota es solo el interés (excepto la última que incluye capital)
     // Para modo "amortización" o "empeño", cada cuota incluye capital + interés
-    for (let i = 1; i <= cuotas; i++) {
+    for (let i = inicioCuota; i <= cuotas; i++) {
       // Para la primera cuota, usar directamente la fecha de inicio para evitar problemas de zona horaria
       // Para las demás cuotas, calcular sumando períodos desde la fecha de inicio
       let fechaVencimiento: Date
@@ -385,28 +568,57 @@ export default function PrestamosPage() {
           fechaVencimiento = addDays(fechaVencimiento, 1) // Mover al lunes
         }
       } else {
-        // Cuotas 2 en adelante: calcular sumando períodos
-        fechaVencimiento = calcularSiguienteFechaPago(
-          fechaInicio,
-          i - 1,
-          formData.frecuencia_pago,
-          formData.excluir_domingos // Pasar la opción de excluir domingos
-        )
+        // Cuotas 2 en adelante: calcular desde la ÚLTIMA fecha generada (no desde fechaInicio)
+        // Esto evita duplicados cuando hay domingos en medio
+        const ultimaFecha = fechasGeneradas[fechasGeneradas.length - 1]
+        
+        // Calcular la siguiente fecha según la frecuencia
+        switch (formData.frecuencia_pago) {
+          case 'diario':
+            fechaVencimiento = addDays(ultimaFecha, 1)
+            break
+          case 'semanal':
+            fechaVencimiento = addWeeks(ultimaFecha, 1)
+            break
+          case 'quincenal':
+            fechaVencimiento = addWeeks(ultimaFecha, 2)
+            break
+          case 'mensual':
+            fechaVencimiento = addMonths(ultimaFecha, 1)
+            break
+          default:
+            fechaVencimiento = addMonths(ultimaFecha, 1)
+        }
+        
+        // Si excluir domingos está activo, ajustar si cae en domingo
+        if (formData.excluir_domingos && fechaVencimiento.getDay() === 0) {
+          fechaVencimiento = addDays(fechaVencimiento, 1) // Mover al lunes
+        }
       }
 
-      // Si excluir domingos está activo, verificar que no haya duplicados
-      if (formData.excluir_domingos && fechasGeneradas.length > 0) {
-        const fechaAnterior = fechasGeneradas[fechasGeneradas.length - 1]
+      // Verificar duplicados contra TODAS las fechas generadas (no solo la anterior)
+      if (fechasGeneradas.length > 0) {
         const fechaVencimientoStr = format(fechaVencimiento, 'yyyy-MM-dd')
-        const fechaAnteriorStr = format(fechaAnterior, 'yyyy-MM-dd')
         
-        // Si la fecha actual es igual a la anterior, mover un día adelante
-        if (fechaVencimientoStr === fechaAnteriorStr) {
+        // Verificar si esta fecha ya existe en el array
+        let esDuplicado = fechasGeneradas.some(fecha => 
+          format(fecha, 'yyyy-MM-dd') === fechaVencimientoStr
+        )
+        
+        // Si hay duplicado, avanzar días hasta encontrar una fecha única
+        while (esDuplicado) {
           fechaVencimiento = addDays(fechaVencimiento, 1)
-          // Si el nuevo día también es domingo, mover al lunes
-          if (fechaVencimiento.getDay() === 0) {
+          
+          // Si excluir domingos está activo y el nuevo día es domingo, mover al lunes
+          if (formData.excluir_domingos && fechaVencimiento.getDay() === 0) {
             fechaVencimiento = addDays(fechaVencimiento, 1)
           }
+          
+          // Verificar nuevamente si es duplicado
+          const nuevaFechaStr = format(fechaVencimiento, 'yyyy-MM-dd')
+          esDuplicado = fechasGeneradas.some(fecha => 
+            format(fecha, 'yyyy-MM-dd') === nuevaFechaStr
+          )
         }
       }
 
@@ -472,20 +684,30 @@ export default function PrestamosPage() {
       }
     }
 
-    addPrestamo(prestamo)
-    const duracionTexto = formData.tipo_duracion === 'meses' && meses
-      ? `${meses} mes${meses > 1 ? 'es' : ''}`
-      : formData.tipo_duracion === 'dias' && dias
-      ? `${dias} día${dias > 1 ? 's' : ''}`
-      : ''
-    
-    toast({
-      title: 'Éxito',
-      description: `Préstamo creado con ${cuotas} cuotas ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}${cuotas > 1 ? 'es' : ''} ${duracionTexto ? `(${duracionTexto})` : ''}`,
-    })
+    if (editingPrestamo) {
+      updatePrestamo(prestamo.id, prestamo)
+      toast({
+        title: 'Éxito',
+        description: `Préstamo actualizado correctamente. El cronograma de cuotas ha sido regenerado.`,
+      })
+    } else {
+      addPrestamo(prestamo)
+      const duracionTexto = formData.tipo_duracion === 'meses' && meses
+        ? `${meses} mes${meses > 1 ? 'es' : ''}`
+        : formData.tipo_duracion === 'dias' && dias
+        ? `${dias} día${dias > 1 ? 's' : ''}`
+        : ''
+      
+      toast({
+        title: 'Éxito',
+        description: `Préstamo creado con ${cuotas} cuotas ${getNombreFrecuencia(formData.frecuencia_pago).toLowerCase()}${cuotas > 1 ? 'es' : ''} ${duracionTexto ? `(${duracionTexto})` : ''}`,
+      })
+    }
     
     // Recargar límites y productos después de agregar
-    loadSubscriptionData()
+    if (!editingPrestamo) {
+      loadSubscriptionData()
+    }
     loadData() // Recargar también los productos para actualizar stock
     resetForm()
   }
@@ -541,6 +763,7 @@ export default function PrestamosPage() {
       montoTotal: 0,
       montoCuota: 0,
     })
+    setEditingPrestamo(null)
     setOpen(false)
   }
 
@@ -583,9 +806,11 @@ export default function PrestamosPage() {
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[95vh] flex flex-col p-0">
             <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-4 border-b">
-              <DialogTitle>Nuevo Préstamo</DialogTitle>
+              <DialogTitle>{editingPrestamo ? 'Editar Préstamo' : 'Nuevo Préstamo'}</DialogTitle>
               <DialogDescription>
-                Las cuotas se calcularán y crearán automáticamente
+                {editingPrestamo 
+                  ? 'Actualiza los datos del préstamo. Las cuotas pendientes se regenerarán automáticamente.'
+                  : 'Las cuotas se calcularán y crearán automáticamente'}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
@@ -1210,7 +1435,7 @@ export default function PrestamosPage() {
                 <Button type="button" variant="outline" onClick={resetForm}>
                   Cancelar
                 </Button>
-                <Button type="submit">Crear Préstamo</Button>
+                <Button type="submit">{editingPrestamo ? 'Actualizar Préstamo' : 'Crear Préstamo'}</Button>
               </div>
             </form>
           </DialogContent>
@@ -1313,6 +1538,14 @@ export default function PrestamosPage() {
                           title="Ver detalles y cuotas"
                         >
                           <Eye className="h-4 w-4 text-blue-500" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEditPrestamo(prestamo)}
+                          title="Editar préstamo"
+                        >
+                          <Pencil className="h-4 w-4 text-yellow-500" />
                         </Button>
                         <Button
                           variant="ghost"
