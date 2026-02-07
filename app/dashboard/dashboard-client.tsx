@@ -88,7 +88,17 @@ export function DashboardClient() {
         getCuotasSegunRol(),
       ])
 
-      setPrestamos(prestamosData || [])
+      // Enriquecer préstamos con datos del cliente
+      if (prestamosData && clientesData) {
+        const prestamosEnriquecidos = prestamosData.map(prestamo => ({
+          ...prestamo,
+          cliente: clientesData.find(c => c.id === prestamo.cliente_id)
+        }))
+        setPrestamos(prestamosEnriquecidos)
+      } else {
+        setPrestamos(prestamosData || [])
+      }
+      
       setClientes(clientesData || [])
       setCuotas(cuotasData || [])
     } catch (error) {

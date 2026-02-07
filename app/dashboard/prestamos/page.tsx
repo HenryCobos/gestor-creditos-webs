@@ -195,7 +195,17 @@ export default function PrestamosPage() {
 
       // Cargar préstamos usando función inteligente
       const prestamosData = await getPrestamosInteligente()
-      setPrestamos(prestamosData || [])
+      
+      // Enriquecer préstamos con datos del cliente
+      if (prestamosData && clientesData) {
+        const prestamosEnriquecidos = prestamosData.map(prestamo => ({
+          ...prestamo,
+          cliente: clientesData.find(c => c.id === prestamo.cliente_id)
+        }))
+        setPrestamos(prestamosEnriquecidos)
+      } else {
+        setPrestamos(prestamosData || [])
+      }
     } catch (error) {
       console.error('Error al cargar datos:', error)
       toast({
