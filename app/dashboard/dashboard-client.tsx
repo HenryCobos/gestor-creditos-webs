@@ -10,6 +10,7 @@ import { useConfigStore } from '@/lib/config-store'
 import { useSubscriptionStore } from '@/lib/subscription-store'
 import { loadUserSubscription, loadUsageLimits } from '@/lib/subscription-helpers'
 import { getClientesInteligente, getPrestamosInteligente, getCuotasSegunRol } from '@/lib/queries-con-roles'
+import { LimitesOrganizacionCard } from '@/components/limites-organizacion-card'
 import Link from 'next/link'
 
 interface Prestamo {
@@ -141,6 +142,9 @@ export function DashboardClient() {
   
   return (
     <div className="space-y-8">
+      {/* Card de Límites de Organización */}
+      <LimitesOrganizacionCard />
+
       {/* Banner de Suscripción - Siempre visible para plan gratuito o mientras carga */}
       {(!loadingPlan && currentPlan?.slug === 'free') && (
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg p-6 text-white">
