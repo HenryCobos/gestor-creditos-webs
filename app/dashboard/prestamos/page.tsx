@@ -39,6 +39,7 @@ import { PrestamoDetailDialog } from '@/components/prestamo-detail-dialog'
 import { LimiteAlcanzadoDialog } from '@/components/limite-alcanzado-dialog'
 import { useSubscriptionStore } from '@/lib/subscription-store'
 import { loadUserSubscription, loadUsageLimits } from '@/lib/subscription-helpers'
+import { getClientesInteligente, getPrestamosInteligente } from '@/lib/queries-con-roles'
 import { 
   calculateLoanDetails, 
   calcularSiguienteFechaPago, 
@@ -173,47 +174,35 @@ export default function PrestamosPage() {
     
     if (!user) return
 
-    // Cargar clientes
-    const { data: clientesData } = await supabase
-      .from('clientes')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('nombre', { ascending: true })
+    try {
+      // Cargar clientes usando función inteligente
+      const clientesData = await getClientesInteligente()
+      if (clientesData) {
+        setClientes(clientesData)
+      }
 
-    if (clientesData) {
-      setClientes(clientesData)
-    }
+      // Cargar productos (para ventas a crédito) - query directa OK
+      const { data: productosData } = await supabase
+        .from('productos')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('activo', true)
+        .order('nombre', { ascending: true })
 
-    // Cargar productos (para ventas a crédito)
-    const { data: productosData } = await supabase
-      .from('productos')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('activo', true)
-      .order('nombre', { ascending: true })
+      if (productosData) {
+        setProductos(productosData)
+      }
 
-    if (productosData) {
-      setProductos(productosData)
-    }
-
-    // Cargar préstamos con información del cliente
-    const { data: prestamosData, error } = await supabase
-      .from('prestamos')
-      .select(`
-        *,
-        cliente:clientes(*)
-      `)
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-
-    if (error) {
+      // Cargar préstamos usando función inteligente
+      const prestamosData = await getPrestamosInteligente()
+      setPrestamos(prestamosData || [])
+    } catch (error) {
+      console.error('Error al cargar datos:', error)
       toast({
         title: 'Error',
-        description: 'No se pudieron cargar los préstamos',
+        description: 'No se pudieron cargar los datos',
         variant: 'destructive',
       })
-    } else {
-      setPrestamos(prestamosData || [])
     }
     setLoading(false)
   }

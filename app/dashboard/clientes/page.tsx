@@ -30,6 +30,7 @@ import { SearchFilterBar } from '@/components/search-filter-bar'
 import { LimiteAlcanzadoDialog } from '@/components/limite-alcanzado-dialog'
 import { useSubscriptionStore } from '@/lib/subscription-store'
 import { loadUserSubscription, loadUsageLimits } from '@/lib/subscription-helpers'
+import { getClientesInteligente } from '@/lib/queries-con-roles'
 import { useMemo } from 'react'
 
 export default function ClientesPage() {
@@ -73,20 +74,17 @@ export default function ClientesPage() {
     
     if (!user) return
 
-    const { data, error } = await supabase
-      .from('clientes')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-
-    if (error) {
+    try {
+      // Usar función inteligente que respeta roles
+      const data = await getClientesInteligente()
+      setClientes(data || [])
+    } catch (error) {
+      console.error('Error al cargar clientes:', error)
       toast({
         title: 'Error',
         description: 'No se pudieron cargar los clientes',
         variant: 'destructive',
       })
-    } else {
-      setClientes(data || [])
     }
     setLoading(false)
   }

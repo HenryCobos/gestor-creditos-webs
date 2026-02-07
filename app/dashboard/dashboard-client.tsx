@@ -9,6 +9,7 @@ import { DashboardCharts } from '@/components/dashboard-charts'
 import { useConfigStore } from '@/lib/config-store'
 import { useSubscriptionStore } from '@/lib/subscription-store'
 import { loadUserSubscription, loadUsageLimits } from '@/lib/subscription-helpers'
+import { getClientesInteligente, getPrestamosInteligente, getCuotasSegunRol } from '@/lib/queries-con-roles'
 import Link from 'next/link'
 
 interface Prestamo {
@@ -80,16 +81,16 @@ export function DashboardClient() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      // Obtener métricas en paralelo para mayor velocidad
+      // Obtener métricas usando funciones con soporte de roles
       const [prestamosData, clientesData, cuotasData] = await Promise.all([
-        supabase.from('prestamos').select('*').eq('user_id', user.id),
-        supabase.from('clientes').select('*').eq('user_id', user.id),
-        supabase.from('cuotas').select('*').eq('user_id', user.id),
+        getPrestamosInteligente(),
+        getClientesInteligente(),
+        getCuotasSegunRol(),
       ])
 
-      setPrestamos(prestamosData.data || [])
-      setClientes(clientesData.data || [])
-      setCuotas(cuotasData.data || [])
+      setPrestamos(prestamosData || [])
+      setClientes(clientesData || [])
+      setCuotas(cuotasData || [])
     } catch (error) {
       console.error('Error al cargar datos:', error)
     } finally {
