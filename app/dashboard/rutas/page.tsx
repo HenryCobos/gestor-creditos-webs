@@ -141,15 +141,24 @@ export default function RutasPage() {
   }
 
   const loadCobradores = async (orgId: string) => {
-    const { data } = await supabase
-      .from('profiles')
-      .select(`
-        *,
-        user_roles!inner(role, organization_id)
-      `)
-      .eq('user_roles.organization_id', orgId)
-      .eq('user_roles.role', 'cobrador')
-      .eq('activo', true)
+    console.log('[loadCobradores] Cargando cobradores de org:', orgId)
+    
+    // Usar función RPC para obtener todos los usuarios
+    const { data: allUsers, error } = await supabase
+      .rpc('get_usuarios_organizacion')
+
+    if (error) {
+      console.error('[loadCobradores] Error:', error)
+      return
+    }
+
+    // Filtrar solo los cobradores activos
+    const data = allUsers?.filter((user: any) => 
+      user.role === 'cobrador' && 
+      user.activo === true
+    )
+
+    console.log('[loadCobradores] Cobradores encontrados:', data?.length || 0)
 
     if (data) {
       setCobradores(data)
