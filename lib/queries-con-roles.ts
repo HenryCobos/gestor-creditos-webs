@@ -21,9 +21,11 @@ export async function getClientesSegunRol() {
   
   if (error) {
     console.error('Error al obtener clientes según rol:', error)
+    console.error('Detalle del error:', JSON.stringify(error, null, 2))
     throw error
   }
   
+  console.log('Clientes cargados desde función RPC:', data?.length || 0)
   return data as Cliente[]
 }
 
@@ -38,9 +40,11 @@ export async function getPrestamosSegunRol() {
   
   if (error) {
     console.error('Error al obtener préstamos según rol:', error)
+    console.error('Detalle del error:', JSON.stringify(error, null, 2))
     throw error
   }
   
+  console.log('Préstamos cargados desde función RPC:', data?.length || 0)
   return data as Prestamo[]
 }
 
@@ -52,9 +56,11 @@ export async function getCuotasSegunRol() {
   
   if (error) {
     console.error('Error al obtener cuotas según rol:', error)
+    console.error('Detalle del error:', JSON.stringify(error, null, 2))
     throw error
   }
   
+  console.log('Cuotas cargadas desde función RPC:', data?.length || 0)
   return data as Cuota[]
 }
 
@@ -148,20 +154,29 @@ export async function getPrestamosPropios() {
  */
 export async function getClientesInteligente(): Promise<Cliente[]> {
   try {
-    // Intentar primero con la función que respeta roles
-    return await getClientesSegunRol()
+    console.log('[getClientesInteligente] Intentando cargar con función RPC...')
+    const clientes = await getClientesSegunRol()
+    console.log('[getClientesInteligente] ✅ Cargados:', clientes.length, 'clientes')
+    return clientes
   } catch (error) {
-    console.warn('Fallback a query directa para clientes:', error)
+    console.error('[getClientesInteligente] ❌ Error con función RPC, usando fallback:', error)
     // Fallback a query directa si la función falla
-    return await getClientesPropios()
+    const clientes = await getClientesPropios()
+    console.log('[getClientesInteligente] ⚠️ Fallback exitoso:', clientes.length, 'clientes')
+    return clientes
   }
 }
 
 export async function getPrestamosInteligente(): Promise<Prestamo[]> {
   try {
-    return await getPrestamosSegunRol()
+    console.log('[getPrestamosInteligente] Intentando cargar con función RPC...')
+    const prestamos = await getPrestamosSegunRol()
+    console.log('[getPrestamosInteligente] ✅ Cargados:', prestamos.length, 'préstamos')
+    return prestamos
   } catch (error) {
-    console.warn('Fallback a query directa para préstamos:', error)
-    return await getPrestamosPropios()
+    console.error('[getPrestamosInteligente] ❌ Error con función RPC, usando fallback:', error)
+    const prestamos = await getPrestamosPropios()
+    console.log('[getPrestamosInteligente] ⚠️ Fallback exitoso:', prestamos.length, 'préstamos')
+    return prestamos
   }
 }
