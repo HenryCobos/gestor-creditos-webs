@@ -47,18 +47,18 @@ SELECT
   o.plan_id,
   pl.nombre as plan_nombre,
   pl.slug as plan_slug,
-  pl.max_clientes as limite_clientes,
-  pl.max_prestamos as limite_prestamos,
+  pl.limite_clientes as limite_clientes,
+  pl.limite_prestamos as limite_prestamos,
   COUNT(DISTINCT c.id) FILTER (WHERE c.id IS NOT NULL) as clientes_usados,
   COUNT(DISTINCT pr.id) FILTER (WHERE pr.id IS NOT NULL) as prestamos_usados,
-  (pl.max_clientes - COUNT(DISTINCT c.id) FILTER (WHERE c.id IS NOT NULL)) as clientes_disponibles,
-  (pl.max_prestamos - COUNT(DISTINCT pr.id) FILTER (WHERE pr.id IS NOT NULL)) as prestamos_disponibles,
+  (pl.limite_clientes - COUNT(DISTINCT c.id) FILTER (WHERE c.id IS NOT NULL)) as clientes_disponibles,
+  (pl.limite_prestamos - COUNT(DISTINCT pr.id) FILTER (WHERE pr.id IS NOT NULL)) as prestamos_disponibles,
   ROUND(
-    (COUNT(DISTINCT c.id) FILTER (WHERE c.id IS NOT NULL)::NUMERIC / NULLIF(pl.max_clientes, 0)) * 100, 
+    (COUNT(DISTINCT c.id) FILTER (WHERE c.id IS NOT NULL)::NUMERIC / NULLIF(pl.limite_clientes, 0)) * 100, 
     2
   ) as porcentaje_clientes,
   ROUND(
-    (COUNT(DISTINCT pr.id) FILTER (WHERE pr.id IS NOT NULL)::NUMERIC / NULLIF(pl.max_prestamos, 0)) * 100, 
+    (COUNT(DISTINCT pr.id) FILTER (WHERE pr.id IS NOT NULL)::NUMERIC / NULLIF(pl.limite_prestamos, 0)) * 100, 
     2
   ) as porcentaje_prestamos
 FROM organizations o
@@ -66,7 +66,7 @@ LEFT JOIN planes pl ON pl.id = o.plan_id
 LEFT JOIN profiles p ON p.organization_id = o.id
 LEFT JOIN clientes c ON c.user_id = p.id
 LEFT JOIN prestamos pr ON pr.user_id = p.id
-GROUP BY o.id, o.nombre_negocio, o.plan_id, pl.id, pl.nombre, pl.slug, pl.max_clientes, pl.max_prestamos;
+GROUP BY o.id, o.nombre_negocio, o.plan_id, pl.id, pl.nombre, pl.slug, pl.limite_clientes, pl.limite_prestamos;
 
 -- 2.2 Vista: Uso por usuario dentro de la organización
 CREATE OR REPLACE VIEW vista_uso_por_usuario AS
@@ -120,7 +120,7 @@ BEGIN
   
   -- Verificar límite de organización
   SELECT 
-    pl.max_clientes,
+    pl.limite_clientes,
     COUNT(DISTINCT c.id)
   INTO v_limite_org, v_usado_org
   FROM organizations o
@@ -128,7 +128,7 @@ BEGIN
   LEFT JOIN profiles p ON p.organization_id = o.id
   LEFT JOIN clientes c ON c.user_id = p.id
   WHERE o.id = v_organization_id
-  GROUP BY pl.max_clientes;
+  GROUP BY pl.limite_clientes;
   
   -- Si excede límite de organización
   IF v_usado_org >= v_limite_org THEN
@@ -175,7 +175,7 @@ BEGIN
   
   -- Verificar límite de organización
   SELECT 
-    pl.max_prestamos,
+    pl.limite_prestamos,
     COUNT(DISTINCT pr.id)
   INTO v_limite_org, v_usado_org
   FROM organizations o
@@ -183,7 +183,7 @@ BEGIN
   LEFT JOIN profiles p ON p.organization_id = o.id
   LEFT JOIN prestamos pr ON pr.user_id = p.id
   WHERE o.id = v_organization_id
-  GROUP BY pl.max_prestamos;
+  GROUP BY pl.limite_prestamos;
   
   -- Si excede límite de organización
   IF v_usado_org >= v_limite_org THEN

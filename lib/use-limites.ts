@@ -41,17 +41,18 @@ export function useLimitesOrganizacion() {
   const fetchLimites = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase
+      const { data, error: rpcError } = await supabase
         .rpc('get_limites_organizacion')
         .single()
 
-      if (error) throw error
+      if (rpcError) throw rpcError
 
-      setLimites(data)
+      setLimites(data as LimitesOrganizacion)
       setError(null)
     } catch (err: any) {
       console.error('Error fetching limites:', err)
       setError(err.message)
+      setLimites(null)
     } finally {
       setLoading(false)
     }
@@ -73,15 +74,16 @@ export function useUsoPorUsuario() {
   const fetchUso = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase.rpc('get_uso_por_usuario')
+      const { data, error: rpcError } = await supabase.rpc('get_uso_por_usuario')
 
-      if (error) throw error
+      if (rpcError) throw rpcError
 
-      setUsoUsuarios(data || [])
+      setUsoUsuarios((data || []) as UsoUsuario[])
       setError(null)
     } catch (err: any) {
       console.error('Error fetching uso por usuario:', err)
       setError(err.message)
+      setUsoUsuarios([])
     } finally {
       setLoading(false)
     }
