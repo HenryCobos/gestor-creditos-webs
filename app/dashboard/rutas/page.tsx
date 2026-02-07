@@ -105,10 +105,7 @@ export default function RutasPage() {
 
     const { data: rutasData, error } = await supabase
       .from('rutas')
-      .select(`
-        *,
-        cobrador:profiles!rutas_cobrador_id_fkey(id, email, nombre_completo)
-      `)
+      .select('*')
       .eq('organization_id', orgId)
       .order('created_at', { ascending: false })
 
@@ -255,10 +252,7 @@ export default function RutasPage() {
           color: formData.color,
         })
         .eq('id', editingRuta.id)
-        .select(`
-          *,
-          cobrador:profiles!rutas_cobrador_id_fkey(id, email, nombre_completo)
-        `)
+        .select()
         .single()
 
       if (error) {
@@ -289,10 +283,7 @@ export default function RutasPage() {
           color: formData.color,
           estado: 'activa',
         })
-        .select(`
-          *,
-          cobrador:profiles!rutas_cobrador_id_fkey(id, email, nombre_completo)
-        `)
+        .select()
         .single()
 
       if (rutaError || !newRuta) {
