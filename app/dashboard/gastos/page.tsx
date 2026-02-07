@@ -767,7 +767,7 @@ export default function GastosPage() {
                     )}
                     <TableCell>
                       {gasto.ruta ? (
-                        <Badge variant="outline" style={{ borderColor: gasto.ruta.color }}>
+                        <Badge variant="outline" style={{ borderColor: gasto.ruta.color || undefined }}>
                           {gasto.ruta.nombre_ruta}
                         </Badge>
                       ) : (

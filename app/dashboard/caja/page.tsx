@@ -773,7 +773,7 @@ export default function CajaPage() {
                     )}
                     <TableCell>
                       {arqueo.ruta ? (
-                        <Badge variant="outline" style={{ borderColor: arqueo.ruta.color }}>
+                        <Badge variant="outline" style={{ borderColor: arqueo.ruta.color || undefined }}>
                           {arqueo.ruta.nombre_ruta}
                         </Badge>
                       ) : 'N/A'}
