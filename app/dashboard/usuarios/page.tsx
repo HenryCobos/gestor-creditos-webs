@@ -95,14 +95,11 @@ export default function UsuariosPage() {
       return
     }
 
-    // Obtener todos los usuarios de la organización
+    // Obtener todos los usuarios de la organización (query simplificada)
     const { data: usuariosData, error } = await supabase
       .from('profiles')
-      .select(`
-        *,
-        user_roles!inner(role, organization_id)
-      `)
-      .eq('user_roles.organization_id', profile.organization_id)
+      .select('*')
+      .eq('organization_id', profile.organization_id)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -113,12 +110,8 @@ export default function UsuariosPage() {
         variant: 'destructive',
       })
     } else {
-      // Mapear datos correctamente
-      const mappedUsers = usuariosData.map((u: any) => ({
-        ...u,
-        role: u.user_roles[0]?.role || null,
-      }))
-      setUsuarios(mappedUsers)
+      console.log('✅ Usuarios cargados:', usuariosData?.length || 0)
+      setUsuarios(usuariosData || [])
     }
     setLoading(false)
   }
