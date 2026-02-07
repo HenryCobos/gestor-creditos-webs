@@ -91,10 +91,13 @@ export async function POST(request: Request) {
       .from('profiles')
       .upsert({
         id: newUser.user.id,
+        email: email,
         full_name: fullName,
+        nombre_completo: fullName, // Por si usa esta columna
         organization_id: organizationId,
         role: role,
         activo: true,
+        created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }, {
         onConflict: 'id'
