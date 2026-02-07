@@ -15,16 +15,39 @@ const supabaseAdmin = createClient(
 
 export async function POST(request: Request) {
   try {
-    const { email, password, fullName, role, organizationId, invitedBy } = await request.json()
+    const body = await request.json()
+    const { email, password, fullName, role, organizationId, invitedBy } = body
+
+    console.log('[API crear usuario] Request recibido:', { email, fullName, role, organizationId, invitedBy })
+
+    // Verificar que tenemos la Service Role Key
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('[API crear usuario] SUPABASE_SERVICE_ROLE_KEY no está configurada')
+      return NextResponse.json(
+        { error: 'Configuración del servidor incompleta' },
+        { status: 500 }
+      )
+    }
 
     // Verificar que el usuario que invita es admin
-    const { data: inviterProfile } = await supabaseAdmin
+    const { data: inviterProfile, error: inviterError } = await supabaseAdmin
       .from('profiles')
       .select('role, organization_id')
       .eq('id', invitedBy)
       .single()
 
+    console.log('[API crear usuario] Perfil del invitador:', inviterProfile)
+
+    if (inviterError) {
+      console.error('[API crear usuario] Error al verificar invitador:', inviterError)
+      return NextResponse.json(
+        { error: 'Error al verificar permisos del invitador' },
+        { status: 500 }
+      )
+    }
+
     if (!inviterProfile || inviterProfile.role !== 'admin') {
+      console.error('[API crear usuario] Usuario no es admin:', inviterProfile)
       return NextResponse.json(
         { error: 'No tienes permisos para crear usuarios' },
         { status: 403 }
@@ -32,6 +55,7 @@ export async function POST(request: Request) {
     }
 
     // Crear usuario en Supabase Auth usando admin API
+    console.log('[API crear usuario] Creando usuario en Auth...')
     const { data: newUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -42,7 +66,7 @@ export async function POST(request: Request) {
     })
 
     if (authError) {
-      console.error('Error al crear usuario en Auth:', authError)
+      console.error('[API crear usuario] Error al crear usuario en Auth:', authError)
       return NextResponse.json(
         { error: authError.message },
         { status: 400 }
@@ -50,45 +74,66 @@ export async function POST(request: Request) {
     }
 
     if (!newUser.user) {
+      console.error('[API crear usuario] No se devolvió usuario')
       return NextResponse.json(
         { error: 'No se pudo crear el usuario' },
         { status: 500 }
       )
     }
 
-    // Crear perfil del usuario
+    console.log('[API crear usuario] Usuario creado en Auth:', newUser.user.id)
+
+    console.log('[API crear usuario] Usuario creado en Auth:', newUser.user.id)
+
+    // Crear/actualizar perfil del usuario
+    console.log('[API crear usuario] Creando perfil...')
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .insert({
+      .upsert({
         id: newUser.user.id,
         full_name: fullName,
         organization_id: organizationId,
         role: role,
-        activo: true
+        activo: true,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'id'
       })
 
     if (profileError) {
-      console.error('Error al crear perfil:', profileError)
+      console.error('[API crear usuario] Error al crear perfil:', profileError)
       // Intentar eliminar el usuario de Auth si falla el perfil
       await supabaseAdmin.auth.admin.deleteUser(newUser.user.id)
       return NextResponse.json(
-        { error: 'Error al crear el perfil del usuario' },
+        { error: 'Error al crear el perfil del usuario: ' + profileError.message },
         { status: 500 }
       )
     }
 
-    // Crear user_role
+    console.log('[API crear usuario] Perfil creado correctamente')
+
+    // Crear/actualizar user_role
+    console.log('[API crear usuario] Asignando rol...')
     const { error: roleError } = await supabaseAdmin
       .from('user_roles')
-      .insert({
+      .upsert({
         user_id: newUser.user.id,
         organization_id: organizationId,
-        role: role
+        role: role,
+        created_at: new Date().toISOString()
+      }, {
+        onConflict: 'user_id,organization_id'
       })
 
     if (roleError) {
-      console.error('Error al asignar rol:', roleError)
+      console.error('[API crear usuario] Error al asignar rol:', roleError)
+      return NextResponse.json(
+        { error: 'Error al asignar rol: ' + roleError.message },
+        { status: 500 }
+      )
     }
+
+    console.log('[API crear usuario] ✅ Usuario creado completamente')
 
     return NextResponse.json({
       success: true,
@@ -101,7 +146,7 @@ export async function POST(request: Request) {
     })
 
   } catch (error: any) {
-    console.error('Error en API de crear usuario:', error)
+    console.error('[API crear usuario] Error general:', error)
     return NextResponse.json(
       { error: error.message || 'Error interno del servidor' },
       { status: 500 }
