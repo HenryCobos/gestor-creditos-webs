@@ -75,7 +75,7 @@ export default function UsuariosPage() {
 
   const loadUsuarios = async () => {
     setLoading(true)
-    console.log('[loadUsuarios] Iniciando carga...')
+    console.log('[loadUsuarios] Iniciando carga con función RPC...')
     
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
@@ -106,13 +106,10 @@ export default function UsuariosPage() {
       return
     }
 
-    // Obtener todos los usuarios de la organización (query simplificada)
-    console.log('[loadUsuarios] Buscando usuarios de organización:', profile.organization_id)
+    // Usar función RPC para obtener usuarios (bypassa RLS)
+    console.log('[loadUsuarios] Llamando función get_usuarios_organizacion()...')
     const { data: usuariosData, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('organization_id', profile.organization_id)
-      .order('created_at', { ascending: false })
+      .rpc('get_usuarios_organizacion')
 
     if (error) {
       console.error('[loadUsuarios] ❌ Error cargando usuarios:', error)
