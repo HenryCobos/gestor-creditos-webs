@@ -296,9 +296,10 @@ export default function RutasPage() {
         .single()
 
       if (rutaError || !newRuta) {
+        console.error('[handleSubmit] Error creando ruta:', rutaError)
         toast({
           title: 'Error',
-          description: 'No se pudo crear la ruta',
+          description: rutaError?.message || 'No se pudo crear la ruta',
           variant: 'destructive',
         })
         return
