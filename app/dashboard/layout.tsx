@@ -12,7 +12,11 @@ import {
   Menu,
   Settings,
   PlayCircle,
-  Package
+  Package,
+  MapPin,
+  UserCog,
+  Receipt,
+  Calculator
 } from 'lucide-react'
 import { CompanyHeader } from '@/components/company-header'
 import { MobileMenu } from '@/components/mobile-menu'
@@ -36,10 +40,15 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
     .from('profiles')
     .select(`
       *,
-      plan:planes(id, nombre, slug)
+      plan:planes(id, nombre, slug),
+      organization_id,
+      role
     `)
     .eq('id', user.id)
     .single()
+
+  // Determinar el rol del usuario (para compatibilidad con usuarios sin organización)
+  const userRole = profile?.role || 'admin' // Por defecto admin para compatibilidad
 
   // Si el perfil no existe, no tiene plan, o el plan no se cargó correctamente
   if (freePlan && (!profile || !profile.plan_id || !profile.plan)) {
@@ -146,42 +155,103 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
                 Dashboard
               </Button>
             </Link>
+
+            {/* Menú común para todos */}
             <Link href="/dashboard/clientes">
               <Button variant="ghost" className="w-full justify-start">
                 <Users className="mr-2 h-4 w-4" />
-                Clientes
+                {userRole === 'cobrador' ? 'Mis Clientes' : 'Clientes'}
               </Button>
             </Link>
             <Link href="/dashboard/prestamos">
               <Button variant="ghost" className="w-full justify-start">
                 <DollarSign className="mr-2 h-4 w-4" />
-                Préstamos
-              </Button>
-            </Link>
-            <Link href="/dashboard/productos">
-              <Button variant="ghost" className="w-full justify-start">
-                <Package className="mr-2 h-4 w-4" />
-                Productos
+                {userRole === 'cobrador' ? 'Mis Préstamos' : 'Préstamos'}
               </Button>
             </Link>
             <Link href="/dashboard/cuotas">
               <Button variant="ghost" className="w-full justify-start">
                 <CreditCard className="mr-2 h-4 w-4" />
-                Cuotas
+                {userRole === 'cobrador' ? 'Mis Cuotas' : 'Cuotas'}
               </Button>
             </Link>
-            <Link href="/dashboard/reportes">
-              <Button variant="ghost" className="w-full justify-start">
-                <FileText className="mr-2 h-4 w-4" />
-                Reportes
-              </Button>
-            </Link>
-            <Link href="/dashboard/tutoriales">
-              <Button variant="ghost" className="w-full justify-start">
-                <PlayCircle className="mr-2 h-4 w-4" />
-                Tutoriales
-              </Button>
-            </Link>
+
+            {/* Solo para administradores */}
+            {userRole === 'admin' && (
+              <>
+                <Link href="/dashboard/productos">
+                  <Button variant="ghost" className="w-full justify-start">
+                    <Package className="mr-2 h-4 w-4" />
+                    Productos
+                  </Button>
+                </Link>
+                
+                {/* Separador visual */}
+                <div className="py-2">
+                  <div className="border-t border-border"></div>
+                  <p className="text-xs text-muted-foreground mt-2 px-2">Gestión de Rutas</p>
+                </div>
+
+                <Link href="/dashboard/usuarios">
+                  <Button variant="ghost" className="w-full justify-start">
+                    <UserCog className="mr-2 h-4 w-4" />
+                    Usuarios
+                  </Button>
+                </Link>
+                <Link href="/dashboard/rutas">
+                  <Button variant="ghost" className="w-full justify-start">
+                    <MapPin className="mr-2 h-4 w-4" />
+                    Rutas
+                  </Button>
+                </Link>
+                <Link href="/dashboard/reportes">
+                  <Button variant="ghost" className="w-full justify-start">
+                    <FileText className="mr-2 h-4 w-4" />
+                    Reportes
+                  </Button>
+                </Link>
+              </>
+            )}
+
+            {/* Gastos y Caja para todos con organización */}
+            {profile?.organization_id && (
+              <>
+                <div className="py-2">
+                  <div className="border-t border-border"></div>
+                  <p className="text-xs text-muted-foreground mt-2 px-2">
+                    {userRole === 'cobrador' ? 'Mi Trabajo' : 'Operaciones'}
+                  </p>
+                </div>
+
+                <Link href="/dashboard/gastos">
+                  <Button variant="ghost" className="w-full justify-start">
+                    <Receipt className="mr-2 h-4 w-4" />
+                    {userRole === 'cobrador' ? 'Mis Gastos' : 'Gastos'}
+                  </Button>
+                </Link>
+                <Link href="/dashboard/caja">
+                  <Button variant="ghost" className="w-full justify-start">
+                    <Calculator className="mr-2 h-4 w-4" />
+                    {userRole === 'cobrador' ? 'Mi Caja' : 'Arqueos'}
+                  </Button>
+                </Link>
+              </>
+            )}
+
+            {/* Configuración y tutoriales para todos */}
+            {userRole === 'admin' && (
+              <>
+                <div className="py-2">
+                  <div className="border-t border-border"></div>
+                </div>
+                <Link href="/dashboard/tutoriales">
+                  <Button variant="ghost" className="w-full justify-start">
+                    <PlayCircle className="mr-2 h-4 w-4" />
+                    Tutoriales
+                  </Button>
+                </Link>
+              </>
+            )}
             <Link href="/dashboard/configuracion">
               <Button variant="ghost" className="w-full justify-start">
                 <Settings className="mr-2 h-4 w-4" />
