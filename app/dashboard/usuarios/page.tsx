@@ -160,74 +160,61 @@ export default function UsuariosPage() {
           description: 'No se pudo actualizar el usuario',
           variant: 'destructive',
         })
-        return
-      }
-
-      toast({
-        title: 'Éxito',
-        description: 'Usuario actualizado correctamente',
-      })
-    } else {
-      // Crear nuevo usuario
-      // 1. Crear cuenta en auth.users
-      const { data: newUser, error: signUpError } = await supabase.auth.admin.createUser({
-        email: formData.email,
-        password: formData.password,
-        email_confirm: true,
-        user_metadata: {
-          full_name: formData.nombre_completo,
-        },
-      })
-
-      if (signUpError || !newUser.user) {
-        toast({
-          title: 'Error',
-          description: signUpError?.message || 'No se pudo crear el usuario',
-          variant: 'destructive',
-        })
-        return
-      }
-
-      // 2. Actualizar profile con datos adicionales
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          organization_id: organizationId,
-          role: formData.role,
-          nombre_completo: formData.nombre_completo,
-          activo: true,
-        })
-        .eq('id', newUser.user.id)
-
-      if (profileError) {
-        console.error('Error updating profile:', profileError)
-      }
-
-      // 3. Crear registro en user_roles
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .insert({
-          user_id: newUser.user.id,
-          organization_id: organizationId,
-          role: formData.role,
-        })
-
-      if (roleError) {
-        toast({
-          title: 'Advertencia',
-          description: 'Usuario creado pero hubo un error asignando el rol',
-          variant: 'destructive',
-        })
       } else {
+        toast({
+          title: 'Éxito',
+          description: 'Usuario actualizado correctamente',
+        })
+        setOpen(false)
+        resetForm()
+        loadUsuarios()
+      }
+    } else {
+      // Crear nuevo usuario usando nuestra API
+      try {
+        const response = await fetch('/api/usuarios/crear', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: formData.email,
+            password: formData.password,
+            fullName: formData.nombre_completo,
+            role: formData.role,
+            organizationId: organizationId,
+            invitedBy: currentUser.id
+          }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok || data.error) {
+          toast({
+            title: 'Error',
+            description: data.error || 'No se pudo crear el usuario',
+            variant: 'destructive',
+          })
+          return
+        }
+
         toast({
           title: 'Éxito',
           description: `${formData.role === 'admin' ? 'Administrador' : 'Cobrador'} creado correctamente`,
         })
+
+        setOpen(false)
+        resetForm()
+        loadUsuarios()
+      } catch (error) {
+        console.error('Error creating user:', error)
+        toast({
+          title: 'Error',
+          description: 'Error al crear el usuario. Intenta de nuevo.',
+          variant: 'destructive',
+        })
       }
     }
-
-    loadUsuarios()
-    resetForm()
   }
 
   const handleToggleActivo = async (usuario: Profile) => {
