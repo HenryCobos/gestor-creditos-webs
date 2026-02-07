@@ -75,15 +75,26 @@ export default function UsuariosPage() {
 
   const loadUsuarios = async () => {
     setLoading(true)
+    console.log('[loadUsuarios] Iniciando carga...')
+    
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user) {
+      console.error('[loadUsuarios] No hay usuario autenticado')
+      return
+    }
+    console.log('[loadUsuarios] Usuario autenticado:', user.id)
 
     // Obtener organización del usuario
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('organization_id, role')
       .eq('id', user.id)
       .single()
+
+    if (profileError) {
+      console.error('[loadUsuarios] Error obteniendo perfil:', profileError)
+    }
+    console.log('[loadUsuarios] Perfil:', profile)
 
     if (!profile || profile.role !== 'admin') {
       toast({
@@ -96,6 +107,7 @@ export default function UsuariosPage() {
     }
 
     // Obtener todos los usuarios de la organización (query simplificada)
+    console.log('[loadUsuarios] Buscando usuarios de organización:', profile.organization_id)
     const { data: usuariosData, error } = await supabase
       .from('profiles')
       .select('*')
@@ -103,14 +115,16 @@ export default function UsuariosPage() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('Error cargando usuarios:', error)
+      console.error('[loadUsuarios] ❌ Error cargando usuarios:', error)
+      console.error('[loadUsuarios] Error detallado:', JSON.stringify(error, null, 2))
       toast({
         title: 'Error',
         description: 'No se pudieron cargar los usuarios',
         variant: 'destructive',
       })
     } else {
-      console.log('✅ Usuarios cargados:', usuariosData?.length || 0)
+      console.log('[loadUsuarios] ✅ Usuarios encontrados:', usuariosData?.length || 0)
+      console.log('[loadUsuarios] Datos:', usuariosData)
       setUsuarios(usuariosData || [])
     }
     setLoading(false)

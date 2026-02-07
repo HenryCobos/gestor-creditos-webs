@@ -137,6 +137,13 @@ export async function POST(request: Request) {
     }
 
     console.log('[API crear usuario] ✅ Usuario creado completamente')
+    console.log('[API crear usuario] Detalles finales:', {
+      id: newUser.user.id,
+      email: email,
+      fullName: fullName,
+      role: role,
+      organizationId: organizationId
+    })
 
     return NextResponse.json({
       success: true,
@@ -144,7 +151,8 @@ export async function POST(request: Request) {
         id: newUser.user.id,
         email: newUser.user.email,
         fullName: fullName,
-        role: role
+        role: role,
+        organizationId: organizationId
       }
     })
 
