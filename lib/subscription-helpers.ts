@@ -3,6 +3,29 @@
 import { createClient } from '@/lib/supabase/client'
 import type { Plan, UserSubscription, UsageLimits } from './subscription-store'
 
+// Función para cargar todos los planes disponibles
+export async function loadPlans(): Promise<Plan[]> {
+  const supabase = createClient()
+  
+  try {
+    const { data: planes, error } = await supabase
+      .from('planes')
+      .select('*')
+      .eq('activo', true)
+      .order('orden', { ascending: true })
+
+    if (error) {
+      console.error('[loadPlans] Error cargando planes:', error)
+      return []
+    }
+
+    return (planes || []) as Plan[]
+  } catch (error) {
+    console.error('[loadPlans] Error:', error)
+    return []
+  }
+}
+
 // Función auxiliar para obtener beneficios de un plan según su slug
 export function getPlanBenefits(planSlug: string): string[] {
   const benefitsByPlan: Record<string, string[]> = {
