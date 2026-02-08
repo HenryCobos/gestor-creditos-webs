@@ -127,49 +127,84 @@ export default function GastosPage() {
   }
 
   const loadRutas = async (orgId: string) => {
-    const { data } = await supabase
+    console.log('[loadRutas] Cargando rutas para orgId:', orgId)
+    
+    const { data, error } = await supabase
       .from('rutas')
-      .select('*, cobrador:profiles!rutas_cobrador_id_fkey(id, nombre_completo, email)')
+      .select('*')
       .eq('organization_id', orgId)
       .eq('estado', 'activa')
       .order('nombre_ruta', { ascending: true })
 
+    if (error) {
+      console.error('[loadRutas] Error:', error)
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar las rutas',
+        variant: 'destructive',
+      })
+      setRutas([])
+      return
+    }
+
+    console.log('[loadRutas] Rutas cargadas:', data?.length || 0)
     if (data) {
       setRutas(data)
     }
   }
 
   const loadRutasCobrador = async (cobradorId: string) => {
-    const { data } = await supabase
+    console.log('[loadRutasCobrador] Cargando rutas para cobrador:', cobradorId)
+    
+    const { data, error } = await supabase
       .from('rutas')
       .select('*')
       .eq('cobrador_id', cobradorId)
       .eq('estado', 'activa')
       .order('nombre_ruta', { ascending: true })
 
+    if (error) {
+      console.error('[loadRutasCobrador] Error:', error)
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar tus rutas',
+        variant: 'destructive',
+      })
+      setRutas([])
+      return
+    }
+
+    console.log('[loadRutasCobrador] Rutas cargadas:', data?.length || 0)
+    
     if (data) {
       setRutas(data)
       // Autoseleccionar la primera ruta si solo tiene una
       if (data.length === 1) {
+        console.log('[loadRutasCobrador] Autoseleccionando ruta:', data[0].nombre_ruta)
         setFormData(prev => ({ ...prev, ruta_id: data[0].id }))
       }
     }
   }
 
   const loadCobradores = async (orgId: string) => {
-    const { data } = await supabase
-      .from('profiles')
-      .select(`
-        *,
-        user_roles!inner(role, organization_id)
-      `)
-      .eq('user_roles.organization_id', orgId)
-      .eq('user_roles.role', 'cobrador')
-      .eq('activo', true)
+    console.log('[loadCobradores] Cargando cobradores para orgId:', orgId)
+    
+    const { data, error } = await supabase
+      .rpc('get_usuarios_organizacion')
 
-    if (data) {
-      setCobradores(data)
+    if (error) {
+      console.error('[loadCobradores] Error:', error)
+      setCobradores([])
+      return
     }
+
+    // Filtrar solo cobradores activos
+    const cobradoresActivos = (data || []).filter(
+      (u: any) => u.role === 'cobrador' && u.activo === true
+    )
+
+    console.log('[loadCobradores] Cobradores cargados:', cobradoresActivos.length)
+    setCobradores(cobradoresActivos)
   }
 
   const loadGastos = async (orgId: string) => {
@@ -551,11 +586,15 @@ export default function GastosPage() {
                 />
               </div>
 
-              {rutas.length > 0 && (
-                <div className="space-y-2">
-                  <Label htmlFor="ruta_id">
-                    Ruta {userRole === 'cobrador' ? '*' : '(Opcional)'}
-                  </Label>
+              <div className="space-y-2">
+                <Label htmlFor="ruta_id">
+                  Ruta {userRole === 'cobrador' ? '*' : '(Opcional)'}
+                </Label>
+                {rutas.length === 0 ? (
+                  <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-md">
+                    ⚠️ No hay rutas activas disponibles
+                  </div>
+                ) : (
                   <Select
                     value={formData.ruta_id}
                     onValueChange={(value) => setFormData({ ...formData, ruta_id: value })}
@@ -572,8 +611,8 @@ export default function GastosPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-              )}
+                )}
+              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="descripcion">Descripción *</Label>
