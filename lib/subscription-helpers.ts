@@ -3,6 +3,55 @@
 import { createClient } from '@/lib/supabase/client'
 import type { Plan, UserSubscription, UsageLimits } from './subscription-store'
 
+// Función auxiliar para obtener beneficios de un plan según su slug
+export function getPlanBenefits(planSlug: string): string[] {
+  const benefitsByPlan: Record<string, string[]> = {
+    free: [
+      'Hasta 5 clientes activos',
+      'Hasta 5 préstamos activos',
+      'Gestión básica de préstamos',
+      'Cálculo automático de cuotas',
+      'Registro de pagos',
+    ],
+    pro: [
+      'Hasta 50 clientes activos',
+      'Hasta 50 préstamos activos',
+      'Exportación de reportes en PDF sin marca de agua',
+      'Recordatorios automáticos de pagos',
+      'Soporte prioritario por email',
+      'Historial de 90 días',
+      'Reportes avanzados',
+    ],
+    business: [
+      'Hasta 200 clientes activos',
+      'Hasta 200 préstamos activos',
+      'Multi-usuario: Hasta 5 usuarios',
+      'Gestión de rutas y cobradores',
+      'Exportación ilimitada de reportes',
+      'Recordatorios por email y WhatsApp',
+      'API para integración externa',
+      'Soporte premium 24/7',
+      'Historial ilimitado',
+      'Reportes personalizados',
+    ],
+    enterprise: [
+      'Clientes ilimitados',
+      'Préstamos ilimitados',
+      'Multi-usuario: Usuarios ilimitados',
+      'Gestión avanzada de rutas',
+      'Marca blanca (white label)',
+      'API completa para integración',
+      'Base de datos dedicada',
+      'Soporte premium 24/7',
+      'Historial ilimitado',
+      'Capacitación personalizada',
+      'Desarrollo de funciones a medida',
+    ],
+  }
+
+  return benefitsByPlan[planSlug] || benefitsByPlan.free
+}
+
 // NUEVA FUNCIÓN: Cargar suscripción a nivel de organización
 export async function loadOrganizationSubscription(): Promise<UserSubscription | null> {
   const supabase = createClient()
