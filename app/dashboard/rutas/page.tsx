@@ -22,7 +22,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/components/ui/use-toast'
+import { cn } from '@/lib/utils'
 import { 
   Plus, 
   Pencil, 
@@ -34,7 +36,8 @@ import {
   TrendingDown,
   ArrowRightLeft,
   Users,
-  History
+  History,
+  AlertCircle
 } from 'lucide-react'
 import { useStore, type Ruta, type Profile, type Cliente } from '@/lib/store'
 import { formatCurrency } from '@/lib/utils'
@@ -52,9 +55,10 @@ export default function RutasPage() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [organizationId, setOrganizationId] = useState<string | null>(null)
   const [cobradores, setCobradores] = useState<Profile[]>([])
-  const [todosClientes, setTodosClientes] = useState<Cliente[]>([])
+  const [todosClientes, setTodosClientes] = useState<any[]>([]) // Con info de ruta
   const [clientesRuta, setClientesRuta] = useState<string[]>([])
   const [movimientos, setMovimientos] = useState<any[]>([])
+  const [mostrarAsignados, setMostrarAsignados] = useState(false) // Toggle para clientes asignados
   const { toast } = useToast()
   const supabase = createClient()
   const { rutas, setRutas, addRuta, updateRuta, deleteRuta } = useStore()
@@ -163,17 +167,48 @@ export default function RutasPage() {
   }
 
   const loadClientes = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!organizationId) return
 
-    const { data } = await supabase
-      .from('clientes')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('nombre', { ascending: true })
+    try {
+      // Obtener todos los clientes de la organización
+      const { data: clientesData } = await supabase
+        .from('clientes')
+        .select(`
+          *,
+          user:profiles!clientes_user_id_fkey(organization_id)
+        `)
+        .order('nombre', { ascending: true })
 
-    if (data) {
-      setTodosClientes(data)
+      if (!clientesData) return
+
+      // Obtener asignaciones activas de rutas
+      const { data: asignaciones } = await supabase
+        .from('ruta_clientes')
+        .select(`
+          cliente_id,
+          ruta_id,
+          activo,
+          ruta:rutas(id, nombre_ruta)
+        `)
+        .eq('activo', true)
+
+      // Mapear clientes con info de ruta
+      const clientesConInfo = clientesData
+        .filter(c => c.user?.organization_id === organizationId)
+        .map(cliente => {
+          const asignacion = asignaciones?.find(a => a.cliente_id === cliente.id)
+          const rutaInfo = asignacion?.ruta as any
+          return {
+            ...cliente,
+            ruta_asignada: rutaInfo?.nombre_ruta || null,
+            ruta_id_asignada: asignacion?.ruta_id || null,
+            tiene_ruta: !!asignacion
+          }
+        })
+
+      setTodosClientes(clientesConInfo)
+    } catch (error) {
+      console.error('Error cargando clientes:', error)
     }
   }
 
@@ -454,13 +489,43 @@ export default function RutasPage() {
     if (!selectedRuta) return
 
     try {
-      // 1. Desactivar todas las asignaciones actuales
+      // Detectar clientes que se están moviendo de otra ruta
+      const clientesAMover = clientesRuta
+        .map(id => todosClientes.find(c => c.id === id))
+        .filter(c => c && c.tiene_ruta && c.ruta_id_asignada !== selectedRuta.id)
+
+      // Si hay clientes a mover, pedir confirmación
+      if (clientesAMover.length > 0) {
+        const nombresClientes = clientesAMover.map(c => c.nombre).join(', ')
+        const rutasOrigen = [...new Set(clientesAMover.map(c => c.ruta_asignada))].join(', ')
+        
+        const confirmar = window.confirm(
+          `⚠️ ${clientesAMover.length} cliente(s) será(n) movido(s):\n\n` +
+          `${nombresClientes}\n\n` +
+          `Desde: ${rutasOrigen}\n` +
+          `Hacia: ${selectedRuta.nombre_ruta}\n\n` +
+          `¿Continuar?`
+        )
+        
+        if (!confirmar) return
+      }
+
+      // 1. Desactivar asignaciones de clientes que están siendo movidos de otras rutas
+      for (const cliente of clientesAMover) {
+        await supabase
+          .from('ruta_clientes')
+          .update({ activo: false })
+          .eq('cliente_id', cliente.id)
+          .eq('activo', true)
+      }
+
+      // 2. Desactivar todas las asignaciones actuales de esta ruta
       await supabase
         .from('ruta_clientes')
         .update({ activo: false })
         .eq('ruta_id', selectedRuta.id)
 
-      // 2. Crear/reactivar asignaciones seleccionadas
+      // 3. Crear/reactivar asignaciones seleccionadas
       for (const clienteId of clientesRuta) {
         const { data: existing } = await supabase
           .from('ruta_clientes')
@@ -487,12 +552,19 @@ export default function RutasPage() {
         }
       }
 
+      // Mensaje de éxito personalizado
+      const mensaje = clientesAMover.length > 0
+        ? `${clientesRuta.length} cliente(s) asignado(s) (${clientesAMover.length} movido(s) de otra ruta)`
+        : `${clientesRuta.length} cliente(s) asignado(s) a la ruta`
+
       toast({
         title: 'Éxito',
-        description: `${clientesRuta.length} cliente(s) asignado(s) a la ruta`,
+        description: mensaje,
       })
+      
       setClientesDialogOpen(false)
       loadRutas(organizationId!)
+      loadClientes() // Recargar clientes para actualizar info de rutas
     } catch (error) {
       console.error('Error asignando clientes:', error)
       toast({
@@ -955,48 +1027,145 @@ export default function RutasPage() {
 
       {/* Dialog: Asignar Clientes */}
       <Dialog open={clientesDialogOpen} onOpenChange={setClientesDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Asignar Clientes a Ruta</DialogTitle>
             <DialogDescription>
               {selectedRuta && `Ruta: ${selectedRuta.nombre_ruta}`}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {todosClientes.map((cliente) => (
-              <label
-                key={cliente.id}
-                className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-gray-50 cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  checked={clientesRuta.includes(cliente.id)}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setClientesRuta([...clientesRuta, cliente.id])
-                    } else {
-                      setClientesRuta(clientesRuta.filter(id => id !== cliente.id))
-                    }
-                  }}
-                  className="h-4 w-4"
-                />
-                <div>
-                  <p className="font-medium">{cliente.nombre}</p>
-                  <p className="text-sm text-gray-500">{cliente.dni}</p>
-                </div>
-              </label>
-            ))}
+
+          {/* Toggle para mostrar clientes asignados */}
+          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-gray-500" />
+              <span className="text-sm font-medium">
+                Clientes Disponibles ({todosClientes.filter(c => !c.tiene_ruta || c.ruta_id_asignada === selectedRuta?.id).length})
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="mostrar-asignados" className="text-sm cursor-pointer">
+                Mostrar ya asignados
+              </Label>
+              <Switch
+                id="mostrar-asignados"
+                checked={mostrarAsignados}
+                onCheckedChange={setMostrarAsignados}
+              />
+            </div>
           </div>
-          <div className="flex justify-between items-center pt-4 border-t">
-            <p className="text-sm text-gray-600">
-              {clientesRuta.length} cliente(s) seleccionado(s)
-            </p>
+
+          {/* Lista de clientes */}
+          <div className="flex-1 space-y-2 overflow-y-auto pr-2">
+            {/* Clientes sin ruta o de esta ruta */}
+            {todosClientes
+              .filter(c => !c.tiene_ruta || c.ruta_id_asignada === selectedRuta?.id)
+              .map((cliente) => (
+                <label
+                  key={cliente.id}
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                    "hover:bg-gray-50",
+                    clientesRuta.includes(cliente.id) && "bg-blue-50 border-blue-200"
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={clientesRuta.includes(cliente.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setClientesRuta([...clientesRuta, cliente.id])
+                      } else {
+                        setClientesRuta(clientesRuta.filter(id => id !== cliente.id))
+                      }
+                    }}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <div className="flex-1">
+                    <p className="font-medium">{cliente.nombre}</p>
+                    <p className="text-sm text-gray-500">{cliente.dni}</p>
+                  </div>
+                  {cliente.tiene_ruta && cliente.ruta_id_asignada === selectedRuta?.id && (
+                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                      ✓ En esta ruta
+                    </Badge>
+                  )}
+                </label>
+              ))}
+
+            {/* Separador si hay clientes asignados y el toggle está activo */}
+            {mostrarAsignados && todosClientes.some(c => c.tiene_ruta && c.ruta_id_asignada !== selectedRuta?.id) && (
+              <div className="flex items-center gap-2 py-2">
+                <div className="flex-1 h-px bg-gray-300"></div>
+                <span className="text-xs font-medium text-gray-500 uppercase">Ya Asignados a Otras Rutas</span>
+                <div className="flex-1 h-px bg-gray-300"></div>
+              </div>
+            )}
+
+            {/* Clientes ya asignados a otras rutas (solo si toggle activo) */}
+            {mostrarAsignados && todosClientes
+              .filter(c => c.tiene_ruta && c.ruta_id_asignada !== selectedRuta?.id)
+              .map((cliente) => (
+                <label
+                  key={cliente.id}
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                    "bg-amber-50 border-amber-200 hover:bg-amber-100",
+                    clientesRuta.includes(cliente.id) && "ring-2 ring-amber-400"
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={clientesRuta.includes(cliente.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setClientesRuta([...clientesRuta, cliente.id])
+                      } else {
+                        setClientesRuta(clientesRuta.filter(id => id !== cliente.id))
+                      }
+                    }}
+                    className="h-4 w-4 rounded border-amber-400"
+                  />
+                  <div className="flex-1">
+                    <p className="font-medium">{cliente.nombre}</p>
+                    <p className="text-sm text-gray-500">{cliente.dni}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                    <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300">
+                      📍 En: {cliente.ruta_asignada}
+                    </Badge>
+                  </div>
+                </label>
+              ))}
+          </div>
+
+          {/* Footer con resumen y botones */}
+          <div className="flex flex-col gap-3 pt-4 border-t">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600">
+                {clientesRuta.length} cliente(s) seleccionado(s)
+              </span>
+              {clientesRuta.some(id => todosClientes.find(c => c.id === id && c.tiene_ruta && c.ruta_id_asignada !== selectedRuta?.id)) && (
+                <span className="text-amber-600 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  Incluye clientes de otras rutas
+                </span>
+              )}
+            </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setClientesDialogOpen(false)}>
+              <Button variant="outline" onClick={() => {
+                setClientesDialogOpen(false)
+                setMostrarAsignados(false) // Reset toggle
+              }} className="flex-1">
                 Cancelar
               </Button>
-              <Button onClick={handleAsignarClientes}>
-                Guardar Asignación
+              <Button 
+                onClick={handleAsignarClientes}
+                className="flex-1"
+                disabled={clientesRuta.length === 0}
+              >
+                Guardar Asignación ({clientesRuta.length})
               </Button>
             </div>
           </div>
