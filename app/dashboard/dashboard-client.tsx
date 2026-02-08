@@ -8,7 +8,7 @@ import { formatCurrency } from '@/lib/utils'
 import { DashboardCharts } from '@/components/dashboard-charts'
 import { useConfigStore } from '@/lib/config-store'
 import { useSubscriptionStore } from '@/lib/subscription-store'
-import { loadUserSubscription, loadUsageLimits } from '@/lib/subscription-helpers'
+import { loadOrganizationSubscription, loadOrganizationUsageLimits } from '@/lib/subscription-helpers'
 import { getClientesInteligente, getPrestamosInteligente, getCuotasSegunRol } from '@/lib/queries-con-roles'
 import { LimitesOrganizacionCard } from '@/components/limites-organizacion-card'
 import Link from 'next/link'
@@ -52,26 +52,27 @@ export function DashboardClient() {
   
   const loadSubscriptionData = async () => {
     try {
+      // Intentar cargar plan de organización primero
       const [subscription, limits] = await Promise.all([
-        loadUserSubscription(),
-        loadUsageLimits(),
+        loadOrganizationSubscription(),
+        loadOrganizationUsageLimits(),
       ])
       
       if (subscription) {
-        console.log('Suscripción cargada:', subscription)
+        console.log('[Dashboard] ✅ Suscripción de organización cargada:', subscription)
         setUserSubscription(subscription)
       } else {
-        console.error('No se pudo cargar la suscripción del usuario')
+        console.error('[Dashboard] No se pudo cargar la suscripción')
       }
       
       if (limits) {
-        console.log('Límites cargados:', limits)
+        console.log('[Dashboard] ✅ Límites de organización cargados:', limits)
         setUsageLimits(limits)
       } else {
-        console.log('No se pudieron cargar los límites')
+        console.log('[Dashboard] No se pudieron cargar los límites')
       }
     } catch (error) {
-      console.error('Error al cargar suscripción:', error)
+      console.error('[Dashboard] Error al cargar suscripción:', error)
     } finally {
       setLoadingPlan(false)
     }

@@ -38,7 +38,7 @@ import { useConfigStore } from '@/lib/config-store'
 import { PrestamoDetailDialog } from '@/components/prestamo-detail-dialog'
 import { LimiteAlcanzadoDialog } from '@/components/limite-alcanzado-dialog'
 import { useSubscriptionStore } from '@/lib/subscription-store'
-import { loadUserSubscription, loadUsageLimits } from '@/lib/subscription-helpers'
+import { loadOrganizationSubscription, loadOrganizationUsageLimits } from '@/lib/subscription-helpers'
 import { getClientesInteligente, getPrestamosInteligente } from '@/lib/queries-con-roles'
 import { 
   calculateLoanDetails, 
@@ -109,8 +109,8 @@ export default function PrestamosPage() {
 
   const loadSubscriptionData = async () => {
     const [subscription, limits] = await Promise.all([
-      loadUserSubscription(),
-      loadUsageLimits(),
+      loadOrganizationSubscription(),
+      loadOrganizationUsageLimits(),
     ])
     if (subscription) setUserSubscription(subscription)
     if (limits) setUsageLimits(limits)

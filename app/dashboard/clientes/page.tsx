@@ -29,7 +29,7 @@ import { ClienteDetailDialog } from '@/components/cliente-detail-dialog'
 import { SearchFilterBar } from '@/components/search-filter-bar'
 import { LimiteAlcanzadoDialog } from '@/components/limite-alcanzado-dialog'
 import { useSubscriptionStore } from '@/lib/subscription-store'
-import { loadUserSubscription, loadUsageLimits } from '@/lib/subscription-helpers'
+import { loadOrganizationSubscription, loadOrganizationUsageLimits } from '@/lib/subscription-helpers'
 import { getClientesInteligente } from '@/lib/queries-con-roles'
 import { useMemo } from 'react'
 
@@ -61,8 +61,8 @@ export default function ClientesPage() {
 
   const loadSubscriptionData = async () => {
     const [subscription, limits] = await Promise.all([
-      loadUserSubscription(),
-      loadUsageLimits(),
+      loadOrganizationSubscription(),
+      loadOrganizationUsageLimits(),
     ])
     if (subscription) setUserSubscription(subscription)
     if (limits) setUsageLimits(limits)

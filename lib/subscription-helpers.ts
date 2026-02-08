@@ -3,6 +3,142 @@
 import { createClient } from '@/lib/supabase/client'
 import type { Plan, UserSubscription, UsageLimits } from './subscription-store'
 
+// NUEVA FUNCIÓN: Cargar suscripción a nivel de organización
+export async function loadOrganizationSubscription(): Promise<UserSubscription | null> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) return null
+
+  try {
+    // Obtener perfil con organización
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('organization_id, role')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile?.organization_id) {
+      console.log('[loadOrganizationSubscription] Usuario sin organización')
+      return loadUserSubscription() // Fallback al sistema anterior
+    }
+
+    // Obtener organización con su plan
+    const { data: organization } = await supabase
+      .from('organizations')
+      .select(`
+        plan_id,
+        subscription_status,
+        subscription_start_date,
+        subscription_end_date,
+        paypal_subscription_id,
+        plan:planes(*)
+      `)
+      .eq('id', profile.organization_id)
+      .single()
+
+    if (!organization) {
+      console.log('[loadOrganizationSubscription] Organización no encontrada')
+      return loadUserSubscription() // Fallback
+    }
+
+    // Si la organización no tiene plan, obtener el plan gratuito
+    if (!organization.plan_id || !organization.plan) {
+      const { data: freePlan } = await supabase
+        .from('planes')
+        .select('*')
+        .eq('slug', 'free')
+        .single()
+
+      if (freePlan) {
+        return {
+          plan_id: freePlan.id,
+          plan: freePlan as Plan,
+          subscription_status: 'active',
+          subscription_period: 'monthly',
+          subscription_start_date: null,
+          subscription_end_date: null,
+          hotmart_subscription_id: null,
+          payment_method: null,
+        }
+      }
+    }
+
+    console.log('[loadOrganizationSubscription] ✅ Plan de organización:', organization.plan)
+
+    // Casting explícito a través de unknown para evitar errores TypeScript
+    return {
+      plan_id: organization.plan_id,
+      plan: organization.plan as unknown as Plan,
+      subscription_status: organization.subscription_status || 'active',
+      subscription_period: 'monthly',
+      subscription_start_date: organization.subscription_start_date,
+      subscription_end_date: organization.subscription_end_date,
+      hotmart_subscription_id: organization.paypal_subscription_id || null,
+      payment_method: null,
+    }
+
+  } catch (error) {
+    console.error('[loadOrganizationSubscription] Error:', error)
+    return loadUserSubscription() // Fallback
+  }
+}
+
+// NUEVA FUNCIÓN: Cargar límites a nivel de organización
+export async function loadOrganizationUsageLimits(): Promise<UsageLimits | null> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) return null
+
+  try {
+    // Obtener límites usando la función RPC
+    const { data: limites, error } = await supabase
+      .rpc('get_limites_organizacion')
+      .single()
+
+    if (error || !limites) {
+      console.log('[loadOrganizationUsageLimits] Error o sin límites:', error)
+      return loadUsageLimits() // Fallback
+    }
+
+    console.log('[loadOrganizationUsageLimits] ✅ Límites de organización:', limites)
+
+    // Casting explícito para TypeScript
+    const limitesData = limites as any
+    const clientesUsados = limitesData.clientes_usados || 0
+    const limiteClientes = limitesData.limite_clientes || 0
+    const prestamosUsados = limitesData.prestamos_usados || 0
+    const limitePrestamos = limitesData.limite_prestamos || 0
+
+    return {
+      clientes: {
+        current: clientesUsados,
+        limit: limiteClientes,
+        canAdd: clientesUsados < limiteClientes,
+      },
+      prestamos: {
+        current: prestamosUsados,
+        limit: limitePrestamos,
+        canAdd: prestamosUsados < limitePrestamos,
+      },
+      usuarios: {
+        current: 0,
+        limit: 999,
+        canAdd: true,
+      },
+    }
+
+  } catch (error) {
+    console.error('[loadOrganizationUsageLimits] Error:', error)
+    return loadUsageLimits() // Fallback
+  }
+}
+
+// ============================================
+// FUNCIONES ANTIGUAS (Fallback para usuarios sin organización)
+// ============================================
+
 export async function loadUserSubscription(): Promise<UserSubscription | null> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -10,7 +146,6 @@ export async function loadUserSubscription(): Promise<UserSubscription | null> {
   if (!user) return null
 
   try {
-    // Primero, obtener el plan gratuito (lo vamos a necesitar)
     const { data: freePlan } = await supabase
       .from('planes')
       .select('*')
@@ -37,7 +172,6 @@ export async function loadUserSubscription(): Promise<UserSubscription | null> {
       .eq('id', user.id)
       .single()
 
-    // CASO 1: No existe el perfil → Crearlo con plan gratuito
     if (profileError || !profile) {
       console.log('⚠️ Perfil no encontrado, creando con plan gratuito...')
       
@@ -54,7 +188,6 @@ export async function loadUserSubscription(): Promise<UserSubscription | null> {
           onConflict: 'id'
         })
 
-      // Retornar el plan gratuito directamente
       return {
         plan_id: freePlan.id,
         plan: freePlan,
@@ -67,7 +200,6 @@ export async function loadUserSubscription(): Promise<UserSubscription | null> {
       }
     }
 
-    // CASO 2: Perfil existe pero NO tiene plan asignado → Asignar plan gratuito
     if (!profile.plan_id || !profile.plan) {
       console.log('⚠️ Perfil sin plan, asignando plan gratuito...')
       
@@ -80,23 +212,22 @@ export async function loadUserSubscription(): Promise<UserSubscription | null> {
         })
         .eq('id', user.id)
 
-      // Retornar el plan gratuito directamente
       return {
         plan_id: freePlan.id,
         plan: freePlan,
         subscription_status: 'active',
         subscription_period: 'monthly',
-        subscription_start_date: profile.subscription_start_date,
-        subscription_end_date: profile.subscription_end_date,
-        hotmart_subscription_id: profile.hotmart_subscription_id,
-        payment_method: profile.payment_method,
+        subscription_start_date: null,
+        subscription_end_date: null,
+        hotmart_subscription_id: null,
+        payment_method: null,
       }
     }
 
-    // CASO 3: Todo está bien → Retornar el perfil
+    // Casting explícito a través de unknown para evitar errores TypeScript
     return {
       plan_id: profile.plan_id,
-      plan: profile.plan as any,
+      plan: profile.plan as unknown as Plan,
       subscription_status: profile.subscription_status || 'active',
       subscription_period: profile.subscription_period || 'monthly',
       subscription_start_date: profile.subscription_start_date,
@@ -104,22 +235,11 @@ export async function loadUserSubscription(): Promise<UserSubscription | null> {
       hotmart_subscription_id: profile.hotmart_subscription_id,
       payment_method: profile.payment_method,
     }
+
   } catch (error) {
-    console.error('❌ Error en loadUserSubscription:', error)
+    console.error('Error loading subscription:', error)
     return null
   }
-}
-
-export async function loadPlans(): Promise<Plan[]> {
-  const supabase = createClient()
-  
-  const { data } = await supabase
-    .from('planes')
-    .select('*')
-    .eq('activo', true)
-    .order('orden', { ascending: true })
-
-  return (data || []) as Plan[]
 }
 
 export async function loadUsageLimits(): Promise<UsageLimits | null> {
@@ -128,154 +248,59 @@ export async function loadUsageLimits(): Promise<UsageLimits | null> {
   
   if (!user) return null
 
-  // Obtener límites del plan
-  const { data: limitsData } = await supabase
-    .rpc('get_user_plan_limits', { user_uuid: user.id })
-    .single()
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select(`
+        plan:planes(limite_clientes, limite_prestamos)
+      `)
+      .eq('id', user.id)
+      .single()
 
-  if (!limitsData) return null
+    if (!profile || !profile.plan) {
+      return {
+        clientes: { current: 0, limit: 0, canAdd: true },
+        prestamos: { current: 0, limit: 0, canAdd: true },
+        usuarios: { current: 0, limit: 999, canAdd: true },
+      }
+    }
 
-  // Cast explícito del tipo de datos
-  const limits = limitsData as any
+    const [clientesCount, prestamosCount] = await Promise.all([
+      supabase
+        .from('clientes')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id),
+      supabase
+        .from('prestamos')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+    ])
 
-  // Contar clientes actuales
-  const { count: clientesCount } = await supabase
-    .from('clientes')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', user.id)
+    // Casting explícito para TypeScript
+    const planData = profile.plan as any
+    const limiteClientes = planData.limite_clientes || 0
+    const limitePrestamos = planData.limite_prestamos || 0
 
-  // Contar préstamos activos
-  const { count: prestamosCount } = await supabase
-    .from('prestamos')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', user.id)
-    .eq('estado', 'activo')
+    return {
+      clientes: {
+        current: clientesCount.count || 0,
+        limit: limiteClientes,
+        canAdd: (clientesCount.count || 0) < limiteClientes,
+      },
+      prestamos: {
+        current: prestamosCount.count || 0,
+        limit: limitePrestamos,
+        canAdd: (prestamosCount.count || 0) < limitePrestamos,
+      },
+      usuarios: {
+        current: 0,
+        limit: 999,
+        canAdd: true,
+      },
+    }
 
-  const limiteClientes = limits.limite_clientes || 0
-  const limitePrestamos = limits.limite_prestamos || 0
-
-  return {
-    clientes: {
-      current: clientesCount || 0,
-      limit: limiteClientes,
-      canAdd: limiteClientes === 0 || (clientesCount || 0) < limiteClientes,
-    },
-    prestamos: {
-      current: prestamosCount || 0,
-      limit: limitePrestamos,
-      canAdd: limitePrestamos === 0 || (prestamosCount || 0) < limitePrestamos,
-    },
-    usuarios: {
-      current: 1,
-      limit: limits.limite_usuarios || 1,
-      canAdd: false, // Por ahora solo soportamos 1 usuario
-    },
+  } catch (error) {
+    console.error('Error loading usage limits:', error)
+    return null
   }
-}
-
-// NOTA: Esta función ya no se usa con Hotmart (se activa vía Webhook)
-// La mantenemos simplificada por si se requiere activación manual/admin
-export async function upgradePlan(
-  planId: string, 
-  period: 'monthly' | 'yearly'
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) {
-    return { success: false, error: 'Usuario no autenticado' }
-  }
-
-  const updateData: any = {
-    plan_id: planId,
-    subscription_period: period,
-    subscription_status: 'active',
-    subscription_start_date: new Date().toISOString(),
-    payment_method: 'manual_upgrade', // Cambiado de 'paypal'
-  }
-
-  const { error } = await supabase
-    .from('profiles')
-    .update(updateData)
-    .eq('id', user.id)
-
-  if (error) {
-    return { success: false, error: error.message }
-  }
-
-  return { success: true }
-}
-
-export async function cancelSubscription(): Promise<{ success: boolean; error?: string }> {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) {
-    return { success: false, error: 'Usuario no autenticado' }
-  }
-
-  // Obtener el plan gratuito
-  const { data: freePlan } = await supabase
-    .from('planes')
-    .select('id')
-    .eq('slug', 'free')
-    .single()
-
-  if (!freePlan) {
-    return { success: false, error: 'No se encontró el plan gratuito' }
-  }
-
-  const { error } = await supabase
-    .from('profiles')
-    .update({
-      plan_id: freePlan.id,
-      subscription_status: 'cancelled',
-      subscription_end_date: new Date().toISOString(),
-    })
-    .eq('id', user.id)
-
-  if (error) {
-    return { success: false, error: error.message }
-  }
-
-  return { success: true }
-}
-
-export function getPlanBenefits(slug: string): string[] {
-  const benefits: Record<string, string[]> = {
-    free: [
-      'Hasta 5 clientes',
-      'Hasta 5 préstamos activos',
-      'Reportes básicos',
-      'Soporte por email',
-    ],
-    pro: [
-      'Hasta 50 clientes',
-      'Hasta 50 préstamos activos',
-      'Historial ilimitado',
-      'Exportación PDF ilimitada',
-      'Reportes avanzados',
-      'Soporte prioritario (24h)',
-    ],
-    business: [
-      'Hasta 200 clientes',
-      'Hasta 200 préstamos activos',
-      'Hasta 3 usuarios',
-      'Todo del plan Profesional',
-      'Recordatorios automáticos',
-      'Roles y permisos',
-      'Soporte prioritario (12h)',
-    ],
-    enterprise: [
-      'Clientes ILIMITADOS',
-      'Préstamos ILIMITADOS',
-      'Usuarios ILIMITADOS',
-      'Todo del plan Business',
-      'Reportes personalizados',
-      'Soporte prioritario 24/7',
-      'Capacitación personalizada',
-    ],
-  }
-
-  return benefits[slug] || []
 }
