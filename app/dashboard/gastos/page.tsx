@@ -209,77 +209,166 @@ export default function GastosPage() {
 
   const loadGastos = async (orgId: string) => {
     setLoading(true)
+    console.log('[loadGastos] Iniciando carga de gastos para orgId:', orgId)
 
-    let query = supabase
-      .from('gastos')
-      .select(`
-        *,
-        cobrador:profiles!gastos_cobrador_id_fkey(id, nombre_completo, email),
-        ruta:rutas(id, nombre_ruta, color),
-        aprobador:profiles!gastos_aprobado_por_fkey(nombre_completo)
-      `)
-      .eq('organization_id', orgId)
+    try {
+      // Query simplificado sin JOINs complejos
+      let query = supabase
+        .from('gastos')
+        .select('*')
+        .eq('organization_id', orgId)
 
-    // Aplicar filtros
-    if (filtroFecha) {
-      query = query.eq('fecha_gasto', filtroFecha)
-    }
-    if (filtroCobrador !== 'todos') {
-      query = query.eq('cobrador_id', filtroCobrador)
-    }
-    if (filtroRuta !== 'todos') {
-      query = query.eq('ruta_id', filtroRuta)
-    }
+      // Aplicar filtros
+      if (filtroFecha) {
+        query = query.eq('fecha_gasto', filtroFecha)
+      }
+      if (filtroCobrador !== 'todos') {
+        query = query.eq('cobrador_id', filtroCobrador)
+      }
+      if (filtroRuta !== 'todos') {
+        query = query.eq('ruta_id', filtroRuta)
+      }
 
-    query = query.order('fecha_gasto', { ascending: false })
+      query = query.order('fecha_gasto', { ascending: false })
 
-    const { data, error } = await query
+      const { data: gastosData, error: gastosError } = await query
 
-    if (error) {
-      console.error('Error cargando gastos:', error)
+      if (gastosError) {
+        console.error('[loadGastos] Error en query de gastos:', gastosError)
+        throw gastosError
+      }
+
+      console.log('[loadGastos] Gastos básicos obtenidos:', gastosData?.length || 0)
+
+      if (!gastosData || gastosData.length === 0) {
+        setGastos([])
+        setLoading(false)
+        return
+      }
+
+      // Cargar datos relacionados por separado
+      const cobradorIds = [...new Set(gastosData.map(g => g.cobrador_id))]
+      const rutaIds = [...new Set(gastosData.map(g => g.ruta_id).filter(Boolean))]
+
+      console.log('[loadGastos] Cargando datos relacionados...', { cobradorIds: cobradorIds.length, rutaIds: rutaIds.length })
+
+      // Cargar cobradores
+      const { data: cobradoresData } = await supabase
+        .rpc('get_usuarios_organizacion')
+
+      // Cargar rutas
+      const { data: rutasData } = await supabase
+        .from('rutas')
+        .select('id, nombre_ruta, color')
+        .in('id', rutaIds)
+
+      console.log('[loadGastos] Datos relacionados obtenidos', { 
+        cobradores: cobradoresData?.length || 0,
+        rutas: rutasData?.length || 0
+      })
+
+      // Enriquecer gastos con datos relacionados
+      const gastosEnriquecidos = gastosData.map(gasto => {
+        const cobrador = (cobradoresData || []).find((c: any) => c.id === gasto.cobrador_id)
+        const ruta = (rutasData || []).find(r => r.id === gasto.ruta_id)
+        const aprobador = (cobradoresData || []).find((c: any) => c.id === gasto.aprobado_por)
+
+        return {
+          ...gasto,
+          cobrador: cobrador ? {
+            id: cobrador.id,
+            nombre_completo: cobrador.nombre_completo,
+            email: cobrador.email
+          } : null,
+          ruta: ruta || null,
+          aprobador: aprobador ? {
+            nombre_completo: aprobador.nombre_completo
+          } : null
+        }
+      })
+
+      console.log('[loadGastos] Gastos enriquecidos:', gastosEnriquecidos.length)
+      setGastos(gastosEnriquecidos)
+
+    } catch (error: any) {
+      console.error('[loadGastos] Error completo:', error)
       toast({
         title: 'Error',
         description: 'No se pudieron cargar los gastos',
         variant: 'destructive',
       })
-    } else {
-      setGastos(data || [])
+      setGastos([])
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const loadGastosCobrador = async (cobradorId: string) => {
     setLoading(true)
+    console.log('[loadGastosCobrador] Iniciando carga de gastos para cobrador:', cobradorId)
 
-    let query = supabase
-      .from('gastos')
-      .select(`
-        *,
-        ruta:rutas(id, nombre_ruta, color),
-        aprobador:profiles!gastos_aprobado_por_fkey(nombre_completo)
-      `)
-      .eq('cobrador_id', cobradorId)
+    try {
+      // Query simplificado sin JOINs
+      let query = supabase
+        .from('gastos')
+        .select('*')
+        .eq('cobrador_id', cobradorId)
 
-    // Aplicar filtro de fecha
-    if (filtroFecha) {
-      query = query.eq('fecha_gasto', filtroFecha)
-    }
+      // Aplicar filtro de fecha
+      if (filtroFecha) {
+        query = query.eq('fecha_gasto', filtroFecha)
+      }
 
-    query = query.order('fecha_gasto', { ascending: false })
+      query = query.order('fecha_gasto', { ascending: false })
 
-    const { data, error } = await query
+      const { data: gastosData, error: gastosError } = await query
 
-    if (error) {
-      console.error('Error cargando gastos:', error)
+      if (gastosError) {
+        console.error('[loadGastosCobrador] Error en query:', gastosError)
+        throw gastosError
+      }
+
+      console.log('[loadGastosCobrador] Gastos obtenidos:', gastosData?.length || 0)
+
+      if (!gastosData || gastosData.length === 0) {
+        setGastos([])
+        setLoading(false)
+        return
+      }
+
+      // Cargar rutas relacionadas
+      const rutaIds = [...new Set(gastosData.map(g => g.ruta_id).filter(Boolean))]
+      
+      console.log('[loadGastosCobrador] Cargando rutas:', rutaIds.length)
+
+      const { data: rutasData } = await supabase
+        .from('rutas')
+        .select('id, nombre_ruta, color')
+        .in('id', rutaIds)
+
+      console.log('[loadGastosCobrador] Rutas obtenidas:', rutasData?.length || 0)
+
+      // Enriquecer gastos
+      const gastosEnriquecidos = gastosData.map(gasto => ({
+        ...gasto,
+        ruta: (rutasData || []).find(r => r.id === gasto.ruta_id) || null,
+        aprobador: null // No necesario para cobradores
+      }))
+
+      console.log('[loadGastosCobrador] Gastos enriquecidos:', gastosEnriquecidos.length)
+      setGastos(gastosEnriquecidos)
+
+    } catch (error: any) {
+      console.error('[loadGastosCobrador] Error completo:', error)
       toast({
         title: 'Error',
         description: 'No se pudieron cargar tus gastos',
         variant: 'destructive',
       })
-    } else {
-      setGastos(data || [])
+      setGastos([])
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
