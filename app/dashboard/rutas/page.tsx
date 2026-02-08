@@ -43,6 +43,7 @@ import { useStore, type Ruta, type Profile, type Cliente } from '@/lib/store'
 import { formatCurrency } from '@/lib/utils'
 import { useConfigStore } from '@/lib/config-store'
 import { Textarea } from '@/components/ui/textarea'
+import { getClientesInteligente } from '@/lib/queries-con-roles'
 
 export default function RutasPage() {
   const [open, setOpen] = useState(false)
@@ -170,19 +171,21 @@ export default function RutasPage() {
     if (!organizationId) return
 
     try {
-      // Obtener todos los clientes de la organización
-      const { data: clientesData } = await supabase
-        .from('clientes')
-        .select(`
-          *,
-          user:profiles!clientes_user_id_fkey(organization_id)
-        `)
-        .order('nombre', { ascending: true })
+      console.log('[loadClientes] Cargando clientes de la organización...')
+      
+      // Obtener todos los clientes de la organización usando función inteligente
+      const clientesData = await getClientesInteligente()
+      
+      if (!clientesData) {
+        console.log('[loadClientes] No se obtuvieron clientes')
+        setTodosClientes([])
+        return
+      }
 
-      if (!clientesData) return
+      console.log('[loadClientes] Clientes obtenidos:', clientesData.length)
 
       // Obtener asignaciones activas de rutas
-      const { data: asignaciones } = await supabase
+      const { data: asignaciones, error: asigError } = await supabase
         .from('ruta_clientes')
         .select(`
           cliente_id,
@@ -192,23 +195,32 @@ export default function RutasPage() {
         `)
         .eq('activo', true)
 
+      if (asigError) {
+        console.error('[loadClientes] Error cargando asignaciones:', asigError)
+      }
+
+      console.log('[loadClientes] Asignaciones obtenidas:', asignaciones?.length || 0)
+
       // Mapear clientes con info de ruta
-      const clientesConInfo = clientesData
-        .filter(c => c.user?.organization_id === organizationId)
-        .map(cliente => {
-          const asignacion = asignaciones?.find(a => a.cliente_id === cliente.id)
-          const rutaInfo = asignacion?.ruta as any
-          return {
-            ...cliente,
-            ruta_asignada: rutaInfo?.nombre_ruta || null,
-            ruta_id_asignada: asignacion?.ruta_id || null,
-            tiene_ruta: !!asignacion
-          }
-        })
+      const clientesConInfo = clientesData.map(cliente => {
+        const asignacion = asignaciones?.find(a => a.cliente_id === cliente.id)
+        const rutaInfo = asignacion?.ruta as any
+        return {
+          ...cliente,
+          ruta_asignada: rutaInfo?.nombre_ruta || null,
+          ruta_id_asignada: asignacion?.ruta_id || null,
+          tiene_ruta: !!asignacion
+        }
+      })
+
+      console.log('[loadClientes] Clientes con info procesados:', clientesConInfo.length)
+      console.log('[loadClientes] Clientes sin ruta:', clientesConInfo.filter(c => !c.tiene_ruta).length)
+      console.log('[loadClientes] Clientes con ruta:', clientesConInfo.filter(c => c.tiene_ruta).length)
 
       setTodosClientes(clientesConInfo)
     } catch (error) {
-      console.error('Error cargando clientes:', error)
+      console.error('[loadClientes] Error:', error)
+      setTodosClientes([])
     }
   }
 
@@ -640,7 +652,13 @@ export default function RutasPage() {
 
   const handleOpenClientesDialog = async (ruta: Ruta) => {
     setSelectedRuta(ruta)
+    
+    // Cargar todos los clientes con info de rutas
+    await loadClientes()
+    
+    // Cargar los clientes ya asignados a esta ruta específica
     await loadClientesRuta(ruta.id)
+    
     setClientesDialogOpen(true)
   }
 
@@ -1026,7 +1044,12 @@ export default function RutasPage() {
       </Dialog>
 
       {/* Dialog: Asignar Clientes */}
-      <Dialog open={clientesDialogOpen} onOpenChange={setClientesDialogOpen}>
+      <Dialog open={clientesDialogOpen} onOpenChange={(open) => {
+        setClientesDialogOpen(open)
+        if (!open) {
+          setMostrarAsignados(false) // Reset toggle al cerrar
+        }
+      }}>
         <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Asignar Clientes a Ruta</DialogTitle>
