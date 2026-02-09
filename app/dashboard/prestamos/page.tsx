@@ -37,6 +37,7 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { useConfigStore } from '@/lib/config-store'
 import { PrestamoDetailDialog } from '@/components/prestamo-detail-dialog'
 import { LimiteAlcanzadoDialog } from '@/components/limite-alcanzado-dialog'
+import { PrestamoCardMobile } from '@/components/PrestamoCardMobile'
 import { useSubscriptionStore } from '@/lib/subscription-store'
 import { loadOrganizationSubscription, loadOrganizationUsageLimits } from '@/lib/subscription-helpers'
 import { getClientesInteligente, getPrestamosInteligente } from '@/lib/queries-con-roles'
@@ -788,22 +789,22 @@ export default function PrestamosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Préstamos</h1>
-          <p className="text-gray-500 mt-1">Gestiona los créditos otorgados</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Préstamos</h1>
+          <p className="text-gray-500 mt-1 text-sm md:text-base">Gestiona los créditos otorgados</p>
         </div>
         <Dialog open={open} onOpenChange={(isOpen) => {
           setOpen(isOpen)
           if (!isOpen) resetForm()
         }}>
           <DialogTrigger asChild>
-            <Button disabled={clientes.length === 0} onClick={handleOpenDialog}>
+            <Button disabled={clientes.length === 0} onClick={handleOpenDialog} className="w-full sm:w-auto">
               <Plus className="mr-2 h-4 w-4" />
               Nuevo Préstamo
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[95vh] flex flex-col p-0">
+          <DialogContent className="max-w-2xl w-[95vw] max-h-[95vh] flex flex-col p-0">
             <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-4 border-b">
               <DialogTitle>{editingPrestamo ? 'Editar Préstamo' : 'Nuevo Préstamo'}</DialogTitle>
               <DialogDescription>
@@ -1463,21 +1464,23 @@ export default function PrestamosPage() {
               No hay préstamos registrados aún
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Monto Prestado</TableHead>
-                  <TableHead>Interés</TableHead>
-                  <TableHead>Monto Total</TableHead>
-                  <TableHead>Cuotas</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Frecuencia</TableHead>
-                  <TableHead>Fecha Inicio</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
+            <>
+              {/* Vista Desktop */}
+              <Table className="hidden md:table">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Monto Prestado</TableHead>
+                    <TableHead>Interés</TableHead>
+                    <TableHead>Monto Total</TableHead>
+                    <TableHead>Cuotas</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Frecuencia</TableHead>
+                    <TableHead>Fecha Inicio</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
               <TableBody>
                 {prestamos.map((prestamo) => (
                   <TableRow key={prestamo.id}>
@@ -1560,6 +1563,24 @@ export default function PrestamosPage() {
                 ))}
               </TableBody>
             </Table>
+
+            {/* Vista Móvil */}
+            <div className="md:hidden space-y-3">
+              {prestamos.map((prestamo) => (
+                <PrestamoCardMobile
+                  key={prestamo.id}
+                  prestamo={prestamo}
+                  currency={config.currency}
+                  onView={() => {
+                    setSelectedPrestamo(prestamo)
+                    setDetailDialogOpen(true)
+                  }}
+                  onEdit={() => handleEditPrestamo(prestamo)}
+                  onDelete={() => handleDelete(prestamo.id)}
+                />
+              ))}
+            </div>
+          </>
           )}
         </CardContent>
       </Card>

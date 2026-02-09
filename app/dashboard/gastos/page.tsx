@@ -32,6 +32,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/use-toast'
+import { GastoCardMobile } from '@/components/GastoCardMobile'
 import { 
   Plus, 
   Pencil, 
@@ -572,12 +573,12 @@ export default function GastosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
             {userRole === 'admin' ? 'Gestión de Gastos' : 'Mis Gastos'}
           </h1>
-          <p className="text-gray-500 mt-1">
+          <p className="text-gray-500 mt-1 text-sm md:text-base">
             {userRole === 'admin' 
               ? 'Administra los gastos operativos de los cobradores'
               : 'Registra tus gastos diarios (gasolina, comida, etc.)'}
@@ -588,12 +589,12 @@ export default function GastosPage() {
           if (!isOpen) resetForm()
         }}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className="w-full sm:w-auto">
               <Plus className="mr-2 h-4 w-4" />
               {userRole === 'admin' ? 'Nuevo Gasto' : 'Registrar Gasto'}
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md">
+          <DialogContent className="sm:max-w-md max-w-[95vw] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {editingGasto ? 'Editar Gasto' : 'Registrar Nuevo Gasto'}
@@ -871,19 +872,21 @@ export default function GastosPage() {
               <p className="text-gray-500">No hay gastos registrados para esta fecha</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Fecha</TableHead>
-                  {userRole === 'admin' && <TableHead>Cobrador</TableHead>}
-                  <TableHead>Ruta</TableHead>
-                  <TableHead>Categoría</TableHead>
-                  <TableHead>Descripción</TableHead>
-                  <TableHead>Monto</TableHead>
-                  {userRole === 'admin' && <TableHead>Estado</TableHead>}
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
+            <>
+              {/* Vista Desktop */}
+              <Table className="hidden md:table">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Fecha</TableHead>
+                    {userRole === 'admin' && <TableHead>Cobrador</TableHead>}
+                    <TableHead>Ruta</TableHead>
+                    <TableHead>Categoría</TableHead>
+                    <TableHead>Descripción</TableHead>
+                    <TableHead>Monto</TableHead>
+                    {userRole === 'admin' && <TableHead>Estado</TableHead>}
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
               <TableBody>
                 {gastos.map((gasto) => (
                   <TableRow key={gasto.id}>
@@ -969,6 +972,26 @@ export default function GastosPage() {
                 ))}
               </TableBody>
             </Table>
+
+            {/* Vista Móvil */}
+            <div className="md:hidden space-y-3">
+              {gastos.map((gasto) => (
+                <GastoCardMobile
+                  key={gasto.id}
+                  gasto={{
+                    ...gasto,
+                    estado: gasto.aprobado ? 'aprobado' : 'pendiente',
+                    cobrador: gasto.cobrador ? { nombre: gasto.cobrador.nombre_completo || gasto.cobrador.email || 'N/A' } : null,
+                    revisor: gasto.revisor ? { nombre: gasto.revisor.nombre_completo || gasto.revisor.email || 'N/A' } : null
+                  }}
+                  currency={config.currency}
+                  userRole={userRole}
+                  onEdit={() => handleEdit(gasto)}
+                  onDelete={() => handleDelete(gasto)}
+                />
+              ))}
+            </div>
+          </>
           )}
         </CardContent>
       </Card>

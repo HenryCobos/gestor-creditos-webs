@@ -28,6 +28,7 @@ import { useStore, type Cliente } from '@/lib/store'
 import { ClienteDetailDialog } from '@/components/cliente-detail-dialog'
 import { SearchFilterBar } from '@/components/search-filter-bar'
 import { LimiteAlcanzadoDialog } from '@/components/limite-alcanzado-dialog'
+import { ClienteCardMobile } from '@/components/ClienteCardMobile'
 import { useSubscriptionStore } from '@/lib/subscription-store'
 import { loadOrganizationSubscription, loadOrganizationUsageLimits } from '@/lib/subscription-helpers'
 import { getClientesInteligente } from '@/lib/queries-con-roles'
@@ -226,22 +227,22 @@ export default function ClientesPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Clientes</h1>
-            <p className="text-muted-foreground mt-1">Gestiona tu base de clientes</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground">Clientes</h1>
+            <p className="text-muted-foreground mt-1 text-sm md:text-base">Gestiona tu base de clientes</p>
           </div>
           <Dialog open={open} onOpenChange={(isOpen) => {
           setOpen(isOpen)
           if (!isOpen) resetForm()
         }}>
           <DialogTrigger asChild>
-            <Button onClick={handleOpenDialog}>
+            <Button onClick={handleOpenDialog} className="w-full sm:w-auto">
               <Plus className="mr-2 h-4 w-4" />
               Nuevo Cliente
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="sm:max-w-md max-w-[95vw] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {editingCliente ? 'Editar Cliente' : 'Nuevo Cliente'}
@@ -371,16 +372,18 @@ export default function ClientesPage() {
               No se encontraron clientes con "{searchTerm}"
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nombre</TableHead>
-                  <TableHead>DNI</TableHead>
-                  <TableHead>Teléfono</TableHead>
-                  <TableHead>Dirección</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
+            <>
+              {/* Vista Desktop */}
+              <Table className="hidden md:table">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nombre</TableHead>
+                    <TableHead>DNI</TableHead>
+                    <TableHead>Teléfono</TableHead>
+                    <TableHead>Dirección</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
               <TableBody>
                 {filteredClientes.map((cliente) => (
                   <TableRow key={cliente.id}>
@@ -423,6 +426,20 @@ export default function ClientesPage() {
                 ))}
               </TableBody>
             </Table>
+
+            {/* Vista Móvil */}
+            <div className="md:hidden space-y-3">
+              {filteredClientes.map((cliente) => (
+                <ClienteCardMobile
+                  key={cliente.id}
+                  cliente={cliente}
+                  currency={config?.currency || 'PEN'}
+                  onEdit={() => handleEdit(cliente)}
+                  onDelete={() => handleDelete(cliente.id)}
+                />
+              ))}
+            </div>
+          </>
           )}
         </CardContent>
       </Card>

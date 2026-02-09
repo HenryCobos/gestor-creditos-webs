@@ -43,6 +43,7 @@ import {
   Calendar
 } from 'lucide-react'
 import { useStore, type ArqueoCaja } from '@/lib/store'
+import { ArqueoCardMobile } from '@/components/ArqueoCardMobile'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useConfigStore } from '@/lib/config-store'
 import { format } from 'date-fns'
@@ -566,12 +567,12 @@ export default function CajaPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
             {userRole === 'admin' ? 'Arqueos de Caja' : 'Mi Arqueo de Caja'}
           </h1>
-          <p className="text-gray-500 mt-1">
+          <p className="text-gray-500 mt-1 text-sm md:text-base">
             {userRole === 'admin' 
               ? 'Revisa los arqueos diarios de cada ruta'
               : 'Registra tu arqueo de caja diario'}
@@ -582,12 +583,12 @@ export default function CajaPage() {
           if (!isOpen) resetForm()
         }}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className="w-full sm:w-auto">
               <Calculator className="mr-2 h-4 w-4" />
               Nuevo Arqueo
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-xl">
+          <DialogContent className="sm:max-w-xl max-w-[95vw] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Registrar Arqueo de Caja</DialogTitle>
               <DialogDescription>
@@ -869,7 +870,8 @@ export default function CajaPage() {
               <p className="text-gray-500">No hay arqueos registrados</p>
             </div>
           ) : (
-            <Table>
+            {/* Vista Desktop */}
+            <Table className="hidden md:table">
               <TableHeader>
                 <TableRow>
                   <TableHead>Fecha</TableHead>
@@ -954,13 +956,27 @@ export default function CajaPage() {
                 ))}
               </TableBody>
             </Table>
+
+            {/* Vista Móvil */}
+            <div className="md:hidden space-y-3">
+              {arqueos.map((arqueo) => (
+                <ArqueoCardMobile
+                  key={arqueo.id}
+                  arqueo={arqueo}
+                  currency={config.currency}
+                  userRole={userRole}
+                  onView={() => handleVerDetalle(arqueo)}
+                />
+              ))}
+            </div>
+          </>
           )}
         </CardContent>
       </Card>
 
       {/* Dialog: Detalle del Arqueo */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="sm:max-w-md max-w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Detalle del Arqueo</DialogTitle>
           </DialogHeader>
