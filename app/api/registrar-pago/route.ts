@@ -77,7 +77,7 @@ export async function POST(request: Request) {
     // 5. Obtener información del préstamo para validar permisos
     const { data: prestamo, error: prestamoError } = await supabaseAdmin
       .from('prestamos')
-      .select('id, user_id, organization_id, ruta_id')
+      .select('id, user_id, ruta_id')
       .eq('id', prestamo_id)
       .maybeSingle()
 
@@ -100,42 +100,39 @@ export async function POST(request: Request) {
     console.log('[API registrar-pago] Préstamo encontrado:', {
       id: prestamo.id,
       user_id: prestamo.user_id,
-      organization_id: prestamo.organization_id,
       ruta_id: prestamo.ruta_id
     })
 
     // 6. Verificar que el préstamo pertenece a la organización del usuario
-    // Si el préstamo no tiene organization_id (préstamos antiguos), verificar por user_id
-    if (prestamo.organization_id) {
-      // Préstamo tiene organization_id: verificar que coincide
-      if (prestamo.organization_id !== profile.organization_id) {
-        console.error('[API registrar-pago] Organización no coincide:', {
-          prestamo_org: prestamo.organization_id,
-          user_org: profile.organization_id
-        })
-        return NextResponse.json(
-          { error: 'No tienes permiso para registrar pagos en este préstamo' },
-          { status: 403 }
-        )
-      }
-    } else {
-      // Préstamo sin organization_id (antiguo): verificar que el dueño pertenece a la misma organización
-      console.log('[API registrar-pago] Préstamo sin organization_id, verificando por dueño...')
-      
-      const { data: prestamoOwnerProfile } = await supabaseAdmin
-        .from('profiles')
-        .select('organization_id')
-        .eq('id', prestamo.user_id)
-        .single()
+    // Como prestamos NO tiene organization_id, verificamos por el dueño del préstamo
+    console.log('[API registrar-pago] Verificando organización del dueño del préstamo...')
+    
+    const { data: prestamoOwnerProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('organization_id')
+      .eq('id', prestamo.user_id)
+      .single()
 
-      if (prestamoOwnerProfile?.organization_id !== profile.organization_id) {
-        console.error('[API registrar-pago] El dueño del préstamo pertenece a otra organización')
-        return NextResponse.json(
-          { error: 'No tienes permiso para registrar pagos en este préstamo' },
-          { status: 403 }
-        )
-      }
+    if (!prestamoOwnerProfile?.organization_id) {
+      console.error('[API registrar-pago] Dueño del préstamo sin organización')
+      return NextResponse.json(
+        { error: 'El préstamo no está asociado a ninguna organización' },
+        { status: 403 }
+      )
     }
+
+    if (prestamoOwnerProfile.organization_id !== profile.organization_id) {
+      console.error('[API registrar-pago] Organizaciones no coinciden:', {
+        prestamo_owner_org: prestamoOwnerProfile.organization_id,
+        user_org: profile.organization_id
+      })
+      return NextResponse.json(
+        { error: 'No tienes permiso para registrar pagos en este préstamo' },
+        { status: 403 }
+      )
+    }
+
+    console.log('[API registrar-pago] ✅ Validación de organización exitosa')
 
     // 7. Obtener rol del usuario
     const { data: roleData } = await supabaseAdmin
