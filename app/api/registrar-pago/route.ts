@@ -40,8 +40,20 @@ export async function POST(request: Request) {
       notas
     } = body
 
+    console.log('[API registrar-pago] Datos recibidos:', {
+      cuota_id,
+      prestamo_id,
+      monto_pagado,
+      metodo_pago: metodo_pago || 'sin método'
+    })
+
     // 3. Validar datos requeridos
     if (!cuota_id || !prestamo_id || !monto_pagado || monto_pagado <= 0) {
+      console.error('[API registrar-pago] Datos inválidos:', {
+        cuota_id,
+        prestamo_id,
+        monto_pagado
+      })
       return NextResponse.json(
         { error: 'Datos inválidos' },
         { status: 400 }
@@ -63,25 +75,66 @@ export async function POST(request: Request) {
     }
 
     // 5. Obtener información del préstamo para validar permisos
-    const { data: prestamo } = await supabaseAdmin
+    const { data: prestamo, error: prestamoError } = await supabaseAdmin
       .from('prestamos')
       .select('id, user_id, organization_id, ruta_id')
       .eq('id', prestamo_id)
-      .single()
+      .maybeSingle()
+
+    if (prestamoError) {
+      console.error('[API registrar-pago] Error al buscar préstamo:', prestamoError)
+      return NextResponse.json(
+        { error: 'Error al buscar préstamo', details: prestamoError.message },
+        { status: 500 }
+      )
+    }
 
     if (!prestamo) {
+      console.error('[API registrar-pago] Préstamo no encontrado con ID:', prestamo_id)
       return NextResponse.json(
         { error: 'Préstamo no encontrado' },
         { status: 404 }
       )
     }
 
+    console.log('[API registrar-pago] Préstamo encontrado:', {
+      id: prestamo.id,
+      user_id: prestamo.user_id,
+      organization_id: prestamo.organization_id,
+      ruta_id: prestamo.ruta_id
+    })
+
     // 6. Verificar que el préstamo pertenece a la organización del usuario
-    if (prestamo.organization_id !== profile.organization_id) {
-      return NextResponse.json(
-        { error: 'No tienes permiso para registrar pagos en este préstamo' },
-        { status: 403 }
-      )
+    // Si el préstamo no tiene organization_id (préstamos antiguos), verificar por user_id
+    if (prestamo.organization_id) {
+      // Préstamo tiene organization_id: verificar que coincide
+      if (prestamo.organization_id !== profile.organization_id) {
+        console.error('[API registrar-pago] Organización no coincide:', {
+          prestamo_org: prestamo.organization_id,
+          user_org: profile.organization_id
+        })
+        return NextResponse.json(
+          { error: 'No tienes permiso para registrar pagos en este préstamo' },
+          { status: 403 }
+        )
+      }
+    } else {
+      // Préstamo sin organization_id (antiguo): verificar que el dueño pertenece a la misma organización
+      console.log('[API registrar-pago] Préstamo sin organization_id, verificando por dueño...')
+      
+      const { data: prestamoOwnerProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('organization_id')
+        .eq('id', prestamo.user_id)
+        .single()
+
+      if (prestamoOwnerProfile?.organization_id !== profile.organization_id) {
+        console.error('[API registrar-pago] El dueño del préstamo pertenece a otra organización')
+        return NextResponse.json(
+          { error: 'No tienes permiso para registrar pagos en este préstamo' },
+          { status: 403 }
+        )
+      }
     }
 
     // 7. Obtener rol del usuario
