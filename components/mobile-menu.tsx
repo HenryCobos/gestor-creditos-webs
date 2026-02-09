@@ -21,19 +21,25 @@ import {
   Settings,
   X,
   PlayCircle,
-  Package
+  Package,
+  MapPin,
+  UserCog,
+  Receipt,
+  Calculator
 } from 'lucide-react'
 
 interface MobileMenuProps {
   user: any
   planName: string
   onSignOut: () => Promise<void>
+  userRole?: string
 }
 
-export function MobileMenu({ user, planName, onSignOut }: MobileMenuProps) {
+export function MobileMenu({ user, planName, onSignOut, userRole = 'admin' }: MobileMenuProps) {
   const [open, setOpen] = useState(false)
 
-  const menuItems = [
+  // Menú común para todos
+  const commonMenuItems = [
     {
       href: '/dashboard',
       icon: Home,
@@ -42,32 +48,65 @@ export function MobileMenu({ user, planName, onSignOut }: MobileMenuProps) {
     {
       href: '/dashboard/clientes',
       icon: Users,
-      label: 'Clientes'
+      label: userRole === 'cobrador' ? 'Mis Clientes' : 'Clientes'
     },
     {
       href: '/dashboard/prestamos',
       icon: DollarSign,
-      label: 'Préstamos'
+      label: userRole === 'cobrador' ? 'Mis Préstamos' : 'Préstamos'
     },
+    {
+      href: '/dashboard/cuotas',
+      icon: CreditCard,
+      label: userRole === 'cobrador' ? 'Mis Cuotas' : 'Cuotas'
+    }
+  ]
+
+  // Menú solo para admin
+  const adminMenuItems = [
     {
       href: '/dashboard/productos',
       icon: Package,
       label: 'Productos'
     },
     {
-      href: '/dashboard/cuotas',
-      icon: CreditCard,
-      label: 'Cuotas'
+      href: '/dashboard/usuarios',
+      icon: UserCog,
+      label: 'Usuarios'
+    },
+    {
+      href: '/dashboard/rutas',
+      icon: MapPin,
+      label: 'Rutas'
     },
     {
       href: '/dashboard/reportes',
       icon: FileText,
       label: 'Reportes'
+    }
+  ]
+
+  // Gastos y Caja para todos con organización
+  const operacionesMenuItems = [
+    {
+      href: '/dashboard/gastos',
+      icon: Receipt,
+      label: userRole === 'cobrador' ? 'Mis Gastos' : 'Gastos'
     },
+    {
+      href: '/dashboard/caja',
+      icon: Calculator,
+      label: userRole === 'cobrador' ? 'Mi Caja' : 'Arqueos'
+    }
+  ]
+
+  // Configuración para todos
+  const configMenuItems = [
     {
       href: '/dashboard/tutoriales',
       icon: PlayCircle,
-      label: 'Tutoriales'
+      label: 'Tutoriales',
+      adminOnly: true
     },
     {
       href: '/dashboard/configuracion',
@@ -83,7 +122,7 @@ export function MobileMenu({ user, planName, onSignOut }: MobileMenuProps) {
           <Menu className="h-6 w-6" />
         </Button>
       </SheetTrigger>
-      <SheetContent side="right" className="w-[280px] sm:w-[320px]">
+      <SheetContent side="right" className="w-[280px] sm:w-[320px] flex flex-col">
         <SheetHeader>
           <SheetTitle>Menú</SheetTitle>
         </SheetHeader>
@@ -102,8 +141,82 @@ export function MobileMenu({ user, planName, onSignOut }: MobileMenuProps) {
         </div>
 
         {/* Navigation */}
-        <nav className="space-y-1">
-          {menuItems.map((item) => {
+        <nav className="space-y-1 flex-1 overflow-y-auto">
+          {/* Menú común */}
+          {commonMenuItems.map((item) => {
+            const Icon = item.icon
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setOpen(false)}
+              >
+                <Button variant="ghost" className="w-full justify-start">
+                  <Icon className="mr-2 h-4 w-4" />
+                  {item.label}
+                </Button>
+              </Link>
+            )
+          })}
+
+          {/* Solo para admin */}
+          {userRole === 'admin' && (
+            <>
+              <div className="py-2">
+                <div className="border-t border-border"></div>
+                <p className="text-xs text-muted-foreground mt-2 px-2">Gestión de Rutas</p>
+              </div>
+              {adminMenuItems.map((item) => {
+                const Icon = item.icon
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                  >
+                    <Button variant="ghost" className="w-full justify-start">
+                      <Icon className="mr-2 h-4 w-4" />
+                      {item.label}
+                    </Button>
+                  </Link>
+                )
+              })}
+            </>
+          )}
+
+          {/* Operaciones (Gastos y Caja) */}
+          {user?.organization_id && (
+            <>
+              <div className="py-2">
+                <div className="border-t border-border"></div>
+                <p className="text-xs text-muted-foreground mt-2 px-2">
+                  {userRole === 'cobrador' ? 'Mi Trabajo' : 'Operaciones'}
+                </p>
+              </div>
+              {operacionesMenuItems.map((item) => {
+                const Icon = item.icon
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                  >
+                    <Button variant="ghost" className="w-full justify-start">
+                      <Icon className="mr-2 h-4 w-4" />
+                      {item.label}
+                    </Button>
+                  </Link>
+                )
+              })}
+            </>
+          )}
+
+          {/* Configuración */}
+          <div className="py-2">
+            <div className="border-t border-border"></div>
+          </div>
+          {configMenuItems.map((item) => {
+            if (item.adminOnly && userRole !== 'admin') return null
             const Icon = item.icon
             return (
               <Link
@@ -121,7 +234,7 @@ export function MobileMenu({ user, planName, onSignOut }: MobileMenuProps) {
         </nav>
 
         {/* Sign Out */}
-        <div className="absolute bottom-6 left-6 right-6">
+        <div className="pt-4 border-t border-border mt-auto">
           <form action={onSignOut}>
             <Button
               variant="outline"

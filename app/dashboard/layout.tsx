@@ -118,6 +118,7 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
             user={profile}
             planName={planInfo?.nombre || 'Gratuito'}
             onSignOut={handleSignOut}
+            userRole={userRole}
           />
         </div>
       </div>
