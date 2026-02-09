@@ -27,6 +27,7 @@ import { useConfigStore } from '@/lib/config-store'
 import { generarReporteGeneral, generarReporteCliente } from '@/lib/pdf-generator'
 import { format, subDays, subMonths, startOfDay, endOfDay } from 'date-fns'
 import { useToast } from '@/components/ui/use-toast'
+import { getPrestamosInteligente, getClientesInteligente, getCuotasSegunRol } from '@/lib/queries-con-roles'
 
 interface ReporteGeneral {
   totalPrestado: number
@@ -119,27 +120,25 @@ export default function ReportesPage() {
 
     const { desde, hasta } = getFechasFiltro()
 
-    // Cargar todos los datos necesarios
-    let prestamosQuery = supabase.from('prestamos').select('*').eq('user_id', user.id)
-    let cuotasQuery = supabase.from('cuotas').select('*').eq('user_id', user.id)
-
-    // Aplicar filtros de fecha si corresponde
-    if (desde) {
-      prestamosQuery = prestamosQuery.gte('fecha_inicio', desde.toISOString())
-    }
-    if (hasta) {
-      prestamosQuery = prestamosQuery.lte('fecha_inicio', hasta.toISOString())
-    }
-
-    const [
-      { data: prestamos },
-      { data: cuotas },
-      { data: clientesData }
-    ] = await Promise.all([
-      prestamosQuery,
-      cuotasQuery,
-      supabase.from('clientes').select('id, nombre, dni').eq('user_id', user.id)
+    // Cargar todos los datos usando funciones con soporte de roles
+    const [prestamosData, cuotasData, clientesData] = await Promise.all([
+      getPrestamosInteligente(),
+      getCuotasSegunRol(),
+      getClientesInteligente()
     ])
+
+    // Aplicar filtros de fecha si corresponde (sobre los datos ya obtenidos)
+    let prestamos = prestamosData || []
+    let cuotas = cuotasData || []
+
+    if (desde || hasta) {
+      prestamos = prestamos.filter(p => {
+        const fechaPrestamo = new Date(p.fecha_inicio)
+        if (desde && fechaPrestamo < desde) return false
+        if (hasta && fechaPrestamo > hasta) return false
+        return true
+      })
+    }
 
     if (clientesData) {
       setClientes(clientesData)
@@ -161,15 +160,19 @@ export default function ReportesPage() {
           return true
         })
       }
-      const totalPrestado = prestamos.reduce((sum, p) => sum + parseFloat(p.monto_prestado), 0)
-      const totalRecuperado = cuotasFiltradas.reduce((sum, c) => sum + parseFloat(c.monto_pagado), 0)
+      const totalPrestado = prestamos.reduce((sum, p) => sum + (typeof p.monto_prestado === 'number' ? p.monto_prestado : parseFloat(String(p.monto_prestado))), 0)
+      const totalRecuperado = cuotasFiltradas.reduce((sum, c) => sum + (typeof c.monto_pagado === 'number' ? c.monto_pagado : parseFloat(String(c.monto_pagado))), 0)
       // Calcular total pendiente sumando la diferencia entre monto de cuota y monto pagado
       const totalPendiente = cuotasFiltradas.reduce((sum, c) => {
-        const pendiente = parseFloat(c.monto_cuota) - parseFloat(c.monto_pagado)
+        const montoCuota = typeof c.monto_cuota === 'number' ? c.monto_cuota : parseFloat(String(c.monto_cuota))
+        const montoPagado = typeof c.monto_pagado === 'number' ? c.monto_pagado : parseFloat(String(c.monto_pagado))
+        const pendiente = montoCuota - montoPagado
         return sum + (pendiente > 0 ? pendiente : 0)
       }, 0)
       const gananciaIntereses = prestamos.reduce((sum, p) => {
-        const interes = (parseFloat(p.monto_prestado) * parseFloat(p.interes_porcentaje)) / 100
+        const monto = typeof p.monto_prestado === 'number' ? p.monto_prestado : parseFloat(String(p.monto_prestado))
+        const interes_pct = typeof p.interes_porcentaje === 'number' ? p.interes_porcentaje : parseFloat(String(p.interes_porcentaje))
+        const interes = (monto * interes_pct) / 100
         return sum + interes
       }, 0)
       const prestamosActivos = prestamos.filter(p => p.estado === 'activo').length
@@ -207,7 +210,8 @@ export default function ReportesPage() {
         }
 
         const reporte = reportesPorCliente.get(prestamo.cliente_id)!
-        reporte.total_prestado += parseFloat(prestamo.monto_prestado)
+        const monto = typeof prestamo.monto_prestado === 'number' ? prestamo.monto_prestado : parseFloat(String(prestamo.monto_prestado))
+        reporte.total_prestado += monto
         if (prestamo.estado === 'activo') {
           reporte.prestamos_activos++
         }
@@ -219,9 +223,11 @@ export default function ReportesPage() {
           const reporte = reportesPorCliente.get(prestamo.cliente_id)
           if (reporte) {
             // Sumar el monto pagado independientemente del estado (incluye pagos parciales)
-            reporte.total_pagado += parseFloat(cuota.monto_pagado)
+            const montoPagado = typeof cuota.monto_pagado === 'number' ? cuota.monto_pagado : parseFloat(String(cuota.monto_pagado))
+            reporte.total_pagado += montoPagado
             // Calcular pendiente como la diferencia entre el monto de la cuota y lo pagado
-            const montoPendiente = parseFloat(cuota.monto_cuota) - parseFloat(cuota.monto_pagado)
+            const montoCuota = typeof cuota.monto_cuota === 'number' ? cuota.monto_cuota : parseFloat(String(cuota.monto_cuota))
+            const montoPendiente = montoCuota - montoPagado
             if (montoPendiente > 0) {
               reporte.total_pendiente += montoPendiente
               reporte.cuotas_pendientes++
