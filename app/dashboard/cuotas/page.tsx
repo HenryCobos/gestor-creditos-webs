@@ -44,6 +44,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { getCuotasSegunRol } from '@/lib/queries-con-roles'
 
 interface Pago {
   id: string
@@ -69,6 +70,7 @@ interface CuotaExtended {
       dni: string
     }
   }
+  cobrador_nombre?: string | null
 }
 
 type FiltroFecha = 'hoy' | 'anteriores' | 'posteriores' | 'personalizado'
@@ -90,6 +92,9 @@ export default function CuotasPage() {
   const [filtroFecha, setFiltroFecha] = useState<FiltroFecha>('hoy')
   const [fechaDesde, setFechaDesde] = useState('')
   const [fechaHasta, setFechaHasta] = useState('')
+  const [userRole, setUserRole] = useState<'admin' | 'cobrador' | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
+  const [organizationId, setOrganizationId] = useState<string | null>(null)
   const { toast } = useToast()
   const supabase = createClient()
   const { config } = useConfigStore()
@@ -104,50 +109,123 @@ export default function CuotasPage() {
 
   const loadCuotas = async () => {
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    console.log('[loadCuotas] Iniciando carga de cuotas')
     
-    if (!user) return
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      console.log('[loadCuotas] No hay usuario autenticado')
+      setLoading(false)
+      return
+    }
 
-    const { data, error } = await supabase
-      .from('cuotas')
-      .select(`
-        *,
-        prestamo:prestamos(
+    setUserId(user.id)
+
+    // Obtener rol y organización del usuario
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile?.organization_id) {
+      console.log('[loadCuotas] Usuario sin organización')
+      toast({
+        title: 'Error',
+        description: 'Usuario no asociado a una organización',
+        variant: 'destructive',
+      })
+      setLoading(false)
+      return
+    }
+
+    setOrganizationId(profile.organization_id)
+
+    // Obtener rol del usuario
+    const { data: roleData } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('organization_id', profile.organization_id)
+      .maybeSingle()
+
+    const role = roleData?.role || 'cobrador'
+    setUserRole(role)
+    console.log('[loadCuotas] Rol del usuario:', role)
+
+    try {
+      // Usar la función RPC que maneja permisos según rol
+      const cuotasData = await getCuotasSegunRol()
+      console.log(`[loadCuotas] Se cargaron ${cuotasData.length} cuotas`)
+
+      if (!cuotasData || cuotasData.length === 0) {
+        setCuotas([])
+        setLoading(false)
+        return
+      }
+
+      // Enriquecer con datos de préstamos y clientes
+      const prestamoIds = [...new Set(cuotasData.map((c: any) => c.prestamo_id))]
+      
+      const { data: prestamosData } = await supabase
+        .from('prestamos')
+        .select(`
           id,
           monto_prestado,
+          user_id,
           cliente:clientes(
             nombre,
             dni
           )
-        )
-      `)
-      .eq('user_id', user.id)
-      .order('fecha_vencimiento', { ascending: true })
+        `)
+        .in('id', prestamoIds)
 
-    if (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar las cuotas',
-        variant: 'destructive',
-      })
-    } else {
-      // Actualizar estado de cuotas retrasadas
-      const cuotasActualizadas = data.map(cuota => {
-        if (cuota.estado === 'pendiente' && isDateOverdue(cuota.fecha_vencimiento)) {
-          return { ...cuota, estado: 'retrasada' as const }
+      console.log(`[loadCuotas] Enriqueciendo cuotas con datos de ${prestamosData?.length || 0} préstamos`)
+
+      // Si es admin, obtener nombres de cobradores para mostrar en la UI
+      let cobradoresMap = new Map<string, string>()
+      if (role === 'admin') {
+        const cobradorIds = [...new Set(prestamosData?.map((p: any) => p.user_id).filter(Boolean) || [])]
+        if (cobradorIds.length > 0) {
+          const { data: cobradoresData } = await supabase.rpc('get_usuarios_organizacion')
+          if (cobradoresData) {
+            cobradoresData.forEach((c: any) => {
+              cobradoresMap.set(c.id, c.nombre_completo || c.email)
+            })
+          }
         }
-        return cuota
+      }
+
+      const cuotasEnriquecidas = cuotasData.map((cuota: any) => {
+        const prestamo = prestamosData?.find((p: any) => p.id === cuota.prestamo_id)
+        
+        // Actualizar estado de cuotas retrasadas
+        let estado = cuota.estado
+        if (cuota.estado === 'pendiente' && isDateOverdue(cuota.fecha_vencimiento)) {
+          estado = 'retrasada'
+        }
+
+        // Agregar información del cobrador si es admin
+        const cobrador = prestamo?.user_id ? cobradoresMap.get(prestamo.user_id) : null
+
+        return {
+          ...cuota,
+          estado,
+          prestamo: prestamo || { id: cuota.prestamo_id, monto_prestado: 0, cliente: { nombre: 'N/A', dni: 'N/A' } },
+          cobrador_nombre: cobrador || null
+        }
       })
-      setCuotas(cuotasActualizadas as CuotaExtended[])
+
+      setCuotas(cuotasEnriquecidas as CuotaExtended[])
 
       // Actualizar en la base de datos las cuotas retrasadas
-      const cuotasRetrasadas = cuotasActualizadas.filter(
-        c => c.estado === 'retrasada' && data.find(d => d.id === c.id)?.estado === 'pendiente'
+      const cuotasRetrasadas = cuotasEnriquecidas.filter(
+        (c: any) => c.estado === 'retrasada' && cuotasData.find((d: any) => d.id === c.id)?.estado === 'pendiente'
       )
       
       if (cuotasRetrasadas.length > 0) {
+        console.log(`[loadCuotas] Actualizando ${cuotasRetrasadas.length} cuotas retrasadas`)
         await Promise.all(
-          cuotasRetrasadas.map(cuota =>
+          cuotasRetrasadas.map((cuota: any) =>
             supabase
               .from('cuotas')
               .update({ estado: 'retrasada' })
@@ -155,8 +233,16 @@ export default function CuotasPage() {
           )
         )
       }
+    } catch (error: any) {
+      console.error('[loadCuotas] Error:', error)
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudieron cargar las cuotas',
+        variant: 'destructive',
+      })
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const handleRegistrarPago = async (e: React.FormEvent) => {
@@ -543,6 +629,7 @@ export default function CuotasPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Cliente</TableHead>
+                  {userRole === 'admin' && <TableHead>Cobrador</TableHead>}
                   <TableHead>Cuota #</TableHead>
                   <TableHead>Monto</TableHead>
                   <TableHead>Pagado</TableHead>
@@ -560,6 +647,11 @@ export default function CuotasPage() {
                       <TableCell className="font-medium">
                         {cuota.prestamo.cliente.nombre}
                       </TableCell>
+                      {userRole === 'admin' && (
+                        <TableCell className="text-sm text-gray-600">
+                          {cuota.cobrador_nombre || 'Sin asignar'}
+                        </TableCell>
+                      )}
                       <TableCell>{cuota.numero_cuota}</TableCell>
                       <TableCell>{formatCurrency(cuota.monto_cuota, config.currency)}</TableCell>
                       <TableCell className="text-green-600">
@@ -629,6 +721,7 @@ export default function CuotasPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Cliente</TableHead>
+                  {userRole === 'admin' && <TableHead>Cobrador</TableHead>}
                   <TableHead>Cuota #</TableHead>
                   <TableHead>Monto</TableHead>
                   <TableHead>Pagado</TableHead>
@@ -643,6 +736,11 @@ export default function CuotasPage() {
                     <TableCell className="font-medium">
                       {cuota.prestamo.cliente.nombre}
                     </TableCell>
+                    {userRole === 'admin' && (
+                      <TableCell className="text-sm text-gray-600">
+                        {cuota.cobrador_nombre || 'Sin asignar'}
+                      </TableCell>
+                    )}
                     <TableCell>{cuota.numero_cuota}</TableCell>
                     <TableCell>{formatCurrency(cuota.monto_cuota, config.currency)}</TableCell>
                     <TableCell className="text-green-600 font-semibold">

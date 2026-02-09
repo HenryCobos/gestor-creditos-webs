@@ -1,30 +1,62 @@
 -- =====================================================
 -- VERIFICAR ESTRUCTURA DE TABLAS
+-- Para identificar los nombres correctos de las columnas
 -- =====================================================
 
--- Ver todas las columnas de la tabla clientes
-SELECT '============ COLUMNAS DE CLIENTES ============' as seccion;
+-- TABLA: rutas
+SELECT 
+  '=== ESTRUCTURA DE TABLA: rutas ===' as info;
 
-SELECT column_name, data_type, is_nullable
+SELECT 
+  column_name,
+  data_type,
+  is_nullable
 FROM information_schema.columns
 WHERE table_schema = 'public'
-  AND table_name = 'clientes'
+  AND table_name = 'rutas'
 ORDER BY ordinal_position;
 
--- Ver todas las columnas de la tabla prestamos
-SELECT '============ COLUMNAS DE PRESTAMOS ============' as seccion;
+SELECT ' ' as " ";
 
-SELECT column_name, data_type, is_nullable
+-- TABLA: prestamos
+SELECT 
+  '=== ESTRUCTURA DE TABLA: prestamos ===' as info;
+
+SELECT 
+  column_name,
+  data_type,
+  is_nullable
 FROM information_schema.columns
 WHERE table_schema = 'public'
   AND table_name = 'prestamos'
 ORDER BY ordinal_position;
 
--- Ver todas las columnas de la tabla cuotas
-SELECT '============ COLUMNAS DE CUOTAS ============' as seccion;
+SELECT ' ' as " ";
 
-SELECT column_name, data_type, is_nullable
+-- TABLA: pagos
+SELECT 
+  '=== ESTRUCTURA DE TABLA: pagos ===' as info;
+
+SELECT 
+  column_name,
+  data_type,
+  is_nullable
 FROM information_schema.columns
 WHERE table_schema = 'public'
-  AND table_name = 'cuotas'
+  AND table_name = 'pagos'
+ORDER BY ordinal_position;
+
+SELECT ' ' as " ";
+
+-- TABLA: gastos
+SELECT 
+  '=== ESTRUCTURA DE TABLA: gastos ===' as info;
+
+SELECT 
+  column_name,
+  data_type,
+  is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = 'gastos'
 ORDER BY ordinal_position;
