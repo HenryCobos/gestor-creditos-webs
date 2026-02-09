@@ -19,8 +19,8 @@ interface ArqueoCardMobileProps {
       color: string | null
     } | null
     cobrador?: {
-      nombre_completo?: string
-      email?: string
+      nombre_completo?: string | undefined
+      email?: string | undefined
     } | null
   }
   currency: string

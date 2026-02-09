@@ -963,7 +963,24 @@ export default function CajaPage() {
               {arqueos.map((arqueo) => (
                 <ArqueoCardMobile
                   key={arqueo.id}
-                  arqueo={arqueo}
+                  arqueo={{
+                    id: arqueo.id,
+                    fecha_arqueo: arqueo.fecha_arqueo,
+                    dinero_esperado: arqueo.dinero_esperado,
+                    dinero_reportado: arqueo.dinero_reportado,
+                    diferencia: arqueo.diferencia,
+                    estado: arqueo.estado,
+                    revisado_por: arqueo.revisado_por || null,
+                    notas: arqueo.notas || null,
+                    ruta: arqueo.ruta ? {
+                      nombre_ruta: arqueo.ruta.nombre_ruta,
+                      color: arqueo.ruta.color || null
+                    } : null,
+                    cobrador: arqueo.cobrador ? {
+                      nombre_completo: arqueo.cobrador.nombre_completo || undefined,
+                      email: arqueo.cobrador.email || undefined
+                    } : null
+                  }}
                   currency={config.currency}
                   userRole={userRole}
                   onView={() => handleVerDetalle(arqueo)}
