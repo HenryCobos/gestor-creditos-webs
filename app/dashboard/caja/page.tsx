@@ -107,29 +107,59 @@ export default function CajaPage() {
   }
 
   const loadRutas = async (orgId: string) => {
-    const { data } = await supabase
+    console.log('[loadRutas] Cargando rutas para orgId:', orgId)
+    
+    const { data, error } = await supabase
       .from('rutas')
-      .select('*, cobrador:profiles!rutas_cobrador_id_fkey(id, nombre_completo, email)')
+      .select('*')
       .eq('organization_id', orgId)
       .eq('estado', 'activa')
       .order('nombre_ruta', { ascending: true })
 
+    if (error) {
+      console.error('[loadRutas] Error:', error)
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar las rutas',
+        variant: 'destructive',
+      })
+      setRutas([])
+      return
+    }
+
+    console.log('[loadRutas] Rutas cargadas:', data?.length || 0)
     if (data) {
       setRutas(data)
     }
   }
 
   const loadRutasCobrador = async (cobradorId: string) => {
-    const { data } = await supabase
+    console.log('[loadRutasCobrador] Cargando rutas para cobrador:', cobradorId)
+    
+    const { data, error } = await supabase
       .from('rutas')
       .select('*')
       .eq('cobrador_id', cobradorId)
       .eq('estado', 'activa')
       .order('nombre_ruta', { ascending: true })
 
+    if (error) {
+      console.error('[loadRutasCobrador] Error:', error)
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar tus rutas',
+        variant: 'destructive',
+      })
+      setRutas([])
+      return
+    }
+
+    console.log('[loadRutasCobrador] Rutas cargadas:', data?.length || 0)
+    
     if (data) {
       setRutas(data)
       if (data.length === 1) {
+        console.log('[loadRutasCobrador] Autoseleccionando ruta:', data[0].nombre_ruta)
         setFormData(prev => ({ ...prev, ruta_id: data[0].id }))
       }
     }
@@ -137,80 +167,173 @@ export default function CajaPage() {
 
   const loadArqueos = async (orgId: string) => {
     setLoading(true)
+    console.log('[loadArqueos] Iniciando carga para orgId:', orgId)
 
-    let query = supabase
-      .from('arqueos_caja')
-      .select(`
-        *,
-        ruta:rutas(id, nombre_ruta, color),
-        cobrador:profiles!arqueos_caja_cobrador_id_fkey(nombre_completo, email),
-        revisor:profiles!arqueos_caja_revisado_por_fkey(nombre_completo)
-      `)
-      .eq('organization_id', orgId)
+    try {
+      // Query simplificado sin JOINs
+      let query = supabase
+        .from('arqueos_caja')
+        .select('*')
+        .eq('organization_id', orgId)
 
-    // Aplicar filtros
-    if (filtros.fecha_desde) {
-      query = query.gte('fecha_arqueo', filtros.fecha_desde)
-    }
-    if (filtros.fecha_hasta) {
-      query = query.lte('fecha_arqueo', filtros.fecha_hasta)
-    }
-    if (filtros.ruta_id !== 'todas') {
-      query = query.eq('ruta_id', filtros.ruta_id)
-    }
+      // Aplicar filtros
+      if (filtros.fecha_desde) {
+        query = query.gte('fecha_arqueo', filtros.fecha_desde)
+      }
+      if (filtros.fecha_hasta) {
+        query = query.lte('fecha_arqueo', filtros.fecha_hasta)
+      }
+      if (filtros.ruta_id !== 'todas') {
+        query = query.eq('ruta_id', filtros.ruta_id)
+      }
 
-    query = query.order('fecha_arqueo', { ascending: false })
+      query = query.order('fecha_arqueo', { ascending: false })
 
-    const { data, error } = await query
+      const { data: arqueosData, error: arqueosError } = await query
 
-    if (error) {
-      console.error('Error cargando arqueos:', error)
+      if (arqueosError) {
+        console.error('[loadArqueos] Error en query:', arqueosError)
+        throw arqueosError
+      }
+
+      console.log('[loadArqueos] Arqueos básicos obtenidos:', arqueosData?.length || 0)
+
+      if (!arqueosData || arqueosData.length === 0) {
+        setArqueos([])
+        setLoading(false)
+        return
+      }
+
+      // Cargar datos relacionados
+      const rutaIds = [...new Set(arqueosData.map(a => a.ruta_id).filter(Boolean))]
+      const cobradorIds = [...new Set(arqueosData.map(a => a.cobrador_id))]
+      const revisorIds = [...new Set(arqueosData.map(a => a.revisado_por).filter(Boolean))]
+
+      console.log('[loadArqueos] Cargando datos relacionados...', {
+        rutas: rutaIds.length,
+        cobradores: cobradorIds.length,
+        revisores: revisorIds.length
+      })
+
+      // Cargar rutas
+      const { data: rutasData } = await supabase
+        .from('rutas')
+        .select('id, nombre_ruta, color')
+        .in('id', rutaIds)
+
+      // Cargar usuarios (cobradores y revisores)
+      const { data: usuariosData } = await supabase
+        .rpc('get_usuarios_organizacion')
+
+      console.log('[loadArqueos] Datos relacionados obtenidos', {
+        rutas: rutasData?.length || 0,
+        usuarios: usuariosData?.length || 0
+      })
+
+      // Enriquecer arqueos
+      const arqueosEnriquecidos = arqueosData.map(arqueo => {
+        const ruta = (rutasData || []).find(r => r.id === arqueo.ruta_id)
+        const cobrador = (usuariosData || []).find((u: any) => u.id === arqueo.cobrador_id)
+        const revisor = (usuariosData || []).find((u: any) => u.id === arqueo.revisado_por)
+
+        return {
+          ...arqueo,
+          ruta: ruta || null,
+          cobrador: cobrador ? {
+            nombre_completo: cobrador.nombre_completo,
+            email: cobrador.email
+          } : null,
+          revisor: revisor ? {
+            nombre_completo: revisor.nombre_completo
+          } : null
+        }
+      })
+
+      console.log('[loadArqueos] Arqueos enriquecidos:', arqueosEnriquecidos.length)
+      setArqueos(arqueosEnriquecidos)
+
+    } catch (error: any) {
+      console.error('[loadArqueos] Error completo:', error)
       toast({
         title: 'Error',
         description: 'No se pudieron cargar los arqueos',
         variant: 'destructive',
       })
-    } else {
-      setArqueos(data || [])
+      setArqueos([])
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const loadArqueosCobrador = async (cobradorId: string) => {
     setLoading(true)
+    console.log('[loadArqueosCobrador] Iniciando carga para cobrador:', cobradorId)
 
-    let query = supabase
-      .from('arqueos_caja')
-      .select(`
-        *,
-        ruta:rutas(id, nombre_ruta, color),
-        revisor:profiles!arqueos_caja_revisado_por_fkey(nombre_completo)
-      `)
-      .eq('cobrador_id', cobradorId)
+    try {
+      // Query simplificado
+      let query = supabase
+        .from('arqueos_caja')
+        .select('*')
+        .eq('cobrador_id', cobradorId)
 
-    // Aplicar filtros
-    if (filtros.fecha_desde) {
-      query = query.gte('fecha_arqueo', filtros.fecha_desde)
-    }
-    if (filtros.fecha_hasta) {
-      query = query.lte('fecha_arqueo', filtros.fecha_hasta)
-    }
+      // Aplicar filtros
+      if (filtros.fecha_desde) {
+        query = query.gte('fecha_arqueo', filtros.fecha_desde)
+      }
+      if (filtros.fecha_hasta) {
+        query = query.lte('fecha_arqueo', filtros.fecha_hasta)
+      }
 
-    query = query.order('fecha_arqueo', { ascending: false })
+      query = query.order('fecha_arqueo', { ascending: false })
 
-    const { data, error } = await query
+      const { data: arqueosData, error: arqueosError } = await query
 
-    if (error) {
-      console.error('Error cargando arqueos:', error)
+      if (arqueosError) {
+        console.error('[loadArqueosCobrador] Error:', arqueosError)
+        throw arqueosError
+      }
+
+      console.log('[loadArqueosCobrador] Arqueos obtenidos:', arqueosData?.length || 0)
+
+      if (!arqueosData || arqueosData.length === 0) {
+        setArqueos([])
+        setLoading(false)
+        return
+      }
+
+      // Cargar rutas relacionadas
+      const rutaIds = [...new Set(arqueosData.map(a => a.ruta_id).filter(Boolean))]
+
+      console.log('[loadArqueosCobrador] Cargando rutas:', rutaIds.length)
+
+      const { data: rutasData } = await supabase
+        .from('rutas')
+        .select('id, nombre_ruta, color')
+        .in('id', rutaIds)
+
+      console.log('[loadArqueosCobrador] Rutas obtenidas:', rutasData?.length || 0)
+
+      // Enriquecer arqueos
+      const arqueosEnriquecidos = arqueosData.map(arqueo => ({
+        ...arqueo,
+        ruta: (rutasData || []).find(r => r.id === arqueo.ruta_id) || null,
+        revisor: null // No necesario para cobradores
+      }))
+
+      console.log('[loadArqueosCobrador] Arqueos enriquecidos:', arqueosEnriquecidos.length)
+      setArqueos(arqueosEnriquecidos)
+
+    } catch (error: any) {
+      console.error('[loadArqueosCobrador] Error completo:', error)
       toast({
         title: 'Error',
         description: 'No se pudieron cargar tus arqueos',
         variant: 'destructive',
       })
-    } else {
-      setArqueos(data || [])
+      setArqueos([])
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const calcularDineroEsperado = async () => {
