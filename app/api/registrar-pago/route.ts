@@ -75,14 +75,16 @@ export async function POST(request: Request) {
     }
 
     // 5. Obtener información del préstamo para validar permisos
+    // Seleccionar solo columnas básicas que seguro existen
     const { data: prestamo, error: prestamoError } = await supabaseAdmin
       .from('prestamos')
-      .select('id, user_id, ruta_id')
+      .select('id, user_id')
       .eq('id', prestamo_id)
       .maybeSingle()
 
     if (prestamoError) {
       console.error('[API registrar-pago] Error al buscar préstamo:', prestamoError)
+      console.error('[API registrar-pago] Detalles del error:', JSON.stringify(prestamoError, null, 2))
       return NextResponse.json(
         { error: 'Error al buscar préstamo', details: prestamoError.message },
         { status: 500 }
@@ -99,8 +101,7 @@ export async function POST(request: Request) {
 
     console.log('[API registrar-pago] Préstamo encontrado:', {
       id: prestamo.id,
-      user_id: prestamo.user_id,
-      ruta_id: prestamo.ruta_id
+      user_id: prestamo.user_id
     })
 
     // 6. Verificar que el préstamo pertenece a la organización del usuario
@@ -144,26 +145,26 @@ export async function POST(request: Request) {
 
     const userRole = roleData?.role || 'cobrador'
 
-    // 8. Si es cobrador, verificar que el préstamo le pertenece o está en su ruta
+    // 8. Si es cobrador, verificar que el préstamo le pertenece
+    // Los cobradores solo pueden registrar pagos de sus propios préstamos
+    // Los admins pueden registrar pagos de cualquier préstamo de la organización
     if (userRole === 'cobrador') {
       const perteneceAlCobrador = prestamo.user_id === user.id
       
       if (!perteneceAlCobrador) {
-        // Verificar si está en una ruta del cobrador
-        const { data: ruta } = await supabaseAdmin
-          .from('rutas')
-          .select('id')
-          .eq('cobrador_id', user.id)
-          .eq('id', prestamo.ruta_id)
-          .maybeSingle()
-
-        if (!ruta) {
-          return NextResponse.json(
-            { error: 'No tienes permiso para registrar pagos en este préstamo' },
-            { status: 403 }
-          )
-        }
+        console.error('[API registrar-pago] Cobrador intenta registrar pago de préstamo ajeno:', {
+          cobrador_id: user.id,
+          prestamo_owner_id: prestamo.user_id
+        })
+        return NextResponse.json(
+          { error: 'No tienes permiso para registrar pagos en este préstamo' },
+          { status: 403 }
+        )
       }
+      
+      console.log('[API registrar-pago] ✅ Cobrador tiene permiso (préstamo propio)')
+    } else {
+      console.log('[API registrar-pago] ✅ Admin tiene permiso (mismo organization)')
     }
 
     // 9. Obtener información de la cuota actual
