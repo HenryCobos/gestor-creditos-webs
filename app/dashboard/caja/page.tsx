@@ -870,8 +870,9 @@ export default function CajaPage() {
               <p className="text-gray-500">No hay arqueos registrados</p>
             </div>
           ) : (
-            {/* Vista Desktop */}
-            <Table className="hidden md:table">
+            <>
+              {/* Vista Desktop */}
+              <Table className="hidden md:table">
               <TableHeader>
                 <TableRow>
                   <TableHead>Fecha</TableHead>

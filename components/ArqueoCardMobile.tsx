@@ -12,11 +12,11 @@ interface ArqueoCardMobileProps {
     dinero_reportado: number
     diferencia: number
     estado: string
-    revisado: boolean
-    observaciones?: string | null
+    revisado_por?: string | null
+    notas?: string | null
     ruta?: {
       nombre_ruta: string
-      color: string
+      color: string | null
     } | null
     cobrador?: {
       nombre_completo?: string
@@ -81,7 +81,7 @@ export function ArqueoCardMobile({
             <Flag className="h-4 w-4 text-gray-400 flex-shrink-0" />
             <div 
               className="w-3 h-3 rounded-full flex-shrink-0" 
-              style={{ backgroundColor: arqueo.ruta.color }}
+              style={{ backgroundColor: arqueo.ruta.color || '#3B82F6' }}
             />
             <span className="text-gray-600 truncate">{arqueo.ruta.nombre_ruta}</span>
           </div>
@@ -129,7 +129,7 @@ export function ArqueoCardMobile({
         {/* Estado de revisión */}
         <div className="flex items-center justify-between text-sm pt-2 border-t">
           <span className="text-gray-500">Revisado</span>
-          {arqueo.revisado ? (
+          {arqueo.revisado_por ? (
             <Badge className="bg-green-100 text-green-800">
               <CheckCircle className="h-3 w-3 mr-1" />
               Sí
@@ -142,11 +142,11 @@ export function ArqueoCardMobile({
           )}
         </div>
 
-        {/* Observaciones */}
-        {arqueo.observaciones && (
+        {/* Notas */}
+        {arqueo.notas && (
           <div className="pt-2 border-t">
-            <p className="text-xs text-gray-500 mb-1">Observaciones</p>
-            <p className="text-sm text-gray-700 line-clamp-2">{arqueo.observaciones}</p>
+            <p className="text-xs text-gray-500 mb-1">Notas</p>
+            <p className="text-sm text-gray-700 line-clamp-2">{arqueo.notas}</p>
           </div>
         )}
 

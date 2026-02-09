@@ -32,6 +32,7 @@ import { ClienteCardMobile } from '@/components/ClienteCardMobile'
 import { useSubscriptionStore } from '@/lib/subscription-store'
 import { loadOrganizationSubscription, loadOrganizationUsageLimits } from '@/lib/subscription-helpers'
 import { getClientesInteligente } from '@/lib/queries-con-roles'
+import { useConfigStore } from '@/lib/config-store'
 import { useMemo } from 'react'
 
 export default function ClientesPage() {
@@ -46,6 +47,7 @@ export default function ClientesPage() {
   const supabase = createClient()
   const { clientes, setClientes, addCliente, updateCliente, deleteCliente } = useStore()
   const { canAddCliente, setUserSubscription, setUsageLimits } = useSubscriptionStore()
+  const { config } = useConfigStore()
 
   const [formData, setFormData] = useState({
     nombre: '',

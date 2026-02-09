@@ -7,7 +7,7 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 interface PrestamoCardMobileProps {
   prestamo: {
     id: string
-    cliente: {
+    cliente?: {
       nombre: string
       dni: string
     }
@@ -19,7 +19,7 @@ interface PrestamoCardMobileProps {
     estado: string
     ruta?: {
       nombre_ruta: string
-      color: string
+      color: string | null
     } | null
   }
   currency: string
@@ -56,9 +56,11 @@ export function PrestamoCardMobile({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <User className="h-4 w-4 text-gray-400 flex-shrink-0" />
-              <h3 className="font-semibold truncate">{prestamo.cliente.nombre}</h3>
+              <h3 className="font-semibold truncate">{prestamo.cliente?.nombre || 'Sin cliente'}</h3>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">DNI: {prestamo.cliente.dni}</p>
+            {prestamo.cliente?.dni && (
+              <p className="text-xs text-gray-500 mt-0.5">DNI: {prestamo.cliente.dni}</p>
+            )}
           </div>
           <Badge className={getEstadoBadgeColor(prestamo.estado)}>
             {prestamo.estado}
@@ -70,7 +72,7 @@ export function PrestamoCardMobile({
           <div className="flex items-center gap-2 text-sm">
             <div 
               className="w-3 h-3 rounded-full flex-shrink-0" 
-              style={{ backgroundColor: prestamo.ruta.color }}
+              style={{ backgroundColor: prestamo.ruta.color || '#3B82F6' }}
             />
             <span className="text-gray-600 truncate">{prestamo.ruta.nombre_ruta}</span>
           </div>

@@ -13,7 +13,7 @@ interface GastoCardMobileProps {
     estado: string
     ruta?: {
       nombre_ruta: string
-      color: string
+      color: string | null
     } | null
     cobrador?: {
       nombre: string
@@ -78,7 +78,7 @@ export function GastoCardMobile({
             <Flag className="h-4 w-4 text-gray-400 flex-shrink-0" />
             <div 
               className="w-3 h-3 rounded-full flex-shrink-0" 
-              style={{ backgroundColor: gasto.ruta.color }}
+              style={{ backgroundColor: gasto.ruta.color || '#3B82F6' }}
             />
             <span className="text-gray-600 truncate">{gasto.ruta.nombre_ruta}</span>
           </div>
