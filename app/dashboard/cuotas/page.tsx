@@ -250,9 +250,6 @@ export default function CuotasPage() {
     
     if (!selectedCuota) return
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
     const monto = parseFloat(montoPago)
     if (isNaN(monto) || monto <= 0) {
       toast({
@@ -263,79 +260,60 @@ export default function CuotasPage() {
       return
     }
 
-    const nuevoMontoPagado = selectedCuota.monto_pagado + monto
-    const esPagoCompleto = nuevoMontoPagado >= selectedCuota.monto_cuota
-
-    // Registrar el pago
-    const { error: pagoError } = await supabase
-      .from('pagos')
-      .insert([{
-        user_id: user.id,
-        cuota_id: selectedCuota.id,
-        prestamo_id: selectedCuota.prestamo.id,
-        monto_pagado: monto,
-        metodo_pago: metodoPago || null,
-        notas: notas || null,
-        fecha_pago: new Date().toISOString(),
-      }])
-
-    if (pagoError) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo registrar el pago',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    // Actualizar la cuota
-    const { error: cuotaError } = await supabase
-      .from('cuotas')
-      .update({
-        monto_pagado: nuevoMontoPagado,
-        estado: esPagoCompleto ? 'pagada' : selectedCuota.estado,
-        fecha_pago: esPagoCompleto ? format(new Date(), 'yyyy-MM-dd') : null,
-      })
-      .eq('id', selectedCuota.id)
-
-    if (cuotaError) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo actualizar la cuota',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    // Si es pago completo, verificar si todas las cuotas del préstamo están pagadas
-    if (esPagoCompleto) {
-      const { data: cuotasPrestamo } = await supabase
-        .from('cuotas')
-        .select('id, estado')
-        .eq('prestamo_id', selectedCuota.prestamo.id)
-
-      const todasPagadas = cuotasPrestamo?.every(
-        c => c.estado === 'pagada' || c.id === selectedCuota.id
-      )
-
-      if (todasPagadas) {
-        await supabase
-          .from('prestamos')
-          .update({ estado: 'pagado' })
-          .eq('id', selectedCuota.prestamo.id)
-      }
-    }
-
-    toast({
-      title: 'Éxito',
-      description: esPagoCompleto 
-        ? 'Cuota pagada completamente' 
-        : 'Pago parcial registrado',
+    console.log('[handleRegistrarPago] Registrando pago:', {
+      cuota_id: selectedCuota.id,
+      prestamo_id: selectedCuota.prestamo.id,
+      monto_pagado: monto,
+      metodo_pago: metodoPago,
     })
 
-    // Recargar cuotas
-    loadCuotas()
-    resetPagoForm()
+    try {
+      // Usar API route para registrar el pago de forma segura
+      // Esto permite que admin registre pagos en nombre de cobradores
+      const response = await fetch('/api/registrar-pago', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cuota_id: selectedCuota.id,
+          prestamo_id: selectedCuota.prestamo.id,
+          monto_pagado: monto,
+          metodo_pago: metodoPago || null,
+          notas: notas || null,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        console.error('[handleRegistrarPago] Error en API:', data)
+        toast({
+          title: 'Error',
+          description: data.error || 'No se pudo registrar el pago',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      console.log('[handleRegistrarPago] Pago registrado exitosamente:', data)
+
+      toast({
+        title: 'Éxito',
+        description: data.message || 'Pago registrado correctamente',
+      })
+
+      // Recargar cuotas
+      loadCuotas()
+      resetPagoForm()
+    } catch (error: any) {
+      console.error('[handleRegistrarPago] Error al registrar pago:', error)
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudo registrar el pago',
+        variant: 'destructive',
+      })
+    }
   }
 
   const resetPagoForm = () => {
