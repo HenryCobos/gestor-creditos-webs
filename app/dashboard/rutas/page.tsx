@@ -107,22 +107,44 @@ export default function RutasPage() {
 
   const loadRutas = async (orgId: string) => {
     setLoading(true)
+    console.log('[loadRutas] Cargando rutas para orgId:', orgId)
 
-    const { data: rutasData, error } = await supabase
-      .from('rutas')
-      .select('*')
-      .eq('organization_id', orgId)
-      .order('created_at', { ascending: false })
+    try {
+      const { data: rutasData, error } = await supabase
+        .from('rutas')
+        .select('*')
+        .eq('organization_id', orgId)
+        .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error('Error cargando rutas:', error)
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar las rutas',
-        variant: 'destructive',
-      })
-    } else {
-      // Obtener contadores para cada ruta
+      if (error) {
+        console.error('[loadRutas] Error:', error)
+        throw error
+      }
+
+      if (!rutasData || rutasData.length === 0) {
+        setRutas([])
+        setLoading(false)
+        return
+      }
+
+      console.log('[loadRutas] Rutas básicas obtenidas:', rutasData.length)
+
+      // Obtener IDs únicos de cobradores
+      const cobradorIds = [...new Set(rutasData.map((r: any) => r.cobrador_id).filter(Boolean))]
+      
+      console.log('[loadRutas] Cargando info de cobradores:', cobradorIds.length)
+
+      // Cargar información de cobradores
+      let cobradoresData: any[] = []
+      if (cobradorIds.length > 0) {
+        const { data } = await supabase
+          .rpc('get_usuarios_organizacion')
+        
+        cobradoresData = (data || []).filter((u: any) => cobradorIds.includes(u.id))
+        console.log('[loadRutas] Cobradores obtenidos:', cobradoresData.length)
+      }
+
+      // Obtener contadores y enriquecer con info de cobrador
       const rutasConContadores = await Promise.all(
         rutasData.map(async (ruta: any) => {
           const [clientesCount, prestamosCount] = await Promise.all([
@@ -130,16 +152,36 @@ export default function RutasPage() {
             supabase.from('prestamos').select('id', { count: 'exact', head: true }).eq('ruta_id', ruta.id).eq('estado', 'activo')
           ])
           
+          // Buscar info del cobrador
+          const cobrador = cobradoresData.find((c: any) => c.id === ruta.cobrador_id)
+          
           return {
             ...ruta,
             clientes_count: clientesCount.count || 0,
             prestamos_count: prestamosCount.count || 0,
+            cobrador: cobrador ? {
+              id: cobrador.id,
+              nombre_completo: cobrador.nombre_completo,
+              email: cobrador.email
+            } : null
           }
         })
       )
+      
+      console.log('[loadRutas] Rutas enriquecidas con contadores y cobradores:', rutasConContadores.length)
       setRutas(rutasConContadores)
+
+    } catch (error: any) {
+      console.error('[loadRutas] Error completo:', error)
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar las rutas',
+        variant: 'destructive',
+      })
+      setRutas([])
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const loadCobradores = async (orgId: string) => {
