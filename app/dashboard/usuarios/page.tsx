@@ -245,27 +245,62 @@ export default function UsuariosPage() {
   }
 
   const handleResetPassword = async (usuario: Profile) => {
-    if (!confirm(`¿Deseas restablecer la contraseña de ${usuario.email}?`)) return
-
-    // Generar contraseña temporal
-    const tempPassword = `${usuario.email.split('@')[0]}123`
-
-    const { error } = await supabase.auth.admin.updateUserById(
-      usuario.id,
-      { password: tempPassword }
+    // Solicitar nueva contraseña temporal
+    const tempPassword = prompt(
+      `Ingresa una contraseña temporal para ${usuario.email}:\n\n` +
+      `(Mínimo 6 caracteres. El usuario podrá cambiarla después)`
     )
 
-    if (error) {
+    if (!tempPassword) return // Usuario canceló
+
+    if (tempPassword.length < 6) {
       toast({
         title: 'Error',
-        description: 'No se pudo restablecer la contraseña',
+        description: 'La contraseña debe tener al menos 6 caracteres',
         variant: 'destructive',
       })
-    } else {
+      return
+    }
+
+    try {
+      const response = await fetch('/api/reset-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: usuario.id,
+          newPassword: tempPassword,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || data.error) {
+        throw new Error(data.error || 'Error al resetear contraseña')
+      }
+
       toast({
         title: 'Éxito',
-        description: `Contraseña restablecida a: ${tempPassword}`,
-        duration: 10000,
+        description: `Contraseña restablecida para ${usuario.email}`,
+        duration: 8000,
+      })
+
+      // Copiar contraseña al portapapeles
+      navigator.clipboard.writeText(tempPassword).then(() => {
+        toast({
+          title: 'Contraseña copiada',
+          description: 'La contraseña temporal se copió al portapapeles',
+          duration: 5000,
+        })
+      })
+
+    } catch (error: any) {
+      console.error('Error al resetear contraseña:', error)
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudo restablecer la contraseña',
+        variant: 'destructive',
       })
     }
   }
