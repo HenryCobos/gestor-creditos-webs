@@ -975,32 +975,35 @@ export default function GastosPage() {
 
             {/* Vista Móvil */}
             <div className="md:hidden space-y-3">
-              {gastos.map((gasto) => (
-                <GastoCardMobile
-                  key={gasto.id}
-                  gasto={{
-                    id: gasto.id,
-                    monto: gasto.monto,
-                    descripcion: gasto.descripcion,
-                    fecha_gasto: gasto.fecha_gasto,
-                    estado: gasto.aprobado ? 'aprobado' : 'pendiente',
-                    ruta: gasto.ruta ? {
-                      nombre_ruta: gasto.ruta.nombre_ruta,
-                      color: gasto.ruta.color || null
-                    } : null,
-                    cobrador: gasto.cobrador ? { 
-                      nombre: gasto.cobrador.nombre_completo || gasto.cobrador.email || 'N/A' 
-                    } : null,
-                    revisor: gasto.revisor ? { 
-                      nombre: gasto.revisor.nombre_completo || gasto.revisor.email || 'N/A' 
-                    } : null
-                  }}
-                  currency={config.currency}
-                  userRole={userRole}
-                  onEdit={() => handleEdit(gasto)}
-                  onDelete={() => handleDelete(gasto)}
-                />
-              ))}
+              {gastos.map((gasto) => {
+                const gastoData = gasto as any
+                return (
+                  <GastoCardMobile
+                    key={gasto.id}
+                    gasto={{
+                      id: gasto.id,
+                      monto: gasto.monto,
+                      descripcion: gasto.descripcion,
+                      fecha_gasto: gasto.fecha_gasto,
+                      estado: gasto.aprobado ? 'aprobado' : 'pendiente',
+                      ruta: gastoData.ruta ? {
+                        nombre_ruta: gastoData.ruta.nombre_ruta,
+                        color: gastoData.ruta.color || null
+                      } : null,
+                      cobrador: gastoData.cobrador ? { 
+                        nombre: gastoData.cobrador.nombre_completo || gastoData.cobrador.email || 'N/A' 
+                      } : null,
+                      revisor: gastoData.revisor ? { 
+                        nombre: gastoData.revisor.nombre_completo || gastoData.revisor.email || 'N/A' 
+                      } : null
+                    }}
+                    currency={config.currency}
+                    userRole={userRole}
+                    onEdit={() => handleEdit(gasto)}
+                    onDelete={() => handleDelete(gasto)}
+                  />
+                )
+              })}
             </div>
           </>
           )}

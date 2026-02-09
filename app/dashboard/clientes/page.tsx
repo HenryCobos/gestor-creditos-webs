@@ -431,27 +431,30 @@ export default function ClientesPage() {
 
             {/* Vista Móvil */}
             <div className="md:hidden space-y-3">
-              {filteredClientes.map((cliente) => (
-                <ClienteCardMobile
-                  key={cliente.id}
-                  cliente={{
-                    id: cliente.id,
-                    nombre: cliente.nombre,
-                    dni: cliente.dni,
-                    telefono: cliente.telefono || null,
-                    direccion: cliente.direccion || null,
-                    prestamos_activos: cliente.prestamos_activos,
-                    total_prestado: cliente.total_prestado,
-                    ruta: cliente.ruta ? {
-                      nombre_ruta: cliente.ruta.nombre_ruta,
-                      color: cliente.ruta.color || null
-                    } : null
-                  }}
-                  currency={config?.currency || 'PEN'}
-                  onEdit={() => handleEdit(cliente)}
-                  onDelete={() => handleDelete(cliente.id)}
-                />
-              ))}
+              {filteredClientes.map((cliente) => {
+                const clienteData = cliente as any
+                return (
+                  <ClienteCardMobile
+                    key={cliente.id}
+                    cliente={{
+                      id: cliente.id,
+                      nombre: cliente.nombre,
+                      dni: cliente.dni,
+                      telefono: cliente.telefono || null,
+                      direccion: cliente.direccion || null,
+                      prestamos_activos: clienteData.prestamos_activos,
+                      total_prestado: clienteData.total_prestado,
+                      ruta: clienteData.ruta ? {
+                        nombre_ruta: clienteData.ruta.nombre_ruta,
+                        color: clienteData.ruta.color || null
+                      } : null
+                    }}
+                    currency={config?.currency || 'PEN'}
+                    onEdit={() => handleEdit(cliente)}
+                    onDelete={() => handleDelete(cliente.id)}
+                  />
+                )
+              })}
             </div>
           </>
           )}
