@@ -979,10 +979,21 @@ export default function GastosPage() {
                 <GastoCardMobile
                   key={gasto.id}
                   gasto={{
-                    ...gasto,
+                    id: gasto.id,
+                    monto: gasto.monto,
+                    descripcion: gasto.descripcion,
+                    fecha_gasto: gasto.fecha_gasto,
                     estado: gasto.aprobado ? 'aprobado' : 'pendiente',
-                    cobrador: gasto.cobrador ? { nombre: gasto.cobrador.nombre_completo || gasto.cobrador.email || 'N/A' } : null,
-                    revisor: gasto.revisor ? { nombre: gasto.revisor.nombre_completo || gasto.revisor.email || 'N/A' } : null
+                    ruta: gasto.ruta ? {
+                      nombre_ruta: gasto.ruta.nombre_ruta,
+                      color: gasto.ruta.color || null
+                    } : null,
+                    cobrador: gasto.cobrador ? { 
+                      nombre: gasto.cobrador.nombre_completo || gasto.cobrador.email || 'N/A' 
+                    } : null,
+                    revisor: gasto.revisor ? { 
+                      nombre: gasto.revisor.nombre_completo || gasto.revisor.email || 'N/A' 
+                    } : null
                   }}
                   currency={config.currency}
                   userRole={userRole}

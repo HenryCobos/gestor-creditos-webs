@@ -1569,7 +1569,23 @@ export default function PrestamosPage() {
               {prestamos.map((prestamo) => (
                 <PrestamoCardMobile
                   key={prestamo.id}
-                  prestamo={prestamo}
+                  prestamo={{
+                    id: prestamo.id,
+                    cliente: prestamo.cliente ? {
+                      nombre: prestamo.cliente.nombre,
+                      dni: prestamo.cliente.dni
+                    } : undefined,
+                    monto_prestado: prestamo.monto_prestado,
+                    interes_porcentaje: prestamo.interes_porcentaje,
+                    monto_total: prestamo.monto_total,
+                    numero_cuotas: prestamo.numero_cuotas,
+                    fecha_inicio: prestamo.fecha_inicio,
+                    estado: prestamo.estado,
+                    ruta: prestamo.ruta ? {
+                      nombre_ruta: prestamo.ruta.nombre_ruta,
+                      color: prestamo.ruta.color || null
+                    } : null
+                  }}
                   currency={config.currency}
                   onView={() => {
                     setSelectedPrestamo(prestamo)

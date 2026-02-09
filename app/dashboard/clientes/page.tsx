@@ -434,7 +434,19 @@ export default function ClientesPage() {
               {filteredClientes.map((cliente) => (
                 <ClienteCardMobile
                   key={cliente.id}
-                  cliente={cliente}
+                  cliente={{
+                    id: cliente.id,
+                    nombre: cliente.nombre,
+                    dni: cliente.dni,
+                    telefono: cliente.telefono || null,
+                    direccion: cliente.direccion || null,
+                    prestamos_activos: cliente.prestamos_activos,
+                    total_prestado: cliente.total_prestado,
+                    ruta: cliente.ruta ? {
+                      nombre_ruta: cliente.ruta.nombre_ruta,
+                      color: cliente.ruta.color || null
+                    } : null
+                  }}
                   currency={config?.currency || 'PEN'}
                   onEdit={() => handleEdit(cliente)}
                   onDelete={() => handleDelete(cliente.id)}
