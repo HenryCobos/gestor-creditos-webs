@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { createClient as createServerClient } from '@/lib/supabase/server'
 
 // Cliente con Service Role Key para operaciones privilegiadas
 const supabaseAdmin = createClient(
@@ -14,41 +14,21 @@ const supabaseAdmin = createClient(
   }
 )
 
-// Función para obtener el token de autenticación desde las cookies
-async function getAuthenticatedUser() {
-  const cookieStore = await cookies()
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  
-  // Obtener el token de acceso desde las cookies
-  const accessToken = cookieStore.get('sb-access-token')?.value || 
-                      cookieStore.get('supabase-auth-token')?.value
-
-  if (!accessToken) {
-    return null
-  }
-
-  // Verificar el usuario con el token
-  const supabase = createClient(supabaseUrl, supabaseAnonKey)
-  const { data: { user }, error } = await supabase.auth.getUser(accessToken)
-  
-  if (error || !user) {
-    return null
-  }
-
-  return user
-}
-
 export async function POST(request: Request) {
   try {
-    // 1. Verificar autenticación
-    const user = await getAuthenticatedUser()
-    if (!user) {
+    // 1. Verificar autenticación usando el cliente del servidor
+    const supabase = await createServerClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      console.error('[API registrar-pago] Error de autenticación:', authError)
       return NextResponse.json(
         { error: 'No autenticado' },
         { status: 401 }
       )
     }
+    
+    console.log('[API registrar-pago] Usuario autenticado:', user.id)
 
     // 2. Obtener datos del request
     const body = await request.json()
