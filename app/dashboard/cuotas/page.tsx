@@ -45,6 +45,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { getCuotasSegunRol } from '@/lib/queries-con-roles'
+import { CuotaCardMobile } from '@/components/CuotaCardMobile'
 
 interface Pago {
   id: string
@@ -603,20 +604,22 @@ export default function CuotasPage() {
               No hay cuotas pendientes
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Cliente</TableHead>
-                  {userRole === 'admin' && <TableHead>Cobrador</TableHead>}
-                  <TableHead>Cuota #</TableHead>
-                  <TableHead>Monto</TableHead>
-                  <TableHead>Pagado</TableHead>
-                  <TableHead>Pendiente</TableHead>
-                  <TableHead>Vencimiento</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
+            <>
+              {/* Vista Desktop */}
+              <Table className="hidden md:table">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cliente</TableHead>
+                    {userRole === 'admin' && <TableHead>Cobrador</TableHead>}
+                    <TableHead>Cuota #</TableHead>
+                    <TableHead>Monto</TableHead>
+                    <TableHead>Pagado</TableHead>
+                    <TableHead>Pendiente</TableHead>
+                    <TableHead>Vencimiento</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
               <TableBody>
                 {cuotasPendientes.map((cuota) => {
                   const montoPendiente = cuota.monto_cuota - cuota.monto_pagado
@@ -680,6 +683,25 @@ export default function CuotasPage() {
                 })}
               </TableBody>
             </Table>
+
+            {/* Vista Móvil */}
+            <div className="md:hidden space-y-3">
+              {cuotasPendientes.map((cuota) => (
+                <CuotaCardMobile
+                  key={cuota.id}
+                  cuota={cuota}
+                  currency={config.currency}
+                  userRole={userRole}
+                  onRegistrarPago={() => {
+                    setSelectedCuota(cuota)
+                    setMontoPago((cuota.monto_cuota - cuota.monto_pagado).toFixed(2))
+                    setPagoDialogOpen(true)
+                  }}
+                  onVerPagos={cuota.monto_pagado > 0 ? () => handleVerPagos(cuota) : undefined}
+                />
+              ))}
+            </div>
+          </>
           )}
         </CardContent>
       </Card>
@@ -695,19 +717,21 @@ export default function CuotasPage() {
               No hay cuotas pagadas aún
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Cliente</TableHead>
-                  {userRole === 'admin' && <TableHead>Cobrador</TableHead>}
-                  <TableHead>Cuota #</TableHead>
-                  <TableHead>Monto</TableHead>
-                  <TableHead>Pagado</TableHead>
-                  <TableHead>Fecha de Pago</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
+            <>
+              {/* Vista Desktop */}
+              <Table className="hidden md:table">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cliente</TableHead>
+                    {userRole === 'admin' && <TableHead>Cobrador</TableHead>}
+                    <TableHead>Cuota #</TableHead>
+                    <TableHead>Monto</TableHead>
+                    <TableHead>Pagado</TableHead>
+                    <TableHead>Fecha de Pago</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
               <TableBody>
                 {cuotasPagadas.slice(0, 10).map((cuota) => (
                   <TableRow key={cuota.id}>
@@ -746,6 +770,21 @@ export default function CuotasPage() {
                 ))}
               </TableBody>
             </Table>
+
+            {/* Vista Móvil */}
+            <div className="md:hidden space-y-3">
+              {cuotasPagadas.slice(0, 10).map((cuota) => (
+                <CuotaCardMobile
+                  key={cuota.id}
+                  cuota={cuota}
+                  currency={config.currency}
+                  userRole={userRole}
+                  onRegistrarPago={() => {}}
+                  onVerPagos={() => handleVerPagos(cuota)}
+                />
+              ))}
+            </div>
+          </>
           )}
         </CardContent>
       </Card>
@@ -755,7 +794,7 @@ export default function CuotasPage() {
         setPagoDialogOpen(isOpen)
         if (!isOpen) resetPagoForm()
       }}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[500px] max-w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Registrar Pago</DialogTitle>
             <DialogDescription>
@@ -832,7 +871,7 @@ export default function CuotasPage() {
 
       {/* Dialog de Ver Pagos */}
       <Dialog open={pagosDialogOpen} onOpenChange={setPagosDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="sm:max-w-2xl max-w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Historial de Pagos</DialogTitle>
             <DialogDescription>

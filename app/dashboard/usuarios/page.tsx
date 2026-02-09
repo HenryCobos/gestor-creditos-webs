@@ -34,6 +34,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { Plus, Pencil, Trash2, UserPlus, Key, UserX, UserCheck } from 'lucide-react'
 import { useStore, type Profile, type UserRole } from '@/lib/store'
 import { formatDate } from '@/lib/utils'
+import { UsuarioCardMobile } from '@/components/UsuarioCardMobile'
 
 export default function UsuariosPage() {
   const [open, setOpen] = useState(false)
@@ -379,23 +380,23 @@ export default function UsuariosPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 p-4 md:p-0">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Gestión de Usuarios</h1>
-          <p className="text-gray-500 mt-1">Administra cobradores y administradores</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Gestión de Usuarios</h1>
+          <p className="text-gray-500 mt-1 text-sm md:text-base">Administra cobradores y administradores</p>
         </div>
         <Dialog open={open} onOpenChange={(isOpen) => {
           setOpen(isOpen)
           if (!isOpen) resetForm()
         }}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className="w-full sm:w-auto">
               <UserPlus className="mr-2 h-4 w-4" />
               Nuevo Usuario
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md">
+          <DialogContent className="sm:max-w-md max-w-[95vw] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {editingUsuario ? 'Editar Usuario' : 'Nuevo Usuario'}
@@ -503,17 +504,19 @@ export default function UsuariosPage() {
               </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Usuario</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Rol</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead>Último Acceso</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
+            <>
+              {/* Vista Desktop */}
+              <Table className="hidden md:table">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Usuario</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Rol</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead>Último Acceso</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
               <TableBody>
                 {usuarios.map((usuario) => (
                   <TableRow key={usuario.id}>
@@ -586,6 +589,21 @@ export default function UsuariosPage() {
                 ))}
               </TableBody>
             </Table>
+
+            {/* Vista Móvil */}
+            <div className="md:hidden space-y-3">
+              {usuarios.map((usuario) => (
+                <UsuarioCardMobile
+                  key={usuario.id}
+                  usuario={usuario}
+                  onEdit={() => handleEdit(usuario)}
+                  onResetPassword={() => handleResetPassword(usuario)}
+                  onToggleStatus={() => handleToggleActivo(usuario)}
+                  onDelete={() => handleDelete(usuario)}
+                />
+              ))}
+            </div>
+          </>
           )}
         </CardContent>
       </Card>
