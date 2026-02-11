@@ -1,16 +1,30 @@
 # 🎯 SOLUCIÓN DEFINITIVA - MÚLTIPLES ORGANIZACIONES
 
-## ⚠️ IMPORTANTE
-Este script está diseñado para tu sistema con **múltiples organizaciones (clientes)**. NO moverá todos los usuarios a una sola organización. Respetará cada organización existente.
+## ⚠️ IMPORTANTE - ENTENDIENDO LAS ORGANIZACIONES
+
+### 📌 Concepto Clave:
+
+**Organización = Cada Cliente independiente**
+
+- ✅ **Landing Page**: Usuario se registra → Se crea UNA organización nueva para él
+- ✅ **Dentro del Sistema**: Admin crea cobrador → El cobrador se une a la organización del admin (NO se crea nueva organización)
+
+### 🎯 Objetivo:
+
+- Cada admin tiene su propia organización
+- Cada organización tiene UN plan (no planes individuales por usuario)
+- Todos los usuarios de una organización comparten el mismo plan
+- Admin y sus cobradores ven los mismos límites
 
 ---
 
 ## 📋 QUÉ HACE ESTE SCRIPT
 
 1. **Corrige asignaciones incorrectas**: Mueve usuarios a su organización correcta según `user_roles`
-2. **Respeta organizaciones existentes**: NO toca organizaciones con múltiples usuarios o planes pagados
+2. **Respeta organizaciones existentes**: NO toca organizaciones con múltiples usuarios establecidos
 3. **Recrea funciones**: Asegura que `get_limites_organizacion()` y `get_uso_por_usuario()` funcionen correctamente
 4. **Limpia planes individuales**: Elimina `plan_id` de usuarios individuales (solo organizaciones deben tener planes)
+5. **Elimina vistas problemáticas**: Remueve vistas que causaban errores de seguridad
 
 ---
 
