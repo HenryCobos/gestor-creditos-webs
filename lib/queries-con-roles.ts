@@ -159,11 +159,32 @@ export async function getClientesInteligente(): Promise<Cliente[]> {
     console.log('[getClientesInteligente] ✅ Cargados:', clientes.length, 'clientes')
     return clientes
   } catch (error) {
-    console.error('[getClientesInteligente] ❌ Error con función RPC, usando fallback:', error)
-    // Fallback a query directa si la función falla
-    const clientes = await getClientesPropios()
-    console.log('[getClientesInteligente] ⚠️ Fallback exitoso:', clientes.length, 'clientes')
-    return clientes
+    console.error('[getClientesInteligente] ❌ Error con función RPC:', error)
+
+    // Solo usar fallback de \"clientes propios\" para usuarios SIN organización (modo antiguo)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw error
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single()
+
+      if (profile?.organization_id) {
+        console.error('[getClientesInteligente] Usuario con organización, NO se usa fallback. Propagando error.')
+        throw error
+      }
+
+      console.log('[getClientesInteligente] Usuario sin organización, usando fallback de clientes propios...')
+      const clientes = await getClientesPropios()
+      console.log('[getClientesInteligente] ⚠️ Fallback exitoso:', clientes.length, 'clientes')
+      return clientes
+    } catch (fallbackError) {
+      console.error('[getClientesInteligente] ❌ Error también en fallback o usuario con organización:', fallbackError)
+      throw error
+    }
   }
 }
 
@@ -174,9 +195,31 @@ export async function getPrestamosInteligente(): Promise<Prestamo[]> {
     console.log('[getPrestamosInteligente] ✅ Cargados:', prestamos.length, 'préstamos')
     return prestamos
   } catch (error) {
-    console.error('[getPrestamosInteligente] ❌ Error con función RPC, usando fallback:', error)
-    const prestamos = await getPrestamosPropios()
-    console.log('[getPrestamosInteligente] ⚠️ Fallback exitoso:', prestamos.length, 'préstamos')
-    return prestamos
+    console.error('[getPrestamosInteligente] ❌ Error con función RPC:', error)
+
+    // Solo usar fallback de \"préstamos propios\" para usuarios SIN organización
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw error
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single()
+
+      if (profile?.organization_id) {
+        console.error('[getPrestamosInteligente] Usuario con organización, NO se usa fallback. Propagando error.')
+        throw error
+      }
+
+      console.log('[getPrestamosInteligente] Usuario sin organización, usando fallback de préstamos propios...')
+      const prestamos = await getPrestamosPropios()
+      console.log('[getPrestamosInteligente] ⚠️ Fallback exitoso:', prestamos.length, 'préstamos')
+      return prestamos
+    } catch (fallbackError) {
+      console.error('[getPrestamosInteligente] ❌ Error también en fallback o usuario con organización:', fallbackError)
+      throw error
+    }
   }
 }
