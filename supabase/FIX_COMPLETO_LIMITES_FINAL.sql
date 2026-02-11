@@ -40,7 +40,7 @@ SET plan_id = (
   SELECT pl.id
   FROM profiles p2
   JOIN user_roles ur ON ur.user_id = p2.id AND ur.organization_id = o.id
-  LEFT JOIN plans pl ON pl.id = p2.plan_id
+  LEFT JOIN planes pl ON pl.id = p2.plan_id
   WHERE ur.role = 'admin'
     AND p2.plan_id IS NOT NULL
   LIMIT 1
