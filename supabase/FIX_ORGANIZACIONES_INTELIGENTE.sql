@@ -29,7 +29,7 @@ SELECT
   pl.nombre as plan_nombre,
   pl.slug as plan_slug,
   COUNT(p.id) as total_usuarios,
-  MIN(p.id) as unico_usuario_id
+  (ARRAY_AGG(p.id))[1] as unico_usuario_id
 FROM organizations o
 LEFT JOIN planes pl ON pl.id = o.plan_id
 LEFT JOIN profiles p ON p.organization_id = o.id
