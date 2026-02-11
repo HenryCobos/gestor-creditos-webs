@@ -167,25 +167,112 @@ export async function loadOrganizationUsageLimits(): Promise<UsageLimits | null>
   if (!user) return null
 
   try {
-    // Obtener límites usando la función RPC
+    // 1) Intentar obtener límites usando la función RPC principal
     const { data: limites, error } = await supabase
       .rpc('get_limites_organizacion')
       .single()
 
-    if (error || !limites) {
-      console.log('[loadOrganizationUsageLimits] Error o sin límites para organización:', error)
-      // Devolvemos null para que el caller decida si usa un fallback
+    if (!error && limites) {
+      console.log('[loadOrganizationUsageLimits] ✅ Límites de organización (RPC):', limites)
+
+      // Casting explícito para TypeScript
+      const limitesData = limites as any
+      const clientesUsados = limitesData.clientes_usados || 0
+      const limiteClientes = limitesData.limite_clientes || 0
+      const prestamosUsados = limitesData.prestamos_usados || 0
+      const limitePrestamos = limitesData.limite_prestamos || 0
+
+      return {
+        clientes: {
+          current: clientesUsados,
+          limit: limiteClientes,
+          canAdd: clientesUsados < limiteClientes,
+        },
+        prestamos: {
+          current: prestamosUsados,
+          limit: limitePrestamos,
+          canAdd: prestamosUsados < limitePrestamos,
+        },
+        usuarios: {
+          current: 0,
+          limit: 999,
+          canAdd: true,
+        },
+      }
+    }
+
+    console.log('[loadOrganizationUsageLimits] ⚠️ Error o sin datos desde RPC, usando fallback manual:', error)
+
+    // 2) FALLBACK SEGURO (sin recursion):
+    //    Calcular límites a partir de la organización y sus usuarios.
+
+    // 2.1 Obtener perfil para conocer organization_id
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile?.organization_id) {
+      console.log('[loadOrganizationUsageLimits] Fallback: usuario sin organization_id')
       return null
     }
 
-    console.log('[loadOrganizationUsageLimits] ✅ Límites de organización:', limites)
+    const orgId = profile.organization_id as string
 
-    // Casting explícito para TypeScript
-    const limitesData = limites as any
-    const clientesUsados = limitesData.clientes_usados || 0
-    const limiteClientes = limitesData.limite_clientes || 0
-    const prestamosUsados = limitesData.prestamos_usados || 0
-    const limitePrestamos = limitesData.limite_prestamos || 0
+    // 2.2 Obtener plan de la organización
+    const { data: org, error: orgError } = await supabase
+      .from('organizations')
+      .select(`
+        id,
+        plan:planes(limite_clientes, limite_prestamos)
+      `)
+      .eq('id', orgId)
+      .single()
+
+    if (orgError || !org?.plan) {
+      console.log('[loadOrganizationUsageLimits] Fallback: organización sin plan o error:', orgError)
+      return null
+    }
+
+    const planData = org.plan as any
+    const limiteClientes = planData.limite_clientes || 0
+    const limitePrestamos = planData.limite_prestamos || 0
+
+    // 2.3 Obtener IDs de usuarios de la organización
+    const { data: orgUsers, error: usersError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('organization_id', orgId)
+
+    if (usersError || !orgUsers || orgUsers.length === 0) {
+      console.log('[loadOrganizationUsageLimits] Fallback: sin usuarios en organización o error:', usersError)
+      return null
+    }
+
+    const userIds = orgUsers.map(u => u.id)
+
+    // 2.4 Contar clientes y préstamos de TODOS los usuarios de la organización
+    const [clientesAgg, prestamosAgg] = await Promise.all([
+      supabase
+        .from('clientes')
+        .select('id', { count: 'exact', head: true })
+        .in('user_id', userIds),
+      supabase
+        .from('prestamos')
+        .select('id', { count: 'exact', head: true })
+        .in('user_id', userIds),
+    ])
+
+    const clientesUsados = clientesAgg.count || 0
+    const prestamosUsados = prestamosAgg.count || 0
+
+    console.log('[loadOrganizationUsageLimits] ✅ Fallback manual calculado:', {
+      clientesUsados,
+      prestamosUsados,
+      limiteClientes,
+      limitePrestamos,
+    })
 
     return {
       clientes: {
@@ -199,7 +286,7 @@ export async function loadOrganizationUsageLimits(): Promise<UsageLimits | null>
         canAdd: prestamosUsados < limitePrestamos,
       },
       usuarios: {
-        current: 0,
+        current: userIds.length,
         limit: 999,
         canAdd: true,
       },
@@ -207,7 +294,6 @@ export async function loadOrganizationUsageLimits(): Promise<UsageLimits | null>
 
   } catch (error) {
     console.error('[loadOrganizationUsageLimits] Error:', error)
-    // Evitamos fallback automático para no mezclar límites individuales con organizacionales
     return null
   }
 }
