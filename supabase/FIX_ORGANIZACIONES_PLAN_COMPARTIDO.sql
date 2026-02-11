@@ -68,12 +68,14 @@ BEGIN
   
   -- CREAR UNA ORGANIZACIÓN PARA EL NUEVO USUARIO
   INSERT INTO public.organizations (
-    name,
+    owner_id,
+    nombre_negocio,
     plan_id,
     subscription_status,
     created_at,
     updated_at
   ) VALUES (
+    NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)) || '''s Organization',
     free_plan_id,  -- La ORGANIZACIÓN tiene el plan gratuito
     'active',
@@ -178,7 +180,7 @@ SELECT '========================================' as " ";
 
 -- Ver usuarios por organización
 SELECT 
-  o.name as organizacion,
+  o.nombre_negocio as organizacion,
   pl.nombre as plan_organizacion,
   pl.limite_clientes as limite_org_clientes,
   pl.limite_prestamos as limite_org_prestamos,
@@ -189,7 +191,7 @@ SELECT
 FROM organizations o
 JOIN planes pl ON pl.id = o.plan_id
 LEFT JOIN profiles p ON p.organization_id = o.id
-GROUP BY o.id, o.name, pl.nombre, pl.limite_clientes, pl.limite_prestamos
+GROUP BY o.id, o.nombre_negocio, pl.nombre, pl.limite_clientes, pl.limite_prestamos
 ORDER BY o.created_at DESC;
 
 -- Verificar que NO hay usuarios con plan individual EN organizaciones
