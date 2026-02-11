@@ -732,6 +732,8 @@ export default function PrestamosPage() {
         title: 'Éxito',
         description: 'Préstamo eliminado correctamente',
       })
+      // Recalcular límites de la organización después de eliminar
+      await loadSubscriptionData()
     }
   }
 

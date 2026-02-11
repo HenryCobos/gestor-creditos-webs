@@ -196,6 +196,8 @@ export default function ClientesPage() {
         title: 'Éxito',
         description: 'Cliente eliminado correctamente',
       })
+      // Recalcular límites de la organización después de eliminar
+      await loadSubscriptionData()
     }
   }
 
