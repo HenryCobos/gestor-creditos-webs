@@ -291,26 +291,16 @@ FROM profiles
 WHERE organization_id IS NOT NULL
   AND plan_id IS NOT NULL;
 
--- PROBAR LA FUNCIÓN (debería retornar datos ahora)
-SELECT 
-  '🎯 Resultado de get_limites_organizacion():' as info,
-  organization_id,
-  plan_nombre,
-  plan_slug,
-  limite_clientes,
-  limite_prestamos,
-  clientes_usados,
-  prestamos_usados,
-  clientes_disponibles,
-  prestamos_disponibles
-FROM get_limites_organizacion();
-
 SELECT '========================================' as " ";
 SELECT '✅ FIX COMPLETO FINALIZADO' as " ";
 SELECT '========================================' as " ";
 SELECT '' as " ";
 SELECT '📋 SIGUIENTE PASO:' as " ";
 SELECT '1. Refresca tu navegador (Ctrl+F5)' as " ";
-SELECT '2. Verifica que tu dashboard muestre el plan correcto' as " ";
-SELECT '3. Admin y cobradores deben ver el mismo plan' as " ";
+SELECT '2. Ve al Dashboard de tu aplicación' as " ";
+SELECT '3. Verifica que muestre el plan correcto' as " ";
+SELECT '4. Admin y cobradores deben ver el mismo plan' as " ";
+SELECT '' as " ";
+SELECT '⚠️ NOTA: La función get_limites_organizacion() solo se puede' as " ";
+SELECT 'probar desde la aplicación (no desde SQL Editor)' as " ";
 SELECT '========================================' as " ";
