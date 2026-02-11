@@ -8,10 +8,6 @@
 -- 4. Verifica que todo funcione correctamente
 -- =========================================================
 
-\echo '========================================'
-\echo 'FIX FINAL - MÚLTIPLES ORGANIZACIONES'
-\echo '========================================'
-
 -- =========================================================
 -- PASO 1: Corregir asignaciones de usuarios según user_roles
 -- =========================================================
@@ -21,7 +17,10 @@ DECLARE
   v_corregidos INTEGER := 0;
   v_user RECORD;
 BEGIN
-  \echo 'PASO 1: Corrigiendo asignaciones de usuarios...'
+  RAISE NOTICE '========================================';
+  RAISE NOTICE 'FIX FINAL - MÚLTIPLES ORGANIZACIONES';
+  RAISE NOTICE '========================================';
+  RAISE NOTICE 'PASO 1: Corrigiendo asignaciones de usuarios...';
   
   FOR v_user IN
     SELECT 
@@ -57,7 +56,10 @@ END $$;
 -- PASO 2: Asegurar que organizaciones tienen plan_id
 -- =========================================================
 
-\echo 'PASO 2: Asegurando que organizaciones tienen plan...'
+DO $$
+BEGIN
+  RAISE NOTICE 'PASO 2: Asegurando que organizaciones tienen plan...';
+END $$;
 
 UPDATE organizations o
 SET 
@@ -69,7 +71,10 @@ WHERE plan_id IS NULL;
 -- PASO 3: Recrear función get_limites_organizacion()
 -- =========================================================
 
-\echo 'PASO 3: Recreando función get_limites_organizacion()...'
+DO $$
+BEGIN
+  RAISE NOTICE 'PASO 3: Recreando función get_limites_organizacion()...';
+END $$;
 
 DROP FUNCTION IF EXISTS public.get_limites_organizacion() CASCADE;
 
@@ -155,7 +160,10 @@ GRANT EXECUTE ON FUNCTION public.get_limites_organizacion() TO authenticated;
 -- PASO 4: Recrear función get_uso_por_usuario()
 -- =========================================================
 
-\echo 'PASO 4: Recreando función get_uso_por_usuario()...'
+DO $$
+BEGIN
+  RAISE NOTICE 'PASO 4: Recreando función get_uso_por_usuario()...';
+END $$;
 
 DROP FUNCTION IF EXISTS public.get_uso_por_usuario() CASCADE;
 
@@ -207,7 +215,10 @@ GRANT EXECUTE ON FUNCTION public.get_uso_por_usuario() TO authenticated;
 -- PASO 5: Eliminar vistas que causan problemas
 -- =========================================================
 
-\echo 'PASO 5: Eliminando vistas problemáticas...'
+DO $$
+BEGIN
+  RAISE NOTICE 'PASO 5: Eliminando vistas problemáticas...';
+END $$;
 
 DROP VIEW IF EXISTS public.vista_organizacion_limites CASCADE;
 DROP VIEW IF EXISTS public.vista_uso_por_usuario CASCADE;
@@ -216,9 +227,12 @@ DROP VIEW IF EXISTS public.vista_uso_por_usuario CASCADE;
 -- VERIFICACIÓN FINAL
 -- =========================================================
 
-\echo '========================================'
-\echo 'VERIFICACIÓN FINAL'
-\echo '========================================'
+DO $$
+BEGIN
+  RAISE NOTICE '========================================';
+  RAISE NOTICE 'VERIFICACIÓN FINAL';
+  RAISE NOTICE '========================================';
+END $$;
 
 -- Ver resumen de organizaciones
 SELECT 
@@ -242,12 +256,15 @@ FROM profiles p
 WHERE p.organization_id IS NULL
    OR p.plan_id IS NOT NULL;
 
-\echo '========================================'
-\echo '✅ FIX COMPLETADO'
-\echo '========================================'
-\echo 'SIGUIENTE PASO:'
-\echo '1. Cierra sesión en el sistema'
-\echo '2. Limpia caché del navegador (Ctrl+Shift+Del)'
-\echo '3. Vuelve a iniciar sesión'
-\echo '4. Ahora verás los límites correctos'
-\echo '========================================'
+DO $$
+BEGIN
+  RAISE NOTICE '========================================';
+  RAISE NOTICE '✅ FIX COMPLETADO';
+  RAISE NOTICE '========================================';
+  RAISE NOTICE 'SIGUIENTE PASO:';
+  RAISE NOTICE '1. Cierra sesión en el sistema';
+  RAISE NOTICE '2. Limpia caché del navegador (Ctrl+Shift+Del)';
+  RAISE NOTICE '3. Vuelve a iniciar sesión';
+  RAISE NOTICE '4. Ahora verás los límites correctos';
+  RAISE NOTICE '========================================';
+END $$;
