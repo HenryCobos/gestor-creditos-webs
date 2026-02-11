@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Guía Rápida - Gestor de Créditos</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.6;
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 24px;
+        color: #111827;
+        background: #f9fafb;
+      }
+      h1, h2, h3 {
+        color: #111827;
+      }
+      h1 {
+        font-size: 28px;
+        margin-bottom: 8px;
+      }
+      h2 {
+        font-size: 22px;
+        margin-top: 24px;
+        margin-bottom: 8px;
+        border-bottom: 1px solid #e5e7eb;
+        padding-bottom: 4px;
+      }
+      h3 {
+        font-size: 18px;
+        margin-top: 16px;
+        margin-bottom: 4px;
+      }
+      p {
+        margin: 4px 0 8px;
+      }
+      ul {
+        margin: 4px 0 12px 22px;
+      }
+      li {
+        margin-bottom: 4px;
+      }
+      .badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 9999px;
+        font-size: 12px;
+        background: #eff6ff;
+        color: #1d4ed8;
+        border: 1px solid #bfdbfe;
+        margin-left: 4px;
+      }
+      .note {
+        background: #ecfeff;
+        border-left: 4px solid #06b6d4;
+        padding: 8px 12px;
+        margin: 12px 0;
+        font-size: 14px;
+      }
+      .small {
+        font-size: 13px;
+        color: #4b5563;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Guía Rápida de Uso – Gestor de Créditos</h1>
+    <p class="small">
+      Ejemplo basado en un negocio real con admin (<strong>hcobos99@gmail.com</strong>) y
+      varios cobradores asignados a rutas.
+    </p>
+
+    <h2>1. Conceptos básicos</h2>
+    <ul>
+      <li>
+        <strong>Organización</strong>: tu negocio. Comparte el mismo plan (límites) entre admin y cobradores.
+      </li>
+      <li>
+        <strong>Admin</strong><span class="badge">Rol administrador</span>:
+        puede crear clientes, préstamos, rutas, cobradores, ver reportes y borrar datos si es necesario.
+      </li>
+      <li>
+        <strong>Cobrador</strong><span class="badge">Rol cobrador</span>:
+        trabaja en una o varias rutas. Puede crear clientes y préstamos, registrar pagos y ver su trabajo,
+        pero <strong>no borra</strong> clientes ni préstamos.
+      </li>
+      <li>
+        <strong>Ruta</strong>: grupo de clientes y préstamos gestionados por un cobrador,
+        con capital inicial y capital disponible.
+      </li>
+      <li>
+        <strong>Plan y límites</strong>: la tarjeta de límites del Dashboard muestra
+        <em>clientes y préstamos totales de la organización</em> frente al límite de tu plan
+        (por ejemplo, 17/50 clientes y 29/50 préstamos para un Plan Profesional 50/50).
+      </li>
+    </ul>
+
+    <h2>2. Flujo recomendado para ADMIN</h2>
+
+    <h3>2.1. Registro y primer acceso</h3>
+    <ul>
+      <li>Regístrate desde la landing con tu correo (ej: <strong>hcobos99@gmail.com</strong>).</li>
+      <li>El sistema crea tu organización y te asigna como <strong>admin</strong>.</li>
+      <li>
+        Al entrar al Dashboard verás:
+        <ul>
+          <li>Tarjeta de <strong>Plan Actual</strong> (ej: Profesional 50/50).</li>
+          <li>
+            Tarjeta de <strong>Límites</strong> indicando clientes y préstamos usados dentro de la organización.
+          </li>
+        </ul>
+      </li>
+    </ul>
+
+    <h3>2.2. Crear cobradores</h3>
+    <ul>
+      <li>Menú izquierdo → <strong>Usuarios</strong>.</li>
+      <li>Haz clic en <strong>Nuevo Usuario</strong>.</li>
+      <li>
+        Completa nombre, email y contraseña, y selecciona el rol
+        <strong>Cobrador</strong>.
+      </li>
+      <li>
+        El nuevo usuario pertenece automáticamente a tu organización y
+        comparte tu plan y tus límites.
+      </li>
+    </ul>
+
+    <h3>2.3. Crear rutas y asignar cobradores</h3>
+    <ul>
+      <li>Menú izquierdo → <strong>Rutas</strong>.</li>
+      <li>
+        Crea rutas como:
+        <ul>
+          <li><strong>Ruta Mama</strong> – capital inicial 20,000 US$, cobrador “Mama”.</li>
+          <li><strong>Ruta Prueba</strong> – capital inicial 80,000 US$, cobrador “Rimarachín”.</li>
+          <li><strong>Ruta Centro</strong> – capital inicial 60,000 US$, cobrador “Valeria”.</li>
+        </ul>
+      </li>
+      <li>
+        Cada tarjeta de ruta muestra capital inicial, capital disponible,
+        número de clientes y <strong>préstamos activos</strong> de esa ruta.
+      </li>
+    </ul>
+
+    <h3>2.4. Crear clientes como admin</h3>
+    <ul>
+      <li>Menú → <strong>Clientes</strong> → botón <strong>Nuevo Cliente</strong>.</li>
+      <li>Rellena datos: nombre, DNI, teléfono, dirección, etc.</li>
+      <li>
+        Puedes crear todos los clientes que necesites. Al principio no tienen ruta asignada, lo cual es normal.
+      </li>
+    </ul>
+
+    <h3>2.5. Asignar clientes a rutas</h3>
+    <ul>
+      <li>Menú → <strong>Rutas</strong>.</li>
+      <li>En la tarjeta de una ruta haz clic en <strong>Clientes</strong>.</li>
+      <li>
+        En el diálogo “Asignar Clientes a Ruta”:
+        <ul>
+          <li>Selecciona clientes sin ruta o que quieras mover a esta ruta.</li>
+          <li>
+            Si algún cliente ya pertenece a otra ruta, el sistema te avisará y, si confirmas,
+            lo moverá correctamente.
+          </li>
+        </ul>
+      </li>
+      <li>
+        Al guardar, la ruta muestra el número correcto de clientes y los
+        préstamos activos de esos clientes se ligan automáticamente a la ruta,
+        gracias al trigger de base de datos.
+      </li>
+    </ul>
+
+    <h3>2.6. Crear préstamos (admin)</h3>
+    <ul>
+      <li>Menú → <strong>Préstamos</strong> → <strong>Nuevo Préstamo</strong>.</li>
+      <li>
+        Selecciona un cliente (idealmente ya asignado a una ruta)
+        y define monto, interés, duración, frecuencia de pago, etc.
+      </li>
+      <li>
+        El sistema crea automáticamente el cronograma de cuotas y vincula el préstamo a la ruta del cliente
+        si este tiene una ruta activa.
+      </li>
+      <li>
+        El Dashboard se actualiza con:
+        <ul>
+          <li>Más <strong>Préstamos Activos</strong>.</li>
+          <li>Mayor <strong>Total Prestado</strong>.</li>
+        </ul>
+      </li>
+    </ul>
+
+    <h3>2.7. Revisar capital y rutas</h3>
+    <ul>
+      <li>Menú → <strong>Rutas</strong>.</li>
+      <li>
+        Cada tarjeta muestra:
+        <ul>
+          <li>Capital inicial y capital disponible.</li>
+          <li>Clientes asignados.</li>
+          <li>Préstamos activos ligados a la ruta.</li>
+        </ul>
+      </li>
+      <li>
+        Desde el botón <strong>Capital</strong> puedes registrar ingresos, retiros y transferencias entre rutas,
+        que actualizan automáticamente el capital disponible.
+      </li>
+    </ul>
+
+    <h2>3. Flujo para COBRADOR</h2>
+
+    <h3>3.1. Iniciar sesión y ver su panel</h3>
+    <ul>
+      <li>El cobrador ingresa con el usuario creado por el admin.</li>
+      <li>
+        Su Dashboard muestra solo sus clientes, préstamos y cuotas,
+        según las rutas donde está asignado.
+      </li>
+      <li>
+        No ve la pantalla global de Rutas ni puede borrar clientes o préstamos:
+        su foco es cobrar y registrar pagos.
+      </li>
+    </ul>
+
+    <h3>3.2. Crear clientes (cobrador)</h3>
+    <ul>
+      <li>Menú → <strong>Mis Clientes</strong> → <strong>Nuevo Cliente</strong>.</li>
+      <li>
+        El admin puede luego asignar estos clientes a una ruta concreta del cobrador
+        para que todo quede perfectamente organizado.
+      </li>
+    </ul>
+
+    <h3>3.3. Crear préstamos (cobrador)</h3>
+    <ul>
+      <li>Menú → <strong>Mis Préstamos</strong> → <strong>Nuevo Préstamo</strong>.</li>
+      <li>
+        Selecciona un cliente de su cartera y define los datos del préstamo
+        (monto, interés, duración, frecuencia, tipo).
+      </li>
+      <li>
+        El sistema crea el préstamo, las cuotas y
+        lo asocia a la ruta del cliente si este tiene una única ruta activa.
+      </li>
+    </ul>
+
+    <h3>3.4. Registrar pagos</h3>
+    <ul>
+      <li>Menú → <strong>Mis Cuotas</strong> o desde el detalle de un préstamo.</li>
+      <li>
+        El cobrador marca cuotas como pagadas y registra montos e información del pago.
+      </li>
+      <li>
+        Esto actualiza:
+        <ul>
+          <li>Estado de la cuota y del préstamo.</li>
+          <li>Capital disponible de la ruta.</li>
+          <li>Indicadores de <strong>Total Recuperado</strong> y <strong>Ganancia por Intereses</strong>.</li>
+        </ul>
+      </li>
+    </ul>
+
+    <h2>4. Límites del plan y tarjeta de límites</h2>
+    <ul>
+      <li>
+        La tarjeta de límites del Dashboard muestra
+        <strong>clientes y préstamos totales de la organización</strong> frente al límite del plan.
+      </li>
+      <li>
+        Cuando el admin o los cobradores crean o eliminan clientes y préstamos,
+        estos números se actualizan tras refrescar los datos.
+      </li>
+      <li>
+        Si se alcanza el límite, el sistema bloquea la creación de nuevos clientes o préstamos
+        y sugiere actualizar el plan.
+      </li>
+    </ul>
+
+    <h2>5. Buenas prácticas</h2>
+    <ul>
+      <li>
+        <strong>Como admin</strong>, crea siempre rutas y cobradores antes de escalar el número de clientes y préstamos.
+      </li>
+      <li>
+        <strong>Asigna clientes a rutas</strong> en cuanto sepas quién los cobrará;
+        así los préstamos quedan bien organizados y los reportes serán precisos.
+      </li>
+      <li>
+        Evita borrar datos masivamente. Si necesitas correcciones grandes, haz primero un diagnóstico
+        (reportes y scripts de diagnóstico) y luego corrige con cuidado.
+      </li>
+      <li>
+        Revisa periódicamente la tarjeta de límites para asegurarte de que tu organización
+        no está llegando al máximo de clientes y préstamos de tu plan.
+      </li>
+    </ul>
+
+    <div class="note">
+      <strong>TIP:</strong> Para guardar esta guía como PDF, usa la opción
+      <em>Imprimir → Guardar como PDF</em> desde tu navegador.
+    </div>
+  </body>
+</html>
+

@@ -31,7 +31,7 @@ ORDER BY prestamos_sin_ruta DESC;
 WITH clientes_con_ruta_unica AS (
   SELECT 
     rc.cliente_id,
-    MAX(rc.ruta_id) AS ruta_id
+    (ARRAY_AGG(rc.ruta_id))[1] AS ruta_id  -- tomar una única ruta activa
   FROM ruta_clientes rc
   WHERE rc.activo = true
   GROUP BY rc.cliente_id

@@ -16,7 +16,8 @@ import {
   MapPin,
   UserCog,
   Receipt,
-  Calculator
+  Calculator,
+  HelpCircle
 } from 'lucide-react'
 import { CompanyHeader } from '@/components/company-header'
 import { MobileMenu } from '@/components/mobile-menu'
@@ -139,6 +140,15 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
                 </div>
               </Link>
             )}
+            {/* Botón pequeño para guía rápida */}
+            <div className="mt-3">
+              <Link href="/guia-rapida-gestor-creditos.html" target="_blank">
+                <button className="flex items-center gap-1 px-3 py-1 text-xs border border-dashed border-border rounded-full text-muted-foreground hover:bg-muted/60 transition-colors">
+                  <HelpCircle className="h-3 w-3" />
+                  Guía rápida
+                </button>
+              </Link>
+            </div>
           </div>
 
           <nav className="flex-1 p-4 space-y-1 overflow-y-auto overflow-x-hidden">
