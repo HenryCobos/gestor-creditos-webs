@@ -91,8 +91,9 @@ export async function loadOrganizationSubscription(): Promise<UserSubscription |
       .single()
 
     if (!profile?.organization_id) {
-      console.log('[loadOrganizationSubscription] Usuario sin organización')
-      return loadUserSubscription() // Fallback al sistema anterior
+      console.log('[loadOrganizationSubscription] Usuario sin organización, devolviendo null')
+      // Este usuario funciona con el sistema antiguo (plan individual)
+      return null
     }
 
     // Obtener organización con su plan
@@ -110,8 +111,8 @@ export async function loadOrganizationSubscription(): Promise<UserSubscription |
       .single()
 
     if (!organization) {
-      console.log('[loadOrganizationSubscription] Organización no encontrada')
-      return loadUserSubscription() // Fallback
+      console.log('[loadOrganizationSubscription] Organización no encontrada para el usuario, devolviendo null')
+      return null
     }
 
     // Si la organización no tiene plan, obtener el plan gratuito
@@ -152,7 +153,9 @@ export async function loadOrganizationSubscription(): Promise<UserSubscription |
 
   } catch (error) {
     console.error('[loadOrganizationSubscription] Error:', error)
-    return loadUserSubscription() // Fallback
+    // No hacemos fallback aquí para evitar recursión y datos inconsistentes.
+    // El caller puede decidir usar loadUserSubscription solo si realmente quiere un plan individual.
+    return null
   }
 }
 
@@ -170,8 +173,9 @@ export async function loadOrganizationUsageLimits(): Promise<UsageLimits | null>
       .single()
 
     if (error || !limites) {
-      console.log('[loadOrganizationUsageLimits] Error o sin límites:', error)
-      return loadUsageLimits() // Fallback
+      console.log('[loadOrganizationUsageLimits] Error o sin límites para organización:', error)
+      // Devolvemos null para que el caller decida si usa un fallback
+      return null
     }
 
     console.log('[loadOrganizationUsageLimits] ✅ Límites de organización:', limites)
@@ -203,7 +207,8 @@ export async function loadOrganizationUsageLimits(): Promise<UsageLimits | null>
 
   } catch (error) {
     console.error('[loadOrganizationUsageLimits] Error:', error)
-    return loadUsageLimits() // Fallback
+    // Evitamos fallback automático para no mezclar límites individuales con organizacionales
+    return null
   }
 }
 
@@ -216,6 +221,23 @@ export async function loadUserSubscription(): Promise<UserSubscription | null> {
   const { data: { user } } = await supabase.auth.getUser()
   
   if (!user) return null
+
+  // PRIMERO: si el usuario pertenece a una organización, usamos SIEMPRE
+  // la suscripción de la organización (plan compartido)
+  try {
+    const { data: orgProfile } = await supabase
+      .from('profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single()
+
+    if (orgProfile?.organization_id) {
+      console.log('[loadUserSubscription] Usuario con organización, delegando a loadOrganizationSubscription')
+      return await loadOrganizationSubscription()
+    }
+  } catch (e) {
+    console.error('[loadUserSubscription] Error verificando organización, continuando con lógica individual:', e)
+  }
 
   try {
     const { data: freePlan } = await supabase
@@ -319,6 +341,23 @@ export async function loadUsageLimits(): Promise<UsageLimits | null> {
   const { data: { user } } = await supabase.auth.getUser()
   
   if (!user) return null
+
+  // PRIMERO: si el usuario pertenece a una organización, usamos SIEMPRE
+  // los límites de la organización (planes compartidos)
+  try {
+    const { data: orgProfile } = await supabase
+      .from('profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single()
+
+    if (orgProfile?.organization_id) {
+      console.log('[loadUsageLimits] Usuario con organización, delegando a loadOrganizationUsageLimits')
+      return await loadOrganizationUsageLimits()
+    }
+  } catch (e) {
+    console.error('[loadUsageLimits] Error verificando organización, continuando con lógica individual:', e)
+  }
 
   try {
     const { data: profile } = await supabase
