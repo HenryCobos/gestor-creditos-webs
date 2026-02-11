@@ -920,7 +920,7 @@ export default function RutasPage() {
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-purple-600">{ruta.prestamos_count || 0}</div>
-                    <div className="text-xs text-gray-500">Préstamos</div>
+                    <div className="text-xs text-gray-500">Préstamos activos</div>
                   </div>
                 </div>
 

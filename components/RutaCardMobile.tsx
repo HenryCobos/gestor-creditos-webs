@@ -44,7 +44,7 @@ export function RutaCardMobile({
     <Card className="overflow-hidden">
       <CardContent className="p-4 space-y-3">
         {/* Header */}
-        <div className="flex justify-between items-start gap-2">
+          <div className="flex justify-between items-start gap-2">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <div 
               className="w-4 h-4 rounded-full flex-shrink-0" 
@@ -54,7 +54,7 @@ export function RutaCardMobile({
           </div>
           {ruta.prestamos_activos !== undefined && ruta.prestamos_activos > 0 && (
             <Badge className="bg-blue-100 text-blue-800">
-              {ruta.prestamos_activos} préstamo{ruta.prestamos_activos !== 1 ? 's' : ''}
+              {ruta.prestamos_activos} préstamo{ruta.prestamos_activos !== 1 ? 's' : ''} activo
             </Badge>
           )}
         </div>
