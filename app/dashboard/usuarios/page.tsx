@@ -144,28 +144,31 @@ export default function UsuariosPage() {
     if (!currentUser) return
 
     if (editingUsuario) {
-      // Actualizar usuario existente
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({
-          nombre_completo: formData.nombre_completo,
+      // Actualizar usuario existente usando API con Service Role
+      try {
+        const response = await fetch('/api/usuarios/actualizar', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId: editingUsuario.id,
+            nombre_completo: formData.nombre_completo,
+            role: formData.role,
+          }),
         })
-        .eq('id', editingUsuario.id)
 
-      // Actualizar rol si cambió
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .update({ role: formData.role })
-        .eq('user_id', editingUsuario.id)
-        .eq('organization_id', organizationId)
+        const data = await response.json()
 
-      if (updateError || roleError) {
-        toast({
-          title: 'Error',
-          description: 'No se pudo actualizar el usuario',
-          variant: 'destructive',
-        })
-      } else {
+        if (!response.ok || data.error) {
+          toast({
+            title: 'Error',
+            description: data.error || 'No se pudo actualizar el usuario',
+            variant: 'destructive',
+          })
+          return
+        }
+
         toast({
           title: 'Éxito',
           description: 'Usuario actualizado correctamente',
@@ -173,6 +176,13 @@ export default function UsuariosPage() {
         setOpen(false)
         resetForm()
         loadUsuarios()
+      } catch (error) {
+        console.error('Error updating user:', error)
+        toast({
+          title: 'Error',
+          description: 'Error al actualizar el usuario. Intenta de nuevo.',
+          variant: 'destructive',
+        })
       }
     } else {
       // Crear nuevo usuario usando nuestra API
@@ -225,23 +235,40 @@ export default function UsuariosPage() {
   const handleToggleActivo = async (usuario: Profile) => {
     if (!isAdmin) return
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({ activo: !usuario.activo })
-      .eq('id', usuario.id)
+    try {
+      const response = await fetch('/api/usuarios/toggle-activo', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: usuario.id,
+        }),
+      })
 
-    if (error) {
+      const data = await response.json()
+
+      if (!response.ok || data.error) {
+        toast({
+          title: 'Error',
+          description: data.error || 'No se pudo cambiar el estado del usuario',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      toast({
+        title: 'Éxito',
+        description: `Usuario ${data.activo ? 'activado' : 'desactivado'} correctamente`,
+      })
+      loadUsuarios()
+    } catch (error) {
+      console.error('Error toggling user status:', error)
       toast({
         title: 'Error',
         description: 'No se pudo cambiar el estado del usuario',
         variant: 'destructive',
       })
-    } else {
-      toast({
-        title: 'Éxito',
-        description: `Usuario ${!usuario.activo ? 'activado' : 'desactivado'} correctamente`,
-      })
-      loadUsuarios()
     }
   }
 
@@ -311,31 +338,40 @@ export default function UsuariosPage() {
 
     if (!isAdmin) return
 
-    // Eliminar de user_roles
-    const { error: roleError } = await supabase
-      .from('user_roles')
-      .delete()
-      .eq('user_id', usuario.id)
-      .eq('organization_id', organizationId)
-
-    // Desactivar usuario (no eliminamos para mantener historial)
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .update({ activo: false, organization_id: null, role: null })
-      .eq('id', usuario.id)
-
-    if (roleError || profileError) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo eliminar el usuario',
-        variant: 'destructive',
+    try {
+      const response = await fetch('/api/usuarios/eliminar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: usuario.id,
+        }),
       })
-    } else {
+
+      const data = await response.json()
+
+      if (!response.ok || data.error) {
+        toast({
+          title: 'Error',
+          description: data.error || 'No se pudo eliminar el usuario',
+          variant: 'destructive',
+        })
+        return
+      }
+
       toast({
         title: 'Éxito',
         description: 'Usuario eliminado correctamente',
       })
       loadUsuarios()
+    } catch (error) {
+      console.error('Error deleting user:', error)
+      toast({
+        title: 'Error',
+        description: 'No se pudo eliminar el usuario',
+        variant: 'destructive',
+      })
     }
   }
 
