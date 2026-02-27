@@ -910,6 +910,9 @@ export default function RutasPage() {
                   <div className="text-xs text-gray-500">
                     Capital inicial: {formatCurrency(ruta.capital_inicial, config.currency)}
                   </div>
+                  <div className="text-[11px] text-gray-500 leading-relaxed">
+                    Disponible = Inicial + Cobros - Capital prestado activo - Gastos aprobados
+                  </div>
                 </div>
 
                 {/* Estadísticas */}

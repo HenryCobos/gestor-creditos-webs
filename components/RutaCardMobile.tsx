@@ -95,6 +95,9 @@ export function RutaCardMobile({
             </p>
           </div>
         </div>
+        <p className="text-[11px] text-gray-500">
+          Disponible = Inicial + Cobros - Capital prestado activo - Gastos
+        </p>
 
         {/* Ganancia */}
         <div className="flex items-center justify-between pt-2 border-t">

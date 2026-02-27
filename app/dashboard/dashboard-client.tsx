@@ -332,7 +332,7 @@ export function DashboardClient() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Total Recuperado
+              Cobros Acumulados
             </CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -346,7 +346,7 @@ export function DashboardClient() {
               <>
                 <div className="text-2xl font-bold">{formatCurrency(totalRecuperado, config.currency)}</div>
                 <p className="text-xs text-muted-foreground">
-                  pagos recibidos
+                  pagos recibidos (bruto)
                 </p>
               </>
             )}
