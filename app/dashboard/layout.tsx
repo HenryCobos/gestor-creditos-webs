@@ -50,7 +50,7 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
     userRole = roleData?.role || userRole
   }
   
-  // Obtener el plan de la ORGANIZACIÓN (consulta explícita para evitar fallback incorrecto en cobradores)
+  // Obtener el plan de la ORGANIZACIÓN (con fallbacks robustos)
   let planInfo: { id: string; nombre: string; slug: string } | null = null
   if (profile?.organization_id) {
     const { data: organization } = await supabase
@@ -71,6 +71,53 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
 
     if (orgPlan) {
       planInfo = orgPlan
+    }
+
+    // Fallback 1: si hay plan_id pero la relación no vino poblada
+    if (!planInfo && organization?.plan_id) {
+      const { data: planById } = await supabase
+        .from('planes')
+        .select('id, nombre, slug')
+        .eq('id', organization.plan_id)
+        .maybeSingle()
+
+      if (planById) {
+        planInfo = planById
+      }
+    }
+  }
+
+  // Fallback 2: usar RPC de límites de organización (fuente usada en el resto del sistema)
+  if (!planInfo && profile?.organization_id) {
+    const { data: limitesOrg } = await supabase
+      .rpc('get_limites_organizacion')
+      .single()
+
+    const planSlug = (limitesOrg as any)?.plan_slug as string | undefined
+    const planNombre = (limitesOrg as any)?.plan_nombre as string | undefined
+
+    if (planSlug) {
+      const { data: planBySlug } = await supabase
+        .from('planes')
+        .select('id, nombre, slug')
+        .eq('slug', planSlug)
+        .maybeSingle()
+
+      if (planBySlug) {
+        planInfo = planBySlug
+      } else {
+        planInfo = {
+          id: '',
+          nombre: planNombre || 'Plan Activo',
+          slug: planSlug,
+        }
+      }
+    } else if (planNombre) {
+      planInfo = {
+        id: '',
+        nombre: planNombre,
+        slug: 'custom',
+      }
     }
   }
 
