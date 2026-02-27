@@ -146,9 +146,6 @@ export function ClienteDetailDialog({
     
     if (!selectedCuota) return
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
     const monto = parseFloat(montoPago)
     if (isNaN(monto) || monto <= 0) {
       toast({
@@ -159,77 +156,48 @@ export function ClienteDetailDialog({
       return
     }
 
-    const nuevoMontoPagado = selectedCuota.monto_pagado + monto
-    const esPagoCompleto = nuevoMontoPagado >= selectedCuota.monto_cuota
-
-    // Registrar el pago
-    const { error: pagoError } = await supabase
-      .from('pagos')
-      .insert([{
-        user_id: user.id,
-        cuota_id: selectedCuota.id,
-        prestamo_id: selectedCuota.prestamo_id,
-        monto_pagado: monto,
-        metodo_pago: metodoPago || null,
-        notas: notas || null,
-        fecha_pago: new Date().toISOString(),
-      }])
-
-    if (pagoError) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo registrar el pago',
-        variant: 'destructive',
+    try {
+      const response = await fetch('/api/registrar-pago', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cuota_id: selectedCuota.id,
+          prestamo_id: selectedCuota.prestamo_id,
+          monto_pagado: monto,
+          metodo_pago: metodoPago || null,
+          notas: notas || null,
+        }),
       })
-      return
-    }
 
-    // Actualizar la cuota
-    const { error: cuotaError } = await supabase
-      .from('cuotas')
-      .update({
-        monto_pagado: nuevoMontoPagado,
-        estado: esPagoCompleto ? 'pagada' : selectedCuota.estado,
-        fecha_pago: esPagoCompleto ? new Date().toISOString().split('T')[0] : null,
-      })
-      .eq('id', selectedCuota.id)
+      const data = await response.json()
 
-    if (cuotaError) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo actualizar la cuota',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    // Verificar si todas las cuotas del préstamo están pagadas
-    if (esPagoCompleto) {
-      const cuotasRol = await getCuotasSegunRol()
-      const cuotasPrestamo = (cuotasRol || []).filter(c => c.prestamo_id === selectedCuota.prestamo_id)
-      const todasPagadas = cuotasPrestamo.length > 0 && cuotasPrestamo.every(
-        c => c.estado === 'pagada' || c.id === selectedCuota.id
-      )
-
-      if (todasPagadas) {
-        await supabase
-          .from('prestamos')
-          .update({ estado: 'pagado' })
-          .eq('id', selectedCuota.prestamo_id)
+      if (!response.ok) {
+        toast({
+          title: 'Error',
+          description: data.error || 'No se pudo registrar el pago',
+          variant: 'destructive',
+        })
+        return
       }
+
+      toast({
+        title: 'Éxito',
+        description: data.message || 'Pago registrado correctamente',
+      })
+
+      // Recargar datos
+      loadClienteData()
+      resetPagoForm()
+      onPaymentComplete?.()
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudo registrar el pago',
+        variant: 'destructive',
+      })
     }
-
-    toast({
-      title: 'Éxito',
-      description: esPagoCompleto 
-        ? 'Cuota pagada completamente' 
-        : 'Pago parcial registrado',
-    })
-
-    // Recargar datos
-    loadClienteData()
-    resetPagoForm()
-    onPaymentComplete?.()
   }
 
   const resetPagoForm = () => {
