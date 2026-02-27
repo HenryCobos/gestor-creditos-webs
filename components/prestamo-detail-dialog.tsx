@@ -39,6 +39,7 @@ import type { Prestamo, Garantia } from '@/lib/store'
 import { generarContratoPrestamo } from '@/lib/pdf-generator'
 import { AbonoCapitalDialog } from '@/components/abono-capital-dialog'
 import { RenovarEmpenoDialog } from '@/components/renovar-empeno-dialog'
+import { getCuotasSegunRol } from '@/lib/queries-con-roles'
 
 interface Cuota {
   id: string
@@ -94,19 +95,12 @@ export function PrestamoDetailDialog({
     if (!prestamo) return
     
     setLoading(true)
-    const { data, error } = await supabase
-      .from('cuotas')
-      .select('*')
-      .eq('prestamo_id', prestamo.id)
-      .order('numero_cuota', { ascending: true })
+    try {
+      const cuotasRol = await getCuotasSegunRol()
+      const data = (cuotasRol || [])
+        .filter(cuota => cuota.prestamo_id === prestamo.id)
+        .sort((a, b) => a.numero_cuota - b.numero_cuota)
 
-    if (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar las cuotas',
-        variant: 'destructive',
-      })
-    } else {
       // Actualizar estado de cuotas retrasadas
       const cuotasActualizadas = data.map(cuota => {
         if (cuota.estado === 'pendiente' && isDateOverdue(cuota.fecha_vencimiento)) {
@@ -115,6 +109,13 @@ export function PrestamoDetailDialog({
         return cuota
       })
       setCuotas(cuotasActualizadas as Cuota[])
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar las cuotas',
+        variant: 'destructive',
+      })
+      console.error('Error cargando cuotas por rol:', error)
     }
     setLoading(false)
   }
@@ -261,12 +262,9 @@ export function PrestamoDetailDialog({
 
     // Si es pago completo, verificar si todas las cuotas del préstamo están pagadas
     if (esPagoCompleto) {
-      const { data: cuotasPrestamo } = await supabase
-        .from('cuotas')
-        .select('id, estado')
-        .eq('prestamo_id', prestamo.id)
-
-      const todasPagadas = cuotasPrestamo?.every(
+      const cuotasRol = await getCuotasSegunRol()
+      const cuotasPrestamo = (cuotasRol || []).filter(c => c.prestamo_id === prestamo.id)
+      const todasPagadas = cuotasPrestamo.length > 0 && cuotasPrestamo.every(
         c => c.estado === 'pagada' || c.id === selectedCuota.id
       )
 

@@ -39,6 +39,7 @@ import { DollarSign, CreditCard, AlertCircle, CheckCircle, FileText, Download, X
 import type { Cliente } from '@/lib/store'
 import { generarContratoPrestamo, generarPlanPagos } from '@/lib/pdf-generator'
 import { useConfigStore } from '@/lib/config-store'
+import { getCuotasSegunRol, getPrestamosInteligente } from '@/lib/queries-con-roles'
 
 interface ClienteDetailDialogProps {
   cliente: Cliente | null
@@ -104,26 +105,39 @@ export function ClienteDetailDialog({
     if (!cliente) return
     
     setLoading(true)
+    try {
+      const [prestamosRol, cuotasRol] = await Promise.all([
+        getPrestamosInteligente(),
+        getCuotasSegunRol(),
+      ])
 
-    // Cargar préstamos del cliente
-    const { data: prestamosData } = await supabase
-      .from('prestamos')
-      .select('*')
-      .eq('cliente_id', cliente.id)
-      .order('created_at', { ascending: false })
+      const prestamosData = (prestamosRol || [])
+        .filter(p => p.cliente_id === cliente.id)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
-    // Cargar todas las cuotas del cliente
-    const { data: cuotasData } = await supabase
-      .from('cuotas')
-      .select(`
-        *,
-        prestamo:prestamos(monto_prestado, frecuencia_pago)
-      `)
-      .in('prestamo_id', prestamosData?.map(p => p.id) || [])
-      .order('fecha_vencimiento', { ascending: true })
+      const prestamosMap = new Map(
+        prestamosData.map((p: any) => [p.id, { monto_prestado: p.monto_prestado, frecuencia_pago: p.frecuencia_pago }])
+      )
+      const prestamoIds = new Set(prestamosData.map((p: any) => p.id))
 
-    setPrestamos(prestamosData || [])
-    setCuotas(cuotasData || [])
+      const cuotasData = (cuotasRol || [])
+        .filter(c => prestamoIds.has(c.prestamo_id))
+        .sort((a, b) => new Date(a.fecha_vencimiento).getTime() - new Date(b.fecha_vencimiento).getTime())
+        .map((cuota: any) => ({
+          ...cuota,
+          prestamo: prestamosMap.get(cuota.prestamo_id) || { monto_prestado: 0, frecuencia_pago: 'mensual' },
+        }))
+
+      setPrestamos(prestamosData as PrestamoDetalle[])
+      setCuotas(cuotasData as CuotaDetalle[])
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar los datos del cliente',
+        variant: 'destructive',
+      })
+      console.error('Error cargando detalle del cliente:', error)
+    }
     setLoading(false)
   }
 
@@ -191,12 +205,9 @@ export function ClienteDetailDialog({
 
     // Verificar si todas las cuotas del préstamo están pagadas
     if (esPagoCompleto) {
-      const { data: cuotasPrestamo } = await supabase
-        .from('cuotas')
-        .select('id, estado')
-        .eq('prestamo_id', selectedCuota.prestamo_id)
-
-      const todasPagadas = cuotasPrestamo?.every(
+      const cuotasRol = await getCuotasSegunRol()
+      const cuotasPrestamo = (cuotasRol || []).filter(c => c.prestamo_id === selectedCuota.prestamo_id)
+      const todasPagadas = cuotasPrestamo.length > 0 && cuotasPrestamo.every(
         c => c.estado === 'pagada' || c.id === selectedCuota.id
       )
 
@@ -305,11 +316,10 @@ export function ClienteDetailDialog({
     
     try {
       // Cargar cuotas del préstamo
-      const { data: cuotasData } = await supabase
-        .from('cuotas')
-        .select('*')
-        .eq('prestamo_id', prestamo.id)
-        .order('numero_cuota')
+      const cuotasRol = await getCuotasSegunRol()
+      const cuotasData = (cuotasRol || [])
+        .filter(c => c.prestamo_id === prestamo.id)
+        .sort((a, b) => a.numero_cuota - b.numero_cuota)
 
       generarContratoPrestamo(
         {
@@ -342,11 +352,10 @@ export function ClienteDetailDialog({
     if (!cliente) return
     
     try {
-      const { data: cuotasData } = await supabase
-        .from('cuotas')
-        .select('*')
-        .eq('prestamo_id', prestamo.id)
-        .order('numero_cuota')
+      const cuotasRol = await getCuotasSegunRol()
+      const cuotasData = (cuotasRol || [])
+        .filter(c => c.prestamo_id === prestamo.id)
+        .sort((a, b) => a.numero_cuota - b.numero_cuota)
 
       if (cuotasData) {
         generarPlanPagos(
