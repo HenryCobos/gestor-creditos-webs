@@ -38,6 +38,7 @@ import { useMemo } from 'react'
 export default function ClientesPage() {
   const [open, setOpen] = useState(false)
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null)
+  const [userRole, setUserRole] = useState<'admin' | 'cobrador' | null>(null)
   const [loading, setLoading] = useState(true)
   const [detailOpen, setDetailOpen] = useState(false)
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null)
@@ -76,6 +77,29 @@ export default function ClientesPage() {
     const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) return
+
+    // Resolver rol real del usuario (prioriza user_roles dentro de organización)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('organization_id, role')
+      .eq('id', user.id)
+      .single()
+
+    let role: 'admin' | 'cobrador' = profile?.role === 'admin' ? 'admin' : 'cobrador'
+
+    if (profile?.organization_id) {
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('organization_id', profile.organization_id)
+        .maybeSingle()
+
+      // En organizaciones, el rol fuente de verdad es user_roles
+      role = roleData?.role === 'admin' ? 'admin' : 'cobrador'
+    }
+
+    setUserRole(role)
 
     try {
       // Usar función inteligente que respeta roles
@@ -177,17 +201,32 @@ export default function ClientesPage() {
   }
 
   const handleDelete = async (id: string) => {
+    if (userRole !== 'admin') {
+      toast({
+        title: 'Sin permisos',
+        description: 'Solo el administrador puede eliminar clientes.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     if (!confirm('¿Estás seguro de eliminar este cliente?')) return
 
-    const { error } = await supabase
+    const { error, count } = await supabase
       .from('clientes')
-      .delete()
+      .delete({ count: 'exact' })
       .eq('id', id)
 
     if (error) {
       toast({
         title: 'Error',
         description: 'No se pudo eliminar el cliente',
+        variant: 'destructive',
+      })
+    } else if (!count || count === 0) {
+      toast({
+        title: 'Sin permisos',
+        description: 'No tienes permisos para eliminar este cliente.',
         variant: 'destructive',
       })
     } else {
@@ -420,8 +459,9 @@ export default function ClientesPage() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        disabled={userRole !== 'admin'}
                         onClick={() => handleDelete(cliente.id)}
-                        title="Eliminar"
+                        title={userRole === 'admin' ? 'Eliminar' : 'Solo admin puede eliminar'}
                       >
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>
@@ -453,7 +493,7 @@ export default function ClientesPage() {
                     }}
                     currency={config?.currency || 'PEN'}
                     onEdit={() => handleEdit(cliente)}
-                    onDelete={() => handleDelete(cliente.id)}
+                    onDelete={userRole === 'admin' ? () => handleDelete(cliente.id) : undefined}
                   />
                 )
               })}

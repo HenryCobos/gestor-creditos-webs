@@ -56,6 +56,7 @@ import type { Garantia } from '@/lib/store'
 
 export default function PrestamosPage() {
   const [open, setOpen] = useState(false)
+  const [userRole, setUserRole] = useState<'admin' | 'cobrador' | null>(null)
   const [loading, setLoading] = useState(true)
   const [detailDialogOpen, setDetailDialogOpen] = useState(false)
   const [selectedPrestamo, setSelectedPrestamo] = useState<Prestamo | null>(null)
@@ -174,6 +175,29 @@ export default function PrestamosPage() {
     const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) return
+
+    // Resolver rol real del usuario (prioriza user_roles dentro de organización)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('organization_id, role')
+      .eq('id', user.id)
+      .single()
+
+    let role: 'admin' | 'cobrador' = profile?.role === 'admin' ? 'admin' : 'cobrador'
+
+    if (profile?.organization_id) {
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('organization_id', profile.organization_id)
+        .maybeSingle()
+
+      // En organizaciones, el rol fuente de verdad es user_roles
+      role = roleData?.role === 'admin' ? 'admin' : 'cobrador'
+    }
+
+    setUserRole(role)
 
     try {
       // Cargar clientes usando función inteligente
@@ -713,17 +737,32 @@ export default function PrestamosPage() {
   }
 
   const handleDelete = async (id: string) => {
+    if (userRole !== 'admin') {
+      toast({
+        title: 'Sin permisos',
+        description: 'Solo el administrador puede eliminar préstamos.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     if (!confirm('¿Estás seguro de eliminar este préstamo? Se eliminarán también sus cuotas.')) return
 
-    const { error } = await supabase
+    const { error, count } = await supabase
       .from('prestamos')
-      .delete()
+      .delete({ count: 'exact' })
       .eq('id', id)
 
     if (error) {
       toast({
         title: 'Error',
         description: 'No se pudo eliminar el préstamo',
+        variant: 'destructive',
+      })
+    } else if (!count || count === 0) {
+      toast({
+        title: 'Sin permisos',
+        description: 'No tienes permisos para eliminar este préstamo.',
         variant: 'destructive',
       })
     } else {
@@ -1554,8 +1593,9 @@ export default function PrestamosPage() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          disabled={userRole !== 'admin'}
                           onClick={() => handleDelete(prestamo.id)}
-                          title="Eliminar préstamo"
+                          title={userRole === 'admin' ? 'Eliminar préstamo' : 'Solo admin puede eliminar'}
                         >
                           <Trash2 className="h-4 w-4 text-red-500" />
                         </Button>
@@ -1594,7 +1634,7 @@ export default function PrestamosPage() {
                     setDetailDialogOpen(true)
                   }}
                   onEdit={() => handleEditPrestamo(prestamo)}
-                  onDelete={() => handleDelete(prestamo.id)}
+                  onDelete={userRole === 'admin' ? () => handleDelete(prestamo.id) : undefined}
                 />
               ))}
             </div>

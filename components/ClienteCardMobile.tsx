@@ -20,7 +20,7 @@ interface ClienteCardMobileProps {
   }
   currency: string
   onEdit: () => void
-  onDelete: () => void
+  onDelete?: () => void
 }
 
 export function ClienteCardMobile({
@@ -104,15 +104,17 @@ export function ClienteCardMobile({
             <Pencil className="mr-1 h-4 w-4" />
             Editar
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={onDelete}
-            className="text-red-600 hover:text-red-700"
-          >
-            <Trash2 className="mr-1 h-4 w-4" />
-            Eliminar
-          </Button>
+          {onDelete && (
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={onDelete}
+              className="text-red-600 hover:text-red-700"
+            >
+              <Trash2 className="mr-1 h-4 w-4" />
+              Eliminar
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
