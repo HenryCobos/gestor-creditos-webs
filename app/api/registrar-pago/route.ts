@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     // Seleccionar solo columnas básicas que seguro existen
     const { data: prestamo, error: prestamoError } = await supabaseAdmin
       .from('prestamos')
-      .select('id, user_id')
+      .select('id, user_id, ruta_id, cliente_id')
       .eq('id', prestamo_id)
       .maybeSingle()
 
@@ -101,7 +101,9 @@ export async function POST(request: Request) {
 
     console.log('[API registrar-pago] Préstamo encontrado:', {
       id: prestamo.id,
-      user_id: prestamo.user_id
+      user_id: prestamo.user_id,
+      ruta_id: prestamo.ruta_id,
+      cliente_id: prestamo.cliente_id,
     })
 
     // 6. Verificar que el préstamo pertenece a la organización del usuario
@@ -145,16 +147,46 @@ export async function POST(request: Request) {
 
     const userRole = roleData?.role || 'cobrador'
 
-    // 8. Si es cobrador, verificar que el préstamo le pertenece
-    // Los cobradores solo pueden registrar pagos de sus propios préstamos
+    // 8. Si es cobrador, verificar acceso al préstamo
+    // Permisos válidos para cobrador:
+    // - préstamo propio (legacy)
+    // - préstamo asignado a su ruta (prestamos.ruta_id)
+    // - préstamo de cliente asignado a una de sus rutas (ruta_clientes)
     // Los admins pueden registrar pagos de cualquier préstamo de la organización
     if (userRole === 'cobrador') {
-      const perteneceAlCobrador = prestamo.user_id === user.id
+      let tienePermisoCobrador = prestamo.user_id === user.id
+
+      // Caso 1: préstamo vinculado directamente a ruta del cobrador
+      if (!tienePermisoCobrador && prestamo.ruta_id) {
+        const { data: rutaAsignada } = await supabaseAdmin
+          .from('rutas')
+          .select('id')
+          .eq('id', prestamo.ruta_id)
+          .eq('cobrador_id', user.id)
+          .maybeSingle()
+
+        tienePermisoCobrador = !!rutaAsignada
+      }
+
+      // Caso 2: cliente del préstamo asignado a ruta del cobrador
+      if (!tienePermisoCobrador && prestamo.cliente_id) {
+        const { data: clienteEnRuta } = await supabaseAdmin
+          .from('ruta_clientes')
+          .select('id, ruta_id, rutas!inner(cobrador_id)')
+          .eq('cliente_id', prestamo.cliente_id)
+          .eq('activo', true)
+          .eq('rutas.cobrador_id', user.id)
+          .limit(1)
+
+        tienePermisoCobrador = !!clienteEnRuta && clienteEnRuta.length > 0
+      }
       
-      if (!perteneceAlCobrador) {
-        console.error('[API registrar-pago] Cobrador intenta registrar pago de préstamo ajeno:', {
+      if (!tienePermisoCobrador) {
+        console.error('[API registrar-pago] Cobrador sin permiso para préstamo:', {
           cobrador_id: user.id,
-          prestamo_owner_id: prestamo.user_id
+          prestamo_owner_id: prestamo.user_id,
+          prestamo_ruta_id: prestamo.ruta_id,
+          prestamo_cliente_id: prestamo.cliente_id,
         })
         return NextResponse.json(
           { error: 'No tienes permiso para registrar pagos en este préstamo' },
@@ -162,7 +194,7 @@ export async function POST(request: Request) {
         )
       }
       
-      console.log('[API registrar-pago] ✅ Cobrador tiene permiso (préstamo propio)')
+      console.log('[API registrar-pago] ✅ Cobrador con permiso por asignación/propiedad')
     } else {
       console.log('[API registrar-pago] ✅ Admin tiene permiso (mismo organization)')
     }
@@ -170,7 +202,7 @@ export async function POST(request: Request) {
     // 9. Obtener información de la cuota actual
     const { data: cuotaActual } = await supabaseAdmin
       .from('cuotas')
-      .select('monto_cuota, monto_pagado, estado')
+      .select('monto_cuota, monto_pagado, estado, prestamo_id')
       .eq('id', cuota_id)
       .single()
 
@@ -178,6 +210,14 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Cuota no encontrada' },
         { status: 404 }
+      )
+    }
+
+    // Asegurar que la cuota pertenece al préstamo recibido
+    if (cuotaActual.prestamo_id !== prestamo_id) {
+      return NextResponse.json(
+        { error: 'La cuota no pertenece al préstamo indicado' },
+        { status: 400 }
       )
     }
 

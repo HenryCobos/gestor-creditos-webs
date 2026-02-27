@@ -30,30 +30,51 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
     redirect('/login')
   }
 
-  // Obtener perfil del usuario con su organización
+  // Obtener perfil del usuario
   let { data: profile } = await supabase
     .from('profiles')
-    .select(`
-      *,
-      organization:organizations(
+    .select('*')
+    .eq('id', user.id)
+    .single()
+
+  // Determinar el rol del usuario (fuente principal: user_roles en organizaciones)
+  let userRole = profile?.role || 'admin'
+  if (profile?.organization_id) {
+    const { data: roleData } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('organization_id', profile.organization_id)
+      .maybeSingle()
+
+    userRole = roleData?.role || userRole
+  }
+  
+  // Obtener el plan de la ORGANIZACIÓN (consulta explícita para evitar fallback incorrecto en cobradores)
+  let planInfo: { id: string; nombre: string; slug: string } | null = null
+  if (profile?.organization_id) {
+    const { data: organization } = await supabase
+      .from('organizations')
+      .select(`
         id,
         nombre_negocio,
         plan_id,
         subscription_status,
         plan:planes(id, nombre, slug)
-      )
-    `)
-    .eq('id', user.id)
-    .single()
+      `)
+      .eq('id', profile.organization_id)
+      .single()
 
-  // Determinar el rol del usuario
-  const userRole = profile?.role || 'admin'
-  
-  // Obtener el plan de la ORGANIZACIÓN (no del usuario individual)
-  let planInfo = null
-  if (profile?.organization?.plan) {
-    planInfo = profile.organization.plan
-  } else {
+    const orgPlan = Array.isArray(organization?.plan)
+      ? organization?.plan[0]
+      : organization?.plan
+
+    if (orgPlan) {
+      planInfo = orgPlan
+    }
+  }
+
+  if (!planInfo) {
     // Si no hay organización o plan, obtener el plan gratuito
     const { data: freePlan } = await supabase
       .from('planes')
@@ -86,16 +107,7 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
     // Recargar el perfil
     const { data: updatedProfile } = await supabase
       .from('profiles')
-      .select(`
-        *,
-        organization:organizations(
-          id,
-          nombre_negocio,
-          plan_id,
-          subscription_status,
-          plan:planes(id, nombre, slug)
-        )
-      `)
+      .select('*')
       .eq('id', user.id)
       .single()
 
