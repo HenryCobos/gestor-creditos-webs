@@ -95,8 +95,10 @@ export default function ClientesPage() {
         .eq('organization_id', profile.organization_id)
         .maybeSingle()
 
-      // En organizaciones, el rol fuente de verdad es user_roles
-      role = roleData?.role === 'admin' ? 'admin' : 'cobrador'
+      // En organizaciones, user_roles es fuente de verdad solo cuando existe.
+      if (roleData?.role === 'admin' || roleData?.role === 'cobrador') {
+        role = roleData.role
+      }
     }
 
     setUserRole(role)

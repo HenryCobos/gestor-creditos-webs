@@ -69,7 +69,21 @@ export default function UsuariosPage() {
       .single()
 
     if (profile) {
-      setIsAdmin(profile.role === 'admin')
+      let role: 'admin' | 'cobrador' = profile.role === 'admin' ? 'admin' : 'cobrador'
+      if (profile.organization_id) {
+        const { data: roleData } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id)
+          .eq('organization_id', profile.organization_id)
+          .maybeSingle()
+
+        if (roleData?.role === 'admin' || roleData?.role === 'cobrador') {
+          role = roleData.role
+        }
+      }
+
+      setIsAdmin(role === 'admin')
       setOrganizationId(profile.organization_id)
     }
   }
@@ -97,7 +111,29 @@ export default function UsuariosPage() {
     }
     console.log('[loadUsuarios] Perfil:', profile)
 
-    if (!profile || profile.role !== 'admin') {
+    if (!profile?.organization_id) {
+      toast({
+        title: 'Acceso denegado',
+        description: 'Solo administradores pueden ver esta sección',
+        variant: 'destructive',
+      })
+      setLoading(false)
+      return
+    }
+
+    const { data: roleData } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('organization_id', profile.organization_id)
+      .maybeSingle()
+
+    let role: 'admin' | 'cobrador' = profile.role === 'admin' ? 'admin' : 'cobrador'
+    if (roleData?.role === 'admin' || roleData?.role === 'cobrador') {
+      role = roleData.role
+    }
+
+    if (role !== 'admin') {
       toast({
         title: 'Acceso denegado',
         description: 'Solo administradores pueden ver esta sección',

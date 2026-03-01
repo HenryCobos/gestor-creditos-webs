@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     // 2. Verificar que el usuario es admin
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('organization_id')
+      .select('organization_id, role')
       .eq('id', user.id)
       .single()
 
@@ -49,7 +49,12 @@ export async function POST(request: Request) {
       .eq('organization_id', profile.organization_id)
       .maybeSingle()
 
-    if (roleData?.role !== 'admin') {
+    let userRole: 'admin' | 'cobrador' = profile?.role === 'admin' ? 'admin' : 'cobrador'
+    if (roleData?.role === 'admin' || roleData?.role === 'cobrador') {
+      userRole = roleData.role
+    }
+
+    if (userRole !== 'admin') {
       console.error('[API reset-password] Usuario no es admin')
       return NextResponse.json(
         { error: 'Solo los administradores pueden resetear contraseñas' },

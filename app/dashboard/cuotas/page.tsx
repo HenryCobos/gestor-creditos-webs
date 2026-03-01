@@ -124,7 +124,7 @@ export default function CuotasPage() {
     // Obtener rol y organización del usuario
     const { data: profile } = await supabase
       .from('profiles')
-      .select('organization_id')
+      .select('organization_id, role')
       .eq('id', user.id)
       .single()
 
@@ -149,7 +149,10 @@ export default function CuotasPage() {
       .eq('organization_id', profile.organization_id)
       .maybeSingle()
 
-    const role = roleData?.role || 'cobrador'
+    let role: 'admin' | 'cobrador' = profile?.role === 'admin' ? 'admin' : 'cobrador'
+    if (roleData?.role === 'admin' || roleData?.role === 'cobrador') {
+      role = roleData.role
+    }
     setUserRole(role)
     console.log('[loadCuotas] Rol del usuario:', role)
 

@@ -193,8 +193,10 @@ export default function PrestamosPage() {
         .eq('organization_id', profile.organization_id)
         .maybeSingle()
 
-      // En organizaciones, el rol fuente de verdad es user_roles
-      role = roleData?.role === 'admin' ? 'admin' : 'cobrador'
+      // En organizaciones, user_roles es fuente de verdad solo cuando existe.
+      if (roleData?.role === 'admin' || roleData?.role === 'cobrador') {
+        role = roleData.role
+      }
     }
 
     setUserRole(role)
@@ -339,6 +341,21 @@ export default function PrestamosPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
+    // Resolver ruta activa del cliente (si existe) para mantener capital por ruta consistente
+    const { data: rutaClienteAsignada } = await supabase
+      .from('ruta_clientes')
+      .select('ruta_id')
+      .eq('cliente_id', formData.cliente_id)
+      .eq('activo', true)
+      .order('fecha_asignacion', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const rutaAsignadaId =
+      rutaClienteAsignada?.ruta_id ||
+      editingPrestamo?.ruta_id ||
+      null
+
     const monto = parseFloat(formData.monto_prestado)
     const interes = parseFloat(formData.interes_porcentaje)
     const meses = formData.tipo_duracion === 'meses' ? parseFloat(formData.numero_meses) : undefined
@@ -398,6 +415,7 @@ export default function PrestamosPage() {
         .from('prestamos')
         .update({
           cliente_id: formData.cliente_id,
+          ruta_id: rutaAsignadaId,
           monto_prestado: monto,
           interes_porcentaje: interes,
           numero_cuotas: cuotas,
@@ -482,6 +500,7 @@ export default function PrestamosPage() {
         .insert([{
           user_id: user.id,
           cliente_id: formData.cliente_id,
+          ruta_id: rutaAsignadaId,
           monto_prestado: monto,
           interes_porcentaje: interes,
           numero_cuotas: cuotas,

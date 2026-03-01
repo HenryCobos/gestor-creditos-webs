@@ -78,7 +78,26 @@ export async function POST(request: Request) {
       )
     }
 
-    if (!inviterProfile || inviterProfile.role !== 'admin' || !inviterProfile.organization_id) {
+    if (!inviterProfile?.organization_id) {
+      return NextResponse.json(
+        { error: 'No tienes permisos para eliminar usuarios' },
+        { status: 403 }
+      )
+    }
+
+    const { data: inviterRoleData } = await supabaseAdmin
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', currentUser.id)
+      .eq('organization_id', inviterProfile.organization_id)
+      .maybeSingle()
+
+    let inviterRole: 'admin' | 'cobrador' = inviterProfile.role === 'admin' ? 'admin' : 'cobrador'
+    if (inviterRoleData?.role === 'admin' || inviterRoleData?.role === 'cobrador') {
+      inviterRole = inviterRoleData.role
+    }
+
+    if (inviterRole !== 'admin') {
       return NextResponse.json(
         { error: 'No tienes permisos para eliminar usuarios' },
         { status: 403 }

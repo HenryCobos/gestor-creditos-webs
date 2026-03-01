@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     // 4. Obtener información del usuario (rol y organización)
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('organization_id')
+      .select('organization_id, role')
       .eq('id', user.id)
       .single()
 
@@ -145,7 +145,10 @@ export async function POST(request: Request) {
       .eq('organization_id', profile.organization_id)
       .maybeSingle()
 
-    const userRole = roleData?.role || 'cobrador'
+    let userRole: 'admin' | 'cobrador' = profile?.role === 'admin' ? 'admin' : 'cobrador'
+    if (roleData?.role === 'admin' || roleData?.role === 'cobrador') {
+      userRole = roleData.role
+    }
 
     // 8. Si es cobrador, verificar acceso al préstamo
     // Permisos válidos para cobrador:

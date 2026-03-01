@@ -93,14 +93,28 @@ export default function CajaPage() {
       .single()
 
     if (profile) {
-      setUserRole(profile.role)
+      let role: 'admin' | 'cobrador' = profile.role === 'admin' ? 'admin' : 'cobrador'
+      if (profile.organization_id) {
+        const { data: roleData } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id)
+          .eq('organization_id', profile.organization_id)
+          .maybeSingle()
+
+        if (roleData?.role === 'admin' || roleData?.role === 'cobrador') {
+          role = roleData.role
+        }
+      }
+
+      setUserRole(role)
       setUserId(user.id)
       setOrganizationId(profile.organization_id)
       
-      if (profile.role === 'admin') {
+      if (role === 'admin') {
         loadRutas(profile.organization_id)
         loadArqueos(profile.organization_id)
-      } else if (profile.role === 'cobrador') {
+      } else if (role === 'cobrador') {
         loadRutasCobrador(user.id)
         loadArqueosCobrador(user.id)
       }

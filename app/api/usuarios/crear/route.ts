@@ -46,7 +46,27 @@ export async function POST(request: Request) {
       )
     }
 
-    if (!inviterProfile || inviterProfile.role !== 'admin') {
+    if (!inviterProfile?.organization_id) {
+      console.error('[API crear usuario] Invitador sin organización:', inviterProfile)
+      return NextResponse.json(
+        { error: 'No tienes permisos para crear usuarios' },
+        { status: 403 }
+      )
+    }
+
+    const { data: inviterRoleData } = await supabaseAdmin
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', invitedBy)
+      .eq('organization_id', inviterProfile.organization_id)
+      .maybeSingle()
+
+    let inviterRole: 'admin' | 'cobrador' = inviterProfile.role === 'admin' ? 'admin' : 'cobrador'
+    if (inviterRoleData?.role === 'admin' || inviterRoleData?.role === 'cobrador') {
+      inviterRole = inviterRoleData.role
+    }
+
+    if (inviterRole !== 'admin') {
       console.error('[API crear usuario] Usuario no es admin:', inviterProfile)
       return NextResponse.json(
         { error: 'No tienes permisos para crear usuarios' },
@@ -61,7 +81,9 @@ export async function POST(request: Request) {
       password,
       email_confirm: true, // Confirmar email automáticamente
       user_metadata: {
-        full_name: fullName
+        full_name: fullName,
+        organization_id: organizationId, // Para que el trigger no cree una org nueva
+        role: role, // admin o cobrador
       }
     })
 
