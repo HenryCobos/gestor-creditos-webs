@@ -352,6 +352,15 @@ export default function CajaPage() {
   }
 
   const calcularDineroEsperado = async () => {
+    if (userRole !== 'cobrador') {
+      toast({
+        title: 'Acción no permitida',
+        description: 'Solo cobradores pueden registrar arqueos',
+        variant: 'destructive',
+      })
+      return
+    }
+
     if (!formData.ruta_id || !formData.fecha_arqueo) {
       toast({
         title: 'Error',
@@ -447,6 +456,15 @@ export default function CajaPage() {
 
     if (!userId || !organizationId || !formData.ruta_id) return
 
+    if (userRole !== 'cobrador') {
+      toast({
+        title: 'Acción no permitida',
+        description: 'Solo cobradores pueden registrar arqueos',
+        variant: 'destructive',
+      })
+      return
+    }
+
     const dineroReportado = parseFloat(formData.dinero_reportado)
     if (isNaN(dineroReportado) || dineroReportado < 0) {
       toast({
@@ -463,7 +481,7 @@ export default function CajaPage() {
       .select('id')
       .eq('ruta_id', formData.ruta_id)
       .eq('fecha_arqueo', formData.fecha_arqueo)
-      .single()
+      .maybeSingle()
 
     if (existing) {
       toast({
@@ -592,6 +610,7 @@ export default function CajaPage() {
               : 'Registra tu arqueo de caja diario'}
           </p>
         </div>
+        {userRole === 'cobrador' && (
         <Dialog open={open} onOpenChange={(isOpen) => {
           setOpen(isOpen)
           if (!isOpen) resetForm()
@@ -743,6 +762,7 @@ export default function CajaPage() {
             </form>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
       {/* Filtros (solo para admin) */}

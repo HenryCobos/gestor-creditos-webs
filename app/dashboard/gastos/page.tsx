@@ -401,10 +401,25 @@ export default function GastosPage() {
       return
     }
 
-    if (userRole === 'cobrador' && !formData.ruta_id) {
+    if (!formData.ruta_id) {
       toast({
         title: 'Error',
         description: 'Debes seleccionar una ruta',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const selectedRuta = rutas.find((ruta) => ruta.id === formData.ruta_id)
+    const gastoCobradorId =
+      userRole === 'admin'
+        ? (selectedRuta?.cobrador_id || null)
+        : userId
+
+    if (!gastoCobradorId) {
+      toast({
+        title: 'Error',
+        description: 'La ruta seleccionada debe tener un cobrador asignado',
         variant: 'destructive',
       })
       return
@@ -451,15 +466,15 @@ export default function GastosPage() {
         .from('gastos')
         .insert({
           organization_id: organizationId,
-          cobrador_id: userId,
+          cobrador_id: gastoCobradorId,
           categoria: formData.categoria,
           monto: monto,
           descripcion: formData.descripcion,
           fecha_gasto: formData.fecha_gasto,
           ruta_id: formData.ruta_id || null,
-          aprobado: true, // Automático
-          aprobado_por: userId,
-          fecha_aprobacion: new Date().toISOString(),
+          aprobado: userRole === 'admin',
+          aprobado_por: userRole === 'admin' ? userId : null,
+          fecha_aprobacion: userRole === 'admin' ? new Date().toISOString() : null,
         })
         .select()
         .single()
@@ -475,7 +490,9 @@ export default function GastosPage() {
 
       toast({
         title: 'Éxito',
-        description: 'Gasto registrado correctamente',
+        description: userRole === 'admin'
+          ? 'Gasto registrado y aprobado correctamente'
+          : 'Gasto registrado correctamente (pendiente de aprobación)',
       })
     }
 
@@ -616,7 +633,9 @@ export default function GastosPage() {
               <DialogDescription>
                 {editingGasto 
                   ? 'Actualiza los datos del gasto'
-                  : 'Los gastos se aprueban automáticamente'}
+                  : userRole === 'admin'
+                  ? 'Los gastos creados por admin se aprueban automáticamente'
+                  : 'El gasto quedará pendiente hasta ser aprobado por un admin'}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -691,9 +710,7 @@ export default function GastosPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="ruta_id">
-                  Ruta {userRole === 'cobrador' ? '*' : '(Opcional)'}
-                </Label>
+                <Label htmlFor="ruta_id">Ruta *</Label>
                 {rutas.length === 0 ? (
                   <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-md">
                     ⚠️ No hay rutas activas disponibles
@@ -702,7 +719,7 @@ export default function GastosPage() {
                   <Select
                     value={formData.ruta_id}
                     onValueChange={(value) => setFormData({ ...formData, ruta_id: value })}
-                    required={userRole === 'cobrador'}
+                    required
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Seleccionar ruta" />
