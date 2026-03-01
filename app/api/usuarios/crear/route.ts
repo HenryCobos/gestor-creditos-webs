@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { createClient as createServerClient } from '@/lib/supabase/server'
 
 // Cliente de Supabase con Service Role (admin)
 const supabaseAdmin = createClient(
@@ -26,6 +27,34 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Configuración del servidor incompleta' },
         { status: 500 }
+      )
+    }
+
+    // Verificar sesión del usuario actual y evitar suplantación por body
+    const supabaseServer = await createServerClient()
+    const {
+      data: { user: currentUser },
+      error: sessionError,
+    } = await supabaseServer.auth.getUser()
+
+    if (sessionError || !currentUser) {
+      return NextResponse.json(
+        { error: 'No autenticado' },
+        { status: 401 }
+      )
+    }
+
+    if (!invitedBy || invitedBy !== currentUser.id) {
+      return NextResponse.json(
+        { error: 'No tienes permisos para crear usuarios' },
+        { status: 403 }
+      )
+    }
+
+    if (role !== 'admin' && role !== 'cobrador') {
+      return NextResponse.json(
+        { error: 'Rol inválido' },
+        { status: 400 }
       )
     }
 
@@ -74,9 +103,16 @@ export async function POST(request: Request) {
       )
     }
 
+    if (!organizationId || organizationId !== inviterProfile.organization_id) {
+      return NextResponse.json(
+        { error: 'Organización inválida para crear el usuario' },
+        { status: 403 }
+      )
+    }
+
     // Crear usuario en Supabase Auth usando admin API
     console.log('[API crear usuario] Creando usuario en Auth...')
-    const { data: newUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    const { data: newUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true, // Confirmar email automáticamente
@@ -87,10 +123,10 @@ export async function POST(request: Request) {
       }
     })
 
-    if (authError) {
-      console.error('[API crear usuario] Error al crear usuario en Auth:', authError)
+    if (createUserError) {
+      console.error('[API crear usuario] Error al crear usuario en Auth:', createUserError)
       return NextResponse.json(
-        { error: authError.message },
+        { error: createUserError.message },
         { status: 400 }
       )
     }
