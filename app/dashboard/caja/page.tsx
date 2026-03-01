@@ -526,12 +526,8 @@ export default function CajaPage() {
       description: `Arqueo registrado - Estado: ${newArqueo.estado}`,
     })
 
-    // Recargar arqueos
-    if (userRole === 'admin') {
-      loadArqueos(organizationId)
-    } else {
-      loadArqueosCobrador(userId)
-    }
+    // Aquí userRole ya está acotado a cobrador por el guard al inicio.
+    loadArqueosCobrador(userId)
 
     resetForm()
   }
