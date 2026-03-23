@@ -45,6 +45,7 @@ import {
   calculateLoanDetails, 
   calcularSiguienteFechaPago, 
   calcularNumeroCuotas,
+  calcularTablaFrancesa,
   getNombreFrecuencia,
   type FrecuenciaPago,
   type TipoInteres,
@@ -361,17 +362,22 @@ export default function PrestamosPage() {
     const meses = formData.tipo_duracion === 'meses' ? parseFloat(formData.numero_meses) : undefined
     const dias = formData.tipo_duracion === 'dias' ? parseFloat(formData.numero_dias) : undefined
 
-    if ((meses === undefined || isNaN(meses) || meses <= 0) && (dias === undefined || isNaN(dias) || dias <= 0)) {
-      toast({
-        title: 'Error de validación',
-        description: `La duración en ${formData.tipo_duracion === 'meses' ? 'meses' : 'días'} debe ser mayor a 0`,
-        variant: 'destructive',
-      })
-      return
+    // Para préstamos abiertos la duración no es obligatoria
+    if (formData.tipo_prestamo !== 'abierto') {
+      if ((meses === undefined || isNaN(meses) || meses <= 0) && (dias === undefined || isNaN(dias) || dias <= 0)) {
+        toast({
+          title: 'Error de validación',
+          description: `La duración en ${formData.tipo_duracion === 'meses' ? 'meses' : 'días'} debe ser mayor a 0`,
+          variant: 'destructive',
+        })
+        return
+      }
     }
 
-    // Calcular número de cuotas basado en meses/días y frecuencia
-    const cuotas = calcularNumeroCuotas(meses, formData.frecuencia_pago, dias)
+    // Calcular número de cuotas basado en meses/días y frecuencia (0 para préstamos abiertos)
+    const cuotas = formData.tipo_prestamo === 'abierto'
+      ? 0
+      : calcularNumeroCuotas(meses, formData.frecuencia_pago, dias)
 
     const { montoTotal, montoCuota } = calculateLoanDetails({
       monto,
@@ -517,6 +523,7 @@ export default function PrestamosPage() {
           cargos_adicionales: formData.tipo_prestamo === 'venta_credito' && formData.cargos_adicionales ? parseFloat(formData.cargos_adicionales) : null,
           descripcion_producto: formData.tipo_prestamo === 'venta_credito' && formData.descripcion_producto ? formData.descripcion_producto : null,
           estado: 'activo',
+          capital_saldo: formData.tipo_prestamo === 'abierto' ? monto : null,
         }])
         .select(`
           *,
@@ -578,6 +585,31 @@ export default function PrestamosPage() {
         }
       }
     }
+
+    // Préstamo abierto: no genera cuotas fijas, solo guarda capital_saldo
+    if (formData.tipo_prestamo === 'abierto') {
+      await supabase
+        .from('prestamos')
+        .update({ capital_saldo: monto })
+        .eq('id', prestamo.id)
+
+      if (editingPrestamo) {
+        updatePrestamo(prestamo.id, { ...prestamo, capital_saldo: monto })
+        toast({ title: 'Éxito', description: 'Préstamo abierto actualizado correctamente.' })
+      } else {
+        addPrestamo({ ...prestamo, capital_saldo: monto })
+        toast({ title: 'Éxito', description: 'Préstamo abierto creado. Los pagos se registrarán manualmente desde el detalle.' })
+        loadSubscriptionData()
+      }
+      loadData()
+      resetForm()
+      return
+    }
+
+    // Para sistema francés: generar tabla de amortización completa
+    const tablaFrancesa = formData.tipo_calculo_interes === 'frances'
+      ? calcularTablaFrancesa(monto, interes, cuotas, formData.frecuencia_pago)
+      : null
 
     // Crear cuotas automáticamente con la frecuencia seleccionada
     const cuotasToCreate = []
@@ -681,11 +713,17 @@ export default function PrestamosPage() {
       const fechaVencimientoString = format(fechaVencimiento, 'yyyy-MM-dd')
       const fechaVencimientoConHora = `${fechaVencimientoString}T12:00:00`
       
+      // Para sistema francés: usar los valores de la tabla de amortización
+      const filaFrancesa = tablaFrancesa ? tablaFrancesa[i - 1] : null
+      const montoCuotaReal = filaFrancesa ? filaFrancesa.cuota : montoCuotaFinal
+
       cuotasToCreate.push({
         user_id: user.id,
         prestamo_id: prestamo.id,
         numero_cuota: i,
-        monto_cuota: montoCuotaFinal,
+        monto_cuota: montoCuotaReal,
+        monto_interes: filaFrancesa ? filaFrancesa.interes : null,
+        monto_capital: filaFrancesa ? filaFrancesa.capital : null,
         fecha_vencimiento: fechaVencimientoConHora,
         estado: 'pendiente',
         monto_pagado: 0,
@@ -896,6 +934,7 @@ export default function PrestamosPage() {
                       <SelectItem value="solo_intereses">📊 Solo Intereses (Capital al final)</SelectItem>
                       <SelectItem value="empeño">💎 Empeño (Con garantías)</SelectItem>
                       <SelectItem value="venta_credito">🛍️ Venta a Crédito (Con enganche)</SelectItem>
+                      <SelectItem value="abierto">🔓 Préstamo Abierto (Sin cuotas fijas)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1093,6 +1132,8 @@ export default function PrestamosPage() {
                   </div>
                 )}
 
+                {/* Tipo de cálculo solo aplica para Amortización */}
+                {formData.tipo_prestamo === 'amortizacion' && (
                 <div className="space-y-2">
                   <Label htmlFor="tipo_calculo_interes">Tipo de Cálculo de Interés *</Label>
                   <Select
@@ -1107,14 +1148,18 @@ export default function PrestamosPage() {
                     <SelectContent>
                       <SelectItem value="por_periodo">Por Mes (interés mensual × meses)</SelectItem>
                       <SelectItem value="global">Global (interés fijo sobre el total)</SelectItem>
+                      <SelectItem value="frances">Sistema Francés (saldo decreciente)</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-gray-500">
-                    {formData.tipo_calculo_interes === 'global' 
+                    {formData.tipo_calculo_interes === 'global'
                       ? 'El interés se aplica una sola vez sobre el capital total'
+                      : formData.tipo_calculo_interes === 'frances'
+                      ? 'Cuota constante; el interés se calcula sobre el saldo restante y decrece cada período'
                       : 'El interés mensual se multiplica por el número de meses'}
                   </p>
                 </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="interes_porcentaje">
@@ -1272,6 +1317,8 @@ export default function PrestamosPage() {
                   </Label>
                 </div>
 
+                {/* Tipo de interés (simple/compuesto) solo aplica para amortización por período */}
+                {formData.tipo_prestamo !== 'abierto' && formData.tipo_calculo_interes !== 'frances' && (
                 <div className="space-y-2">
                   <Label htmlFor="tipo_interes">Tipo de Interés *</Label>
                   <Select
@@ -1289,12 +1336,45 @@ export default function PrestamosPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                )}
               </div>
 
-              {calculatedDetails.montoTotal > 0 && (
+              {/* Préstamo Abierto — aviso informativo */}
+              {formData.tipo_prestamo === 'abierto' && formData.monto_prestado && formData.interes_porcentaje && (
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg space-y-2">
+                  <h4 className="font-semibold text-sm text-amber-900">Préstamo Abierto</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-600">Capital inicial</p>
+                      <p className="font-semibold text-amber-900">
+                        {formatCurrency(parseFloat(formData.monto_prestado || '0'), config.currency)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Interés mensual estimado</p>
+                      <p className="font-semibold text-amber-900">
+                        {formatCurrency(
+                          parseFloat(formData.monto_prestado || '0') * parseFloat(formData.interes_porcentaje || '0') / 100,
+                          config.currency
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-amber-700 mt-1">
+                    No se generarán cuotas automáticamente. Cada pago se registra manualmente desde el detalle del préstamo con el monto de interés y abono a capital que el cliente pague.
+                  </p>
+                </div>
+              )}
+
+              {calculatedDetails.montoTotal > 0 && formData.tipo_prestamo !== 'abierto' && (
                 <div className="bg-blue-50 p-4 rounded-lg space-y-2">
                   <h4 className="font-semibold text-sm text-blue-900">
                     Resumen del Préstamo
+                    {formData.tipo_calculo_interes === 'frances' && (
+                      <span className="ml-2 text-xs font-normal bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">
+                        Sistema Francés
+                      </span>
+                    )}
                   </h4>
                   {formData.tipo_prestamo === 'solo_intereses' ? (
                     <div className="grid grid-cols-2 gap-4 text-sm">

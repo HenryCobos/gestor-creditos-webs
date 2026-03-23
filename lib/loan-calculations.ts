@@ -4,8 +4,8 @@ import { addDays, addWeeks, addMonths } from 'date-fns'
 
 export type FrecuenciaPago = 'diario' | 'semanal' | 'quincenal' | 'mensual'
 export type TipoInteres = 'simple' | 'compuesto'
-export type TipoPrestamo = 'amortizacion' | 'solo_intereses' | 'empeño' | 'venta_credito'
-export type TipoCalculoInteres = 'por_periodo' | 'global' // Por período (20% mensual) o Global (20% total)
+export type TipoPrestamo = 'amortizacion' | 'solo_intereses' | 'empeño' | 'venta_credito' | 'abierto'
+export type TipoCalculoInteres = 'por_periodo' | 'global' | 'frances' // Por período, Global, o Sistema Francés
 
 export interface CalculoPrestamoParams {
   monto: number
@@ -79,6 +79,123 @@ export function convertirDiasAMeses(numeroDias: number): number {
   return numeroDias / 30
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SISTEMA FRANCÉS (Amortización con cuota nivelada e interés decreciente)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface FilaAmortizacionFrancesa {
+  numero: number
+  cuota: number    // PMT constante (igual para todas las cuotas)
+  interes: number  // Porción que va a intereses (decrece)
+  capital: number  // Porción que va a capital (crece)
+  saldo: number    // Saldo restante de capital
+}
+
+/**
+ * Convierte la tasa mensual al período según la frecuencia de pago.
+ * Usa equivalencia de tasas (compuesto) para mayor precisión financiera.
+ */
+export function calcularTasaPorPeriodo(
+  tasaMensual: number,
+  frecuenciaPago: FrecuenciaPago
+): number {
+  switch (frecuenciaPago) {
+    case 'mensual':
+      return tasaMensual
+    case 'quincenal':
+      return Math.pow(1 + tasaMensual, 1 / 2) - 1
+    case 'semanal':
+      return Math.pow(1 + tasaMensual, 1 / 4.333) - 1
+    case 'diario':
+      return Math.pow(1 + tasaMensual, 1 / 30) - 1
+    default:
+      return tasaMensual
+  }
+}
+
+/**
+ * Genera la tabla de amortización completa usando el Sistema Francés.
+ * Todas las cuotas tienen el mismo monto total (PMT) pero diferente
+ * proporción entre interés y capital: el interés decrece cada período
+ * porque se calcula sobre el saldo de capital restante.
+ */
+export function calcularTablaFrancesa(
+  monto: number,
+  interesPorcentaje: number,
+  numeroCuotas: number,
+  frecuenciaPago: FrecuenciaPago
+): FilaAmortizacionFrancesa[] {
+  if (numeroCuotas <= 0 || monto <= 0) return []
+
+  const tasaMensual = interesPorcentaje / 100
+  const r = calcularTasaPorPeriodo(tasaMensual, frecuenciaPago)
+
+  // Si la tasa es 0 o muy cercana a 0: cuotas de puro capital iguales
+  if (r < 0.000001) {
+    const cuotaCapital = monto / numeroCuotas
+    return Array.from({ length: numeroCuotas }, (_, i) => ({
+      numero: i + 1,
+      cuota: Number(cuotaCapital.toFixed(2)),
+      interes: 0,
+      capital: Number(cuotaCapital.toFixed(2)),
+      saldo: Number(Math.max(0, monto - cuotaCapital * (i + 1)).toFixed(2)),
+    }))
+  }
+
+  // PMT = P × r × (1+r)^n / ((1+r)^n − 1)
+  const factor = Math.pow(1 + r, numeroCuotas)
+  const pmt = (monto * r * factor) / (factor - 1)
+
+  const tabla: FilaAmortizacionFrancesa[] = []
+  let saldo = monto
+
+  for (let i = 1; i <= numeroCuotas; i++) {
+    const interes = saldo * r
+    let capital = pmt - interes
+
+    // Ajuste de redondeo en la última cuota
+    if (i === numeroCuotas) {
+      capital = saldo
+    }
+
+    const nuevoSaldo = Math.max(0, saldo - capital)
+
+    tabla.push({
+      numero: i,
+      cuota: Number(pmt.toFixed(2)),
+      interes: Number(interes.toFixed(2)),
+      capital: Number(capital.toFixed(2)),
+      saldo: Number(nuevoSaldo.toFixed(2)),
+    })
+
+    saldo = nuevoSaldo
+  }
+
+  return tabla
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRÉSTAMO ABIERTO — interés calculado sobre el saldo vigente
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Calcula el interés generado para un período determinado en un préstamo abierto.
+ * @param capitalSaldo  Saldo de capital vigente
+ * @param interesPorcentaje  Tasa mensual (%)
+ * @param diasPeriodo  Días transcurridos en este período (default 30)
+ */
+export function calcularInteresAbierto(
+  capitalSaldo: number,
+  interesPorcentaje: number,
+  diasPeriodo: number = 30
+): number {
+  const tasaMensual = interesPorcentaje / 100
+  const interes = capitalSaldo * tasaMensual * (diasPeriodo / 30)
+  return Number(interes.toFixed(2))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * Calcula los detalles de un préstamo
  * El interés siempre es MENSUAL, y se calcula por número de MESES
@@ -127,9 +244,35 @@ export function calculateLoanDetails(
     }
   }
   
+  // Modo "Préstamo Abierto": sin cuotas fijas, interés sobre saldo vigente
+  if (tipoPrestamo === 'abierto') {
+    const tasaMensual = interesPorcentaje / 100
+    const interesMensualEstimado = monto * tasaMensual
+    return {
+      interes: Number(interesMensualEstimado.toFixed(2)),
+      montoTotal: monto, // El total es solo el capital inicial (interés es variable)
+      montoCuota: Number(interesMensualEstimado.toFixed(2)), // Interés mensual como referencia
+    }
+  }
+
   // Modo "Amortización" (por defecto): Pago de capital + interés
   const tipoCalculo = params.tipoCalculoInteres || 'por_periodo'
-  
+
+  // Sistema Francés: cuota nivelada con interés sobre saldo decreciente
+  if (tipoCalculo === 'frances') {
+    const tabla = calcularTablaFrancesa(monto, interesPorcentaje, numeroCuotas, frecuenciaPago)
+    if (tabla.length === 0) {
+      return { interes: 0, montoTotal: monto, montoCuota: 0 }
+    }
+    const pmt = tabla[0].cuota
+    const interesTotal = tabla.reduce((sum, f) => sum + f.interes, 0)
+    return {
+      interes: Number(interesTotal.toFixed(2)),
+      montoTotal: Number((monto + interesTotal).toFixed(2)),
+      montoCuota: pmt,
+    }
+  }
+
   let interes: number
   let montoTotal: number
   

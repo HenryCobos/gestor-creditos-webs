@@ -14,7 +14,7 @@ export interface Cliente {
   updated_at: string
 }
 
-export type TipoPrestamo = 'amortizacion' | 'solo_intereses' | 'empeño' | 'venta_credito'
+export type TipoPrestamo = 'amortizacion' | 'solo_intereses' | 'empeño' | 'venta_credito' | 'abierto'
 
 export interface Prestamo {
   id: string
@@ -31,7 +31,8 @@ export interface Prestamo {
   frecuencia_pago: 'diario' | 'semanal' | 'quincenal' | 'mensual'
   tipo_interes: 'simple' | 'compuesto'
   tipo_prestamo: TipoPrestamo
-  tipo_calculo_interes?: 'por_periodo' | 'global'
+  tipo_calculo_interes?: 'por_periodo' | 'global' | 'frances'
+  capital_saldo?: number | null
   dias_gracia?: number | null
   excluir_domingos?: boolean
   // Campos nuevos para Ventas a Crédito
@@ -77,6 +78,8 @@ export interface Cuota {
   fecha_pago: string | null
   estado: 'pendiente' | 'pagada' | 'retrasada'
   monto_pagado: number
+  monto_interes?: number | null  // Sistema francés y préstamo abierto
+  monto_capital?: number | null  // Sistema francés y préstamo abierto
   created_at: string
   updated_at: string
 }

@@ -37,13 +37,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { CheckCircle, DollarSign, Eye, X, FileText, Package, XCircle, Repeat, TrendingDown, Receipt, MoreHorizontal } from 'lucide-react'
+import { CheckCircle, DollarSign, Eye, X, FileText, Package, XCircle, Repeat, TrendingDown, Receipt, MoreHorizontal, Unlock } from 'lucide-react'
 import { formatCurrency, formatDate, isDateOverdue } from '@/lib/utils'
 import { useConfigStore } from '@/lib/config-store'
 import type { Prestamo, Garantia } from '@/lib/store'
 import { generarContratoPrestamo, generarReciboCuota } from '@/lib/pdf-generator'
 import { AbonoCapitalDialog } from '@/components/abono-capital-dialog'
 import { RenovarEmpenoDialog } from '@/components/renovar-empeno-dialog'
+import { PagoAbiertoDialog } from '@/components/pago-abierto-dialog'
 import { getCuotasSegunRol } from '@/lib/queries-con-roles'
 
 interface Cuota {
@@ -54,6 +55,8 @@ interface Cuota {
   fecha_pago: string | null
   estado: 'pendiente' | 'pagada' | 'retrasada'
   monto_pagado: number
+  monto_interes?: number | null
+  monto_capital?: number | null
 }
 
 interface PrestamoDetailDialogProps {
@@ -82,6 +85,7 @@ export function PrestamoDetailDialog({
   const [notas, setNotas] = useState('')
   const [abonoCapitalDialogOpen, setAbonoCapitalDialogOpen] = useState(false)
   const [renovarEmpenoDialogOpen, setRenovarEmpenoDialogOpen] = useState(false)
+  const [pagoAbiertoDialogOpen, setPagoAbiertoDialogOpen] = useState(false)
   const { toast } = useToast()
   const supabase = createClient()
   const { config } = useConfigStore()
@@ -429,6 +433,18 @@ export function PrestamoDetailDialog({
                 <span className="sm:hidden">Renovar</span>
               </Button>
             )}
+            {/* Registrar Pago del Período (solo para préstamos abiertos activos) */}
+            {prestamo.tipo_prestamo === 'abierto' && prestamo.estado === 'activo' && (
+              <Button
+                variant="outline"
+                onClick={() => setPagoAbiertoDialogOpen(true)}
+                className="gap-2 text-amber-700 border-amber-300 hover:bg-amber-50"
+              >
+                <Unlock className="h-4 w-4" />
+                <span className="hidden sm:inline">Registrar Pago del Período</span>
+                <span className="sm:hidden">Pagar</span>
+              </Button>
+            )}
             {/* Generar Contrato PDF — siempre visible */}
             <Button
               variant="outline"
@@ -504,10 +520,14 @@ export function PrestamoDetailDialog({
                         ? 'bg-purple-100 text-purple-800'
                         : prestamo.tipo_prestamo === 'solo_intereses'
                         ? 'bg-orange-100 text-orange-800'
+                        : prestamo.tipo_prestamo === 'abierto'
+                        ? 'bg-amber-100 text-amber-800'
                         : 'bg-gray-100 text-gray-800'
                     }`}>
                       {prestamo.tipo_prestamo === 'empeño' ? 'Empeño' :
                        prestamo.tipo_prestamo === 'solo_intereses' ? 'Solo Intereses' :
+                       prestamo.tipo_prestamo === 'abierto' ? 'Préstamo Abierto' :
+                       prestamo.tipo_calculo_interes === 'frances' ? 'Amortización Francesa' :
                        'Amortización'}
                     </span>
                   </div>
@@ -520,6 +540,39 @@ export function PrestamoDetailDialog({
                 )}
               </div>
             </div>
+
+            {/* Saldo de capital vigente (solo para préstamos abiertos) */}
+            {prestamo.tipo_prestamo === 'abierto' && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
+                <h3 className="font-semibold text-base text-amber-900 flex items-center gap-2">
+                  <Unlock className="h-4 w-4" />
+                  Estado del Préstamo Abierto
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-600">Capital inicial</p>
+                    <p className="font-bold text-amber-900">
+                      {formatCurrency(prestamo.monto_prestado, config.currency)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600">Saldo de capital actual</p>
+                    <p className="font-bold text-amber-700 text-lg">
+                      {formatCurrency(prestamo.capital_saldo ?? prestamo.monto_prestado, config.currency)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600">Interés mensual estimado</p>
+                    <p className="font-bold text-amber-900">
+                      {formatCurrency(
+                        (prestamo.capital_saldo ?? prestamo.monto_prestado) * prestamo.interes_porcentaje / 100,
+                        config.currency
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Sección de Garantías (Solo para Empeños) */}
             {prestamo.tipo_prestamo === 'empeño' && garantias.length > 0 && (
@@ -585,18 +638,37 @@ export function PrestamoDetailDialog({
 
             {/* Lista de Cuotas */}
             <div>
-              <h3 className="font-semibold text-lg text-gray-900 mb-4">Cuotas del Préstamo</h3>
+              <h3 className="font-semibold text-lg text-gray-900 mb-4">
+                {prestamo.tipo_prestamo === 'abierto' ? 'Historial de Pagos' : 'Cuotas del Préstamo'}
+              </h3>
               {loading ? (
                 <p className="text-center py-8 text-gray-500">Cargando cuotas...</p>
               ) : cuotas.length === 0 ? (
-                <p className="text-center py-8 text-gray-500">No hay cuotas registradas</p>
+                <p className="text-center py-8 text-gray-500">
+                  {prestamo.tipo_prestamo === 'abierto'
+                    ? 'Aún no hay pagos registrados. Usa "Registrar Pago del Período" para agregar el primer pago.'
+                    : 'No hay cuotas registradas'}
+                </p>
               ) : (
-                <div className="border rounded-lg overflow-hidden">
+                <div className="border rounded-lg overflow-x-auto">
+                  {/* Nota informativa para sistema francés */}
+                  {prestamo.tipo_calculo_interes === 'frances' && (
+                    <div className="px-4 py-2 bg-blue-50 border-b text-xs text-blue-700">
+                      Sistema Francés: la cuota es constante pero el interés decrece cada período porque se calcula sobre el saldo restante.
+                    </div>
+                  )}
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-16">#</TableHead>
-                        <TableHead>Monto</TableHead>
+                        <TableHead className="w-12">#</TableHead>
+                        <TableHead>Cuota</TableHead>
+                        {/* Columnas de desglose para Sistema Francés y Préstamo Abierto */}
+                        {(prestamo.tipo_calculo_interes === 'frances' || prestamo.tipo_prestamo === 'abierto') && (
+                          <>
+                            <TableHead className="text-blue-700">Interés</TableHead>
+                            <TableHead className="text-green-700">Capital</TableHead>
+                          </>
+                        )}
                         <TableHead>Pagado</TableHead>
                         <TableHead>Pendiente</TableHead>
                         <TableHead>Vencimiento</TableHead>
@@ -613,6 +685,21 @@ export function PrestamoDetailDialog({
                               {cuota.numero_cuota}
                             </TableCell>
                             <TableCell>{formatCurrency(cuota.monto_cuota, config.currency)}</TableCell>
+                            {/* Desglose interés/capital para Sistema Francés y Préstamo Abierto */}
+                            {(prestamo.tipo_calculo_interes === 'frances' || prestamo.tipo_prestamo === 'abierto') && (
+                              <>
+                                <TableCell className="text-blue-700 text-sm">
+                                  {cuota.monto_interes != null
+                                    ? formatCurrency(cuota.monto_interes, config.currency)
+                                    : '—'}
+                                </TableCell>
+                                <TableCell className="text-green-700 text-sm">
+                                  {cuota.monto_capital != null
+                                    ? formatCurrency(cuota.monto_capital, config.currency)
+                                    : '—'}
+                                </TableCell>
+                              </>
+                            )}
                             <TableCell className="text-green-600">
                               {formatCurrency(cuota.monto_pagado, config.currency)}
                             </TableCell>
@@ -810,6 +897,19 @@ export function PrestamoDetailDialog({
         onOpenChange={setRenovarEmpenoDialogOpen}
         onSuccess={handleRenovacionSuccess}
       />
+
+      {/* Dialog para pagos de período en préstamos abiertos */}
+      {prestamo.tipo_prestamo === 'abierto' && (
+        <PagoAbiertoDialog
+          prestamo={prestamo}
+          open={pagoAbiertoDialogOpen}
+          onOpenChange={setPagoAbiertoDialogOpen}
+          onSuccess={() => {
+            loadCuotas()
+            if (onUpdate) onUpdate()
+          }}
+        />
+      )}
     </>
   )
 }

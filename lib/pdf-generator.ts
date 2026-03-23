@@ -21,8 +21,8 @@ interface PrestamoInfo {
   monto_total: number
   frecuencia_pago: string
   tipo_interes: string
-  tipo_prestamo?: 'amortizacion' | 'solo_intereses' | 'empeño' | 'venta_credito'
-  tipo_calculo_interes?: 'por_periodo' | 'global' // Por defecto 'por_periodo' si no se especifica
+  tipo_prestamo?: 'amortizacion' | 'solo_intereses' | 'empeño' | 'venta_credito' | 'abierto'
+  tipo_calculo_interes?: 'por_periodo' | 'global' | 'frances'
 }
 
 interface GarantiaInfo {
