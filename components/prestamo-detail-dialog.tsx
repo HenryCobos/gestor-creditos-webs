@@ -31,11 +31,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { CheckCircle, DollarSign, Eye, X, FileText, Package, XCircle, Repeat, TrendingDown } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { CheckCircle, DollarSign, Eye, X, FileText, Package, XCircle, Repeat, TrendingDown, Receipt, MoreHorizontal } from 'lucide-react'
 import { formatCurrency, formatDate, isDateOverdue } from '@/lib/utils'
 import { useConfigStore } from '@/lib/config-store'
 import type { Prestamo, Garantia } from '@/lib/store'
-import { generarContratoPrestamo } from '@/lib/pdf-generator'
+import { generarContratoPrestamo, generarReciboCuota } from '@/lib/pdf-generator'
 import { AbonoCapitalDialog } from '@/components/abono-capital-dialog'
 import { RenovarEmpenoDialog } from '@/components/renovar-empeno-dialog'
 import { getCuotasSegunRol } from '@/lib/queries-con-roles'
@@ -197,6 +203,42 @@ export function PrestamoDetailDialog({
     })
   }
 
+  const handleGenerarRecibo = (cuota: Cuota) => {
+    if (!prestamo || !prestamo.cliente) return
+
+    generarReciboCuota(
+      {
+        id: cuota.id,
+        numero_cuota: cuota.numero_cuota,
+        monto_cuota: cuota.monto_cuota,
+        monto_pagado: cuota.monto_pagado,
+        fecha_vencimiento: cuota.fecha_vencimiento,
+        fecha_pago: cuota.fecha_pago,
+        estado: cuota.estado,
+      },
+      {
+        id: prestamo.id,
+        monto_prestado: prestamo.monto_prestado,
+        monto_total: prestamo.monto_total,
+        numero_cuotas: prestamo.numero_cuotas,
+        frecuencia_pago: prestamo.frecuencia_pago,
+      },
+      {
+        nombre: prestamo.cliente.nombre,
+        dni: prestamo.cliente.dni,
+        telefono: prestamo.cliente.telefono || undefined,
+      },
+      config.companyName,
+      config.currency,
+      config.currencySymbol
+    )
+
+    toast({
+      title: 'Recibo generado',
+      description: `Comprobante de la cuota N° ${cuota.numero_cuota} descargado correctamente`,
+    })
+  }
+
   const handleRegistrarPago = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -355,47 +397,49 @@ export function PrestamoDetailDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <DialogTitle>Detalle del Préstamo</DialogTitle>
-                <DialogDescription>
-                  Cliente: {prestamo.cliente?.nombre || '-'}
-                </DialogDescription>
-              </div>
-              <div className="flex gap-2">
-                {/* Botón de Abonar a Capital (solo para empeños y solo_intereses) */}
-                {(prestamo.tipo_prestamo === 'empeño' || prestamo.tipo_prestamo === 'solo_intereses') && prestamo.estado === 'activo' && (
-                  <Button
-                    variant="outline"
-                    onClick={() => setAbonoCapitalDialogOpen(true)}
-                    className="gap-2 text-green-700 border-green-300 hover:bg-green-50"
-                  >
-                    <TrendingDown className="h-4 w-4" />
-                    Abonar a Capital
-                  </Button>
-                )}
-                {/* Botón de Renovar Empeño (solo para empeños) */}
-                {prestamo.tipo_prestamo === 'empeño' && prestamo.estado === 'activo' && (
-                  <Button
-                    variant="outline"
-                    onClick={() => setRenovarEmpenoDialogOpen(true)}
-                    className="gap-2 text-purple-700 border-purple-300 hover:bg-purple-50"
-                  >
-                    <Repeat className="h-4 w-4" />
-                    Renovar Empeño
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  onClick={handleGenerarContrato}
-                  className="gap-2"
-                >
-                  <FileText className="h-4 w-4" />
-                  Generar Contrato PDF
-                </Button>
-              </div>
-            </div>
+            <DialogTitle>Detalle del Préstamo</DialogTitle>
+            <DialogDescription>
+              Cliente: {prestamo.cliente?.nombre || '-'}
+            </DialogDescription>
           </DialogHeader>
+
+          {/* Barra de acciones — separada del header para no interferir con el botón X */}
+          <div className="flex flex-wrap gap-2 pb-2 border-b">
+            {/* Abonar a Capital (solo para empeños y solo_intereses activos) */}
+            {(prestamo.tipo_prestamo === 'empeño' || prestamo.tipo_prestamo === 'solo_intereses') && prestamo.estado === 'activo' && (
+              <Button
+                variant="outline"
+                onClick={() => setAbonoCapitalDialogOpen(true)}
+                className="gap-2 text-green-700 border-green-300 hover:bg-green-50"
+              >
+                <TrendingDown className="h-4 w-4" />
+                <span className="hidden sm:inline">Abonar a Capital</span>
+                <span className="sm:hidden">Abonar</span>
+              </Button>
+            )}
+            {/* Renovar Empeño (solo para empeños activos) */}
+            {prestamo.tipo_prestamo === 'empeño' && prestamo.estado === 'activo' && (
+              <Button
+                variant="outline"
+                onClick={() => setRenovarEmpenoDialogOpen(true)}
+                className="gap-2 text-purple-700 border-purple-300 hover:bg-purple-50"
+              >
+                <Repeat className="h-4 w-4" />
+                <span className="hidden sm:inline">Renovar Empeño</span>
+                <span className="sm:hidden">Renovar</span>
+              </Button>
+            )}
+            {/* Generar Contrato PDF — siempre visible */}
+            <Button
+              variant="outline"
+              onClick={handleGenerarContrato}
+              className="gap-2"
+            >
+              <FileText className="h-4 w-4" />
+              <span className="hidden sm:inline">Generar Contrato PDF</span>
+              <span className="sm:hidden">Contrato</span>
+            </Button>
+          </div>
 
           <div className="space-y-6">
             {/* Resumen del Préstamo */}
@@ -603,18 +647,33 @@ export function PrestamoDetailDialog({
                                   Pagar
                                 </Button>
                               ) : (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                  onClick={() => {
-                                    setCuotaADesmarcar(cuota)
-                                    setDesmarcarDialogOpen(true)
-                                  }}
-                                >
-                                  <XCircle className="mr-1 h-3 w-3" />
-                                  Desmarcar
-                                </Button>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button size="sm" variant="outline" className="gap-1">
+                                      <MoreHorizontal className="h-3 w-3" />
+                                      <span className="sr-only">Opciones</span>
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                      onClick={() => handleGenerarRecibo(cuota)}
+                                      className="gap-2 cursor-pointer"
+                                    >
+                                      <Receipt className="h-4 w-4 text-blue-600" />
+                                      Recibo PDF
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setCuotaADesmarcar(cuota)
+                                        setDesmarcarDialogOpen(true)
+                                      }}
+                                      className="gap-2 cursor-pointer text-red-600 focus:text-red-600"
+                                    >
+                                      <XCircle className="h-4 w-4" />
+                                      Desmarcar
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               )}
                             </TableCell>
                           </TableRow>

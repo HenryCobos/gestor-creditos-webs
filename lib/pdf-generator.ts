@@ -833,3 +833,174 @@ export function generarReporteCliente(
   doc.save(`ReporteCliente_${reporte.cliente.nombre.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`)
 }
 
+// ─────────────────────────────────────────────────────────────
+// Recibo de pago por cuota
+// ─────────────────────────────────────────────────────────────
+
+interface ReciboCuotaCliente {
+  nombre: string
+  dni: string
+  telefono?: string
+}
+
+interface ReciboCuotaPrestamo {
+  id: string
+  monto_prestado: number
+  monto_total: number
+  numero_cuotas: number
+  frecuencia_pago: string
+}
+
+interface ReciboCuotaInfo {
+  id: string
+  numero_cuota: number
+  monto_cuota: number
+  monto_pagado: number
+  fecha_vencimiento: string
+  fecha_pago: string | null
+  estado: string
+}
+
+export function generarReciboCuota(
+  cuota: ReciboCuotaInfo,
+  prestamo: ReciboCuotaPrestamo,
+  cliente: ReciboCuotaCliente,
+  companyName: string = 'Gestor de Créditos',
+  currency: string = 'USD',
+  currencySymbol: string = '$'
+) {
+  const doc = new jsPDF({ format: 'a5', orientation: 'portrait' })
+  const pageW = doc.internal.pageSize.getWidth()
+  const margin = 15
+
+  const fmt = (amount: number) =>
+    new Intl.NumberFormat('es-ES', { style: 'currency', currency }).format(amount)
+
+  const fmtDate = (dateStr: string | null) => {
+    if (!dateStr) return 'N/D'
+    if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [y, m, d] = dateStr.split('-')
+      return `${d}/${m}/${y}`
+    }
+    try { return format(parseISO(dateStr), 'dd/MM/yyyy') } catch { return dateStr }
+  }
+
+  const nRecibo = cuota.id.replace(/-/g, '').slice(-8).toUpperCase()
+  const hoy = format(new Date(), 'dd/MM/yyyy HH:mm')
+
+  // ── Encabezado ──────────────────────────────────────────────
+  doc.setFillColor(37, 99, 235)
+  doc.rect(0, 0, pageW, 28, 'F')
+
+  doc.setTextColor(255, 255, 255)
+  doc.setFontSize(14)
+  doc.setFont('helvetica', 'bold')
+  doc.text(companyName, pageW / 2, 11, { align: 'center' })
+
+  doc.setFontSize(10)
+  doc.setFont('helvetica', 'normal')
+  doc.text('COMPROBANTE DE PAGO', pageW / 2, 20, { align: 'center' })
+
+  // ── Metadatos del recibo ─────────────────────────────────────
+  doc.setTextColor(50, 50, 50)
+  doc.setFontSize(8)
+  let y = 36
+  doc.text(`N° Recibo: ${nRecibo}`, margin, y)
+  doc.text(`Emisión: ${hoy}`, pageW - margin, y, { align: 'right' })
+
+  // ── Separador ───────────────────────────────────────────────
+  y += 6
+  doc.setDrawColor(200, 200, 200)
+  doc.setLineWidth(0.3)
+  doc.line(margin, y, pageW - margin, y)
+
+  // ── Datos del cliente ────────────────────────────────────────
+  y += 8
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'bold')
+  doc.text('CLIENTE', margin, y)
+
+  y += 5
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.text(`Nombre: ${cliente.nombre}`, margin, y)
+  y += 5
+  doc.text(`DNI / ID: ${cliente.dni}`, margin, y)
+  if (cliente.telefono) {
+    y += 5
+    doc.text(`Teléfono: ${cliente.telefono}`, margin, y)
+  }
+
+  // ── Datos del préstamo ───────────────────────────────────────
+  y += 10
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'bold')
+  doc.text('PRÉSTAMO', margin, y)
+
+  y += 5
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  const prestamoIdCorto = prestamo.id.replace(/-/g, '').slice(-8).toUpperCase()
+  doc.text(`Préstamo N°: ${prestamoIdCorto}`, margin, y)
+  doc.text(`Total cuotas: ${prestamo.numero_cuotas}`, pageW - margin, y, { align: 'right' })
+  y += 5
+  doc.text(`Monto prestado: ${fmt(prestamo.monto_prestado)}`, margin, y)
+  doc.text(`Total a pagar: ${fmt(prestamo.monto_total)}`, pageW - margin, y, { align: 'right' })
+
+  // ── Separador ───────────────────────────────────────────────
+  y += 8
+  doc.line(margin, y, pageW - margin, y)
+
+  // ── Detalle del pago ─────────────────────────────────────────
+  y += 8
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'bold')
+  doc.text('DETALLE DEL PAGO', margin, y)
+  y += 6
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margin, right: margin },
+    head: [['Concepto', 'Valor']],
+    body: [
+      ['Cuota N°', `${cuota.numero_cuota} de ${prestamo.numero_cuotas}`],
+      ['Monto de la cuota', fmt(cuota.monto_cuota)],
+      ['Monto pagado', fmt(cuota.monto_pagado)],
+      ['Fecha de vencimiento', fmtDate(cuota.fecha_vencimiento)],
+      ['Fecha de pago', fmtDate(cuota.fecha_pago)],
+      ['Estado', cuota.estado.toUpperCase()],
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: [37, 99, 235], fontStyle: 'bold', fontSize: 8 },
+    bodyStyles: { fontSize: 8 },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 55 },
+      1: { halign: 'right' },
+    },
+  })
+
+  // ── Firma ───────────────────────────────────────────────────
+  const finalY = (doc as any).lastAutoTable.finalY + 14
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'normal')
+  doc.setDrawColor(100, 100, 100)
+  doc.line(margin, finalY, margin + 50, finalY)
+  doc.line(pageW - margin - 50, finalY, pageW - margin, finalY)
+
+  doc.setFontSize(7)
+  doc.text('Firma del cobrador', margin + 25, finalY + 5, { align: 'center' })
+  doc.text('Firma del cliente', pageW - margin - 25, finalY + 5, { align: 'center' })
+
+  // ── Pie de página ────────────────────────────────────────────
+  doc.setFontSize(7)
+  doc.setTextColor(150, 150, 150)
+  doc.text(
+    `${companyName} · Recibo ${nRecibo} · ${hoy}`,
+    pageW / 2,
+    doc.internal.pageSize.getHeight() - 6,
+    { align: 'center' }
+  )
+
+  doc.save(`Recibo_Cuota${cuota.numero_cuota}_${cliente.nombre.replace(/\s+/g, '_')}_${nRecibo}.pdf`)
+}
+
