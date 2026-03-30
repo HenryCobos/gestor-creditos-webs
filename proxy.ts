@@ -1,53 +1,62 @@
-import { type NextRequest } from 'next/server'
-import { updateSession } from '@/lib/supabase/middleware'
-import { createClient } from '@/lib/supabase/server'
-import { NextResponse } from 'next/server'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { type NextRequest, NextResponse } from 'next/server'
 
 export async function proxy(request: NextRequest) {
-  // Update session
-  const response = await updateSession(request)
+  let response = NextResponse.next({
+    request: { headers: request.headers },
+  })
 
-  const supabase = await createClient()
+  // Una sola instancia de Supabase para toda la función del middleware
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return request.cookies.get(name)?.value
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          request.cookies.set({ name, value, ...options })
+          response = NextResponse.next({ request: { headers: request.headers } })
+          response.cookies.set({ name, value, ...options })
+        },
+        remove(name: string, options: CookieOptions) {
+          request.cookies.set({ name, value: '', ...options })
+          response = NextResponse.next({ request: { headers: request.headers } })
+          response.cookies.set({ name, value: '', ...options })
+        },
+      },
+    }
+  )
+
+  // Una sola llamada de autenticación — refresca la sesión y obtiene el usuario
   const { data: { user } } = await supabase.auth.getUser()
 
-  const isAuthPage = request.nextUrl.pathname.startsWith('/login') || 
-                     request.nextUrl.pathname.startsWith('/register') ||
-                     request.nextUrl.pathname.startsWith('/recuperar-contrasena') ||
-                     request.nextUrl.pathname.startsWith('/actualizar-contrasena') ||
-                     request.nextUrl.pathname.startsWith('/auth/callback')
-  const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard')
+  const pathname = request.nextUrl.pathname
 
-  // Si no hay usuario y está intentando acceder a rutas protegidas
+  const isAuthPage =
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/register') ||
+    pathname.startsWith('/recuperar-contrasena') ||
+    pathname.startsWith('/actualizar-contrasena') ||
+    pathname.startsWith('/auth/callback')
+
+  const isProtectedRoute = pathname.startsWith('/dashboard')
+
+  const isPasswordRecovery =
+    pathname.startsWith('/recuperar-contrasena') ||
+    pathname.startsWith('/actualizar-contrasena') ||
+    pathname.startsWith('/auth/callback')
+
+  // Sin sesión intentando acceder al dashboard → login
   if (!user && isProtectedRoute) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Si hay usuario y está en páginas de auth (excepto recuperación de contraseña), redirigir al dashboard
-  const isPasswordRecovery = request.nextUrl.pathname.startsWith('/recuperar-contrasena') ||
-                              request.nextUrl.pathname.startsWith('/actualizar-contrasena') ||
-                              request.nextUrl.pathname.startsWith('/auth/callback')
-  
+  // Con sesión en páginas de auth (excepto recuperación) → dashboard
   if (user && isAuthPage && !isPasswordRecovery) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
-
-  // Verificar suscripción para rutas del dashboard
-  // TEMPORALMENTE DESACTIVADO - Descomenta cuando configures Stripe
-  /*
-  if (user && isProtectedRoute) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('subscription_status')
-      .eq('id', user.id)
-      .single()
-
-    // Si no tiene suscripción activa, redirigir a la página de suscripción
-    if (profile?.subscription_status !== 'active' && 
-        !request.nextUrl.pathname.startsWith('/dashboard/subscription')) {
-      return NextResponse.redirect(new URL('/dashboard/subscription', request.url))
-    }
-  }
-  */
 
   return response
 }
@@ -57,4 +66,3 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
-
