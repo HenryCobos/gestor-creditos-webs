@@ -6,7 +6,6 @@ export async function proxy(request: NextRequest) {
     request: { headers: request.headers },
   })
 
-  // Una sola instancia de Supabase para toda la función del middleware
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -29,32 +28,31 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  // Una sola llamada de autenticación — refresca la sesión y obtiene el usuario
-  const { data: { user } } = await supabase.auth.getUser()
+  // getSession() lee la cookie sin hacer llamada de red → muy rápido en Edge
+  // getUser() (validación completa) se hace en los server components individuales
+  const { data: { session } } = await supabase.auth.getSession()
 
   const pathname = request.nextUrl.pathname
-
-  const isAuthPage =
-    pathname.startsWith('/login') ||
-    pathname.startsWith('/register') ||
-    pathname.startsWith('/recuperar-contrasena') ||
-    pathname.startsWith('/actualizar-contrasena') ||
-    pathname.startsWith('/auth/callback')
-
-  const isProtectedRoute = pathname.startsWith('/dashboard')
 
   const isPasswordRecovery =
     pathname.startsWith('/recuperar-contrasena') ||
     pathname.startsWith('/actualizar-contrasena') ||
     pathname.startsWith('/auth/callback')
 
-  // Sin sesión intentando acceder al dashboard → login
-  if (!user && isProtectedRoute) {
+  const isAuthPage =
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/register') ||
+    isPasswordRecovery
+
+  const isProtectedRoute = pathname.startsWith('/dashboard')
+
+  // Sin sesión en dashboard → redirigir a login
+  if (!session && isProtectedRoute) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Con sesión en páginas de auth (excepto recuperación) → dashboard
-  if (user && isAuthPage && !isPasswordRecovery) {
+  // Con sesión en páginas de auth (excepto recuperación) → redirigir al dashboard
+  if (session && isAuthPage && !isPasswordRecovery) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
@@ -62,7 +60,14 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
+  // Solo ejecutar middleware en rutas que realmente necesitan verificación de auth
+  // Excluye: archivos estáticos, imágenes, API routes, fuentes, etc.
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/dashboard/:path*',
+    '/login',
+    '/register',
+    '/recuperar-contrasena',
+    '/actualizar-contrasena',
+    '/auth/callback',
   ],
 }

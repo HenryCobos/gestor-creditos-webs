@@ -1,16 +1,6 @@
 import { proxy } from './proxy'
 
-export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-  ],
-}
+// El config del matcher se define en proxy.ts para mantener todo centralizado
+export { config } from './proxy'
 
 export default proxy
-
