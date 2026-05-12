@@ -35,6 +35,7 @@ export interface Prestamo {
   capital_saldo?: number | null
   dias_gracia?: number | null
   excluir_domingos?: boolean
+  excluir_fines_semana?: boolean
   // Campos nuevos para Ventas a Crédito
   precio_contado?: number | null
   enganche?: number | null

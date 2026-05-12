@@ -82,7 +82,8 @@ export default function PrestamosPage() {
     tipo_interes: 'simple' as TipoInteres,
     tipo_prestamo: 'amortizacion' as TipoPrestamo,
     tipo_calculo_interes: 'por_periodo' as TipoCalculoInteres,
-    excluir_domingos: false, // Nueva opción para excluir domingos del cronograma
+    excluir_domingos: false,
+    excluir_fines_semana: false,
     // Campos nuevos para Venta a Crédito
     producto_id: '',
     precio_contado: '',
@@ -305,6 +306,7 @@ export default function PrestamosPage() {
       tipo_prestamo: prestamo.tipo_prestamo || 'amortizacion',
       tipo_calculo_interes: prestamo.tipo_calculo_interes || 'por_periodo',
       excluir_domingos: prestamo.excluir_domingos || false,
+      excluir_fines_semana: prestamo.excluir_fines_semana || false,
       producto_id: prestamo.producto_id || '',
       precio_contado: prestamo.precio_contado?.toString() || '',
       enganche: prestamo.enganche?.toString() || '',
@@ -433,6 +435,7 @@ export default function PrestamosPage() {
           tipo_prestamo: formData.tipo_prestamo,
           tipo_calculo_interes: formData.tipo_calculo_interes,
           excluir_domingos: formData.excluir_domingos,
+          excluir_fines_semana: formData.excluir_fines_semana,
           precio_contado: formData.tipo_prestamo === 'venta_credito' && formData.precio_contado ? parseFloat(formData.precio_contado) : null,
           enganche: formData.tipo_prestamo === 'venta_credito' && formData.enganche ? parseFloat(formData.enganche) : null,
           cargos_adicionales: formData.tipo_prestamo === 'venta_credito' && formData.cargos_adicionales ? parseFloat(formData.cargos_adicionales) : null,
@@ -518,6 +521,7 @@ export default function PrestamosPage() {
           tipo_prestamo: formData.tipo_prestamo,
           tipo_calculo_interes: formData.tipo_calculo_interes,
           excluir_domingos: formData.excluir_domingos,
+          excluir_fines_semana: formData.excluir_fines_semana,
           precio_contado: formData.tipo_prestamo === 'venta_credito' && formData.precio_contado ? parseFloat(formData.precio_contado) : null,
           enganche: formData.tipo_prestamo === 'venta_credito' && formData.enganche ? parseFloat(formData.enganche) : null,
           cargos_adicionales: formData.tipo_prestamo === 'venta_credito' && formData.cargos_adicionales ? parseFloat(formData.cargos_adicionales) : null,
@@ -638,9 +642,12 @@ export default function PrestamosPage() {
         const [y, m, d] = formData.fecha_inicio.split('-').map(Number)
         fechaVencimiento = new Date(y, m - 1, d)
         
-        // Si excluir domingos está activo, ajustar la primera cuota también
-        if (formData.excluir_domingos && fechaVencimiento.getDay() === 0) {
-          fechaVencimiento = addDays(fechaVencimiento, 1) // Mover al lunes
+        // Ajustar la primera cuota si cae en fin de semana
+        if (formData.excluir_fines_semana) {
+          if (fechaVencimiento.getDay() === 6) fechaVencimiento = addDays(fechaVencimiento, 2)
+          else if (fechaVencimiento.getDay() === 0) fechaVencimiento = addDays(fechaVencimiento, 1)
+        } else if (formData.excluir_domingos && fechaVencimiento.getDay() === 0) {
+          fechaVencimiento = addDays(fechaVencimiento, 1)
         }
       } else {
         // Cuotas 2 en adelante: calcular desde la ÚLTIMA fecha generada (no desde fechaInicio)
@@ -665,9 +672,12 @@ export default function PrestamosPage() {
             fechaVencimiento = addMonths(ultimaFecha, 1)
         }
         
-        // Si excluir domingos está activo, ajustar si cae en domingo
-        if (formData.excluir_domingos && fechaVencimiento.getDay() === 0) {
-          fechaVencimiento = addDays(fechaVencimiento, 1) // Mover al lunes
+        // Ajustar si cae en fin de semana
+        if (formData.excluir_fines_semana) {
+          if (fechaVencimiento.getDay() === 6) fechaVencimiento = addDays(fechaVencimiento, 2)
+          else if (fechaVencimiento.getDay() === 0) fechaVencimiento = addDays(fechaVencimiento, 1)
+        } else if (formData.excluir_domingos && fechaVencimiento.getDay() === 0) {
+          fechaVencimiento = addDays(fechaVencimiento, 1)
         }
       }
 
@@ -684,8 +694,11 @@ export default function PrestamosPage() {
         while (esDuplicado) {
           fechaVencimiento = addDays(fechaVencimiento, 1)
           
-          // Si excluir domingos está activo y el nuevo día es domingo, mover al lunes
-          if (formData.excluir_domingos && fechaVencimiento.getDay() === 0) {
+          // Ajustar si el nuevo día cae en fin de semana
+          if (formData.excluir_fines_semana) {
+            if (fechaVencimiento.getDay() === 6) fechaVencimiento = addDays(fechaVencimiento, 2)
+            else if (fechaVencimiento.getDay() === 0) fechaVencimiento = addDays(fechaVencimiento, 1)
+          } else if (formData.excluir_domingos && fechaVencimiento.getDay() === 0) {
             fechaVencimiento = addDays(fechaVencimiento, 1)
           }
           
@@ -848,6 +861,7 @@ export default function PrestamosPage() {
       tipo_prestamo: 'amortizacion',
       tipo_calculo_interes: 'por_periodo',
       excluir_domingos: false,
+      excluir_fines_semana: false,
       // Campos de venta a crédito
       producto_id: '',
       precio_contado: '',
@@ -1301,20 +1315,37 @@ export default function PrestamosPage() {
                   </Select>
                 </div>
 
-                <div className="flex items-center space-x-2 pt-2">
-                  <Checkbox
-                    id="excluir_domingos"
-                    checked={formData.excluir_domingos}
-                    onCheckedChange={(checked: boolean) =>
-                      setFormData({ ...formData, excluir_domingos: checked === true })
-                    }
-                  />
-                  <Label
-                    htmlFor="excluir_domingos"
-                    className="text-sm font-normal cursor-pointer"
-                  >
-                    Excluir domingos del cronograma de cuotas
-                  </Label>
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="excluir_domingos"
+                      checked={formData.excluir_domingos && !formData.excluir_fines_semana}
+                      onCheckedChange={(checked: boolean) =>
+                        setFormData({ ...formData, excluir_domingos: checked === true, excluir_fines_semana: false })
+                      }
+                    />
+                    <Label
+                      htmlFor="excluir_domingos"
+                      className="text-sm font-normal cursor-pointer"
+                    >
+                      Excluir domingos del cronograma de cuotas
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="excluir_fines_semana"
+                      checked={formData.excluir_fines_semana}
+                      onCheckedChange={(checked: boolean) =>
+                        setFormData({ ...formData, excluir_fines_semana: checked === true, excluir_domingos: false })
+                      }
+                    />
+                    <Label
+                      htmlFor="excluir_fines_semana"
+                      className="text-sm font-normal cursor-pointer"
+                    >
+                      Excluir sábados y domingos del cronograma de cuotas
+                    </Label>
+                  </div>
                 </div>
 
                 {/* Tipo de interés (simple/compuesto) solo aplica para amortización por período */}
