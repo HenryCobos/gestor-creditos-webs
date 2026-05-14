@@ -536,9 +536,10 @@ export default function PrestamosPage() {
         .single()
 
       if (prestamoError) {
+        console.error('[Crear Préstamo] Error Supabase:', prestamoError)
         toast({
-          title: 'Error',
-          description: 'No se pudo crear el préstamo',
+          title: 'Error al crear el préstamo',
+          description: prestamoError.message || 'No se pudo crear el préstamo',
           variant: 'destructive',
         })
         return
