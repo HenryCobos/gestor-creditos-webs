@@ -22,7 +22,7 @@ interface PrestamoInfo {
   frecuencia_pago: string
   tipo_interes: string
   tipo_prestamo?: 'amortizacion' | 'solo_intereses' | 'empeño' | 'venta_credito' | 'abierto'
-  tipo_calculo_interes?: 'por_periodo' | 'global' | 'frances'
+  tipo_calculo_interes?: 'por_periodo' | 'global' | 'frances' | 'total_acordado'
 }
 
 interface GarantiaInfo {
@@ -1002,5 +1002,185 @@ export function generarReciboCuota(
   )
 
   doc.save(`Recibo_Cuota${cuota.numero_cuota}_${cliente.nombre.replace(/\s+/g, '_')}_${nRecibo}.pdf`)
+}
+
+export interface ReciboEvolucionOptions {
+  metodo_pago?: string | null
+  notas?: string | null
+  companyName?: string
+  currency?: string
+  currencySymbol?: string
+}
+
+/** Recibo detallado con historial de cuotas pagadas hasta la cuota del comprobante. */
+export function generarReciboPagoConEvolucion(
+  cuotaPago: ReciboCuotaInfo,
+  todasLasCuotas: ReciboCuotaInfo[],
+  prestamo: ReciboCuotaPrestamo & { fecha_inicio?: string; interes_porcentaje?: number },
+  cliente: ReciboCuotaCliente,
+  options: ReciboEvolucionOptions = {}
+) {
+  const {
+    metodo_pago,
+    notas,
+    companyName = 'Gestor de Créditos',
+    currency = 'USD',
+  } = options
+
+  const doc = new jsPDF({ format: 'a4', orientation: 'portrait' })
+  const pageW = doc.internal.pageSize.getWidth()
+  const margin = 14
+
+  const fmt = (amount: number) =>
+    new Intl.NumberFormat('es-ES', { style: 'currency', currency }).format(amount)
+
+  const fmtDate = (dateStr: string | null) => {
+    if (!dateStr) return '—'
+    const datePart = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr
+    const [y, m, d] = datePart.split('-').map(Number)
+    return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`
+  }
+
+  const cuotasHistorial = todasLasCuotas
+    .filter((c) => c.numero_cuota <= cuotaPago.numero_cuota)
+    .sort((a, b) => a.numero_cuota - b.numero_cuota)
+
+  const totalPagadoHistorial = cuotasHistorial.reduce((sum, c) => sum + (c.monto_pagado || 0), 0)
+  const cuotasPagadasCount = cuotasHistorial.filter((c) => c.estado === 'pagada').length
+  const saldoPendiente = Math.max(0, prestamo.monto_total - totalPagadoHistorial)
+
+  const nRecibo = cuotaPago.id.replace(/-/g, '').slice(-8).toUpperCase()
+  const hoy = format(new Date(), 'dd/MM/yyyy HH:mm')
+
+  doc.setFillColor(37, 99, 235)
+  doc.rect(0, 0, pageW, 32, 'F')
+  doc.setTextColor(255, 255, 255)
+  doc.setFontSize(16)
+  doc.setFont('helvetica', 'bold')
+  doc.text(companyName, pageW / 2, 14, { align: 'center' })
+  doc.setFontSize(11)
+  doc.setFont('helvetica', 'normal')
+  doc.text('RECIBO DE PAGO — EVOLUCIÓN DEL PRÉSTAMO', pageW / 2, 24, { align: 'center' })
+
+  doc.setTextColor(50, 50, 50)
+  doc.setFontSize(9)
+  let y = 40
+  doc.text(`N° Recibo: ${nRecibo}`, margin, y)
+  doc.text(`Emisión: ${hoy}`, pageW - margin, y, { align: 'right' })
+
+  y += 10
+  doc.setFont('helvetica', 'bold')
+  doc.text('CLIENTE', margin, y)
+  y += 5
+  doc.setFont('helvetica', 'normal')
+  doc.text(`${cliente.nombre} · DNI ${cliente.dni}`, margin, y)
+  if (cliente.telefono) {
+    y += 5
+    doc.text(`Tel: ${cliente.telefono}`, margin, y)
+  }
+
+  y += 10
+  doc.setFont('helvetica', 'bold')
+  doc.text('PRÉSTAMO', margin, y)
+  y += 5
+  doc.setFont('helvetica', 'normal')
+  const prestamoIdCorto = prestamo.id.replace(/-/g, '').slice(-8).toUpperCase()
+  doc.text(
+    `Ref. ${prestamoIdCorto} · Inicio ${prestamo.fecha_inicio ? fmtDate(prestamo.fecha_inicio) : 'N/D'} · ${prestamo.frecuencia_pago}`,
+    margin,
+    y
+  )
+  y += 5
+  doc.text(
+    `Prestado: ${fmt(prestamo.monto_prestado)} · Total pactado: ${fmt(prestamo.monto_total)} · Cuotas: ${prestamo.numero_cuotas}`,
+    margin,
+    y
+  )
+
+  y += 10
+  doc.setFont('helvetica', 'bold')
+  doc.text('PAGO REGISTRADO EN ESTE COMPROBANTE', margin, y)
+  y += 6
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margin, right: margin },
+    head: [['Concepto', 'Valor']],
+    body: [
+      ['Cuota pagada', `${cuotaPago.numero_cuota} de ${prestamo.numero_cuotas}`],
+      ['Monto de la cuota', fmt(cuotaPago.monto_cuota)],
+      ['Monto pagado (este abono)', fmt(cuotaPago.monto_pagado)],
+      ['Fecha de vencimiento', fmtDate(cuotaPago.fecha_vencimiento)],
+      ['Fecha de pago', fmtDate(cuotaPago.fecha_pago)],
+      ...(metodo_pago ? [['Método de pago', metodo_pago]] : []),
+      ...(notas ? [['Notas', notas]] : []),
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: [37, 99, 235], fontSize: 9 },
+    bodyStyles: { fontSize: 9 },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 70 } },
+  })
+
+  y = (doc as any).lastAutoTable.finalY + 10
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.text(`EVOLUCIÓN HASTA LA CUOTA ${cuotaPago.numero_cuota}`, margin, y)
+  y += 4
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.text(
+    `${cuotasPagadasCount} cuota(s) pagada(s) · Acumulado pagado: ${fmt(totalPagadoHistorial)} · Saldo pendiente: ${fmt(saldoPendiente)}`,
+    margin,
+    y
+  )
+
+  autoTable(doc, {
+    startY: y + 4,
+    margin: { left: margin, right: margin },
+    head: [['#', 'Vencimiento', 'Cuota', 'Pagado', 'Pendiente', 'Estado']],
+    body: cuotasHistorial.map((c) => {
+      const pendiente = Math.max(0, c.monto_cuota - c.monto_pagado)
+      const estadoLabel =
+        c.estado === 'pagada'
+          ? 'PAGADA'
+          : c.estado === 'retrasada'
+            ? 'RETRASADA'
+            : 'PENDIENTE'
+      return [
+        String(c.numero_cuota),
+        fmtDate(c.fecha_vencimiento),
+        fmt(c.monto_cuota),
+        fmt(c.monto_pagado),
+        fmt(pendiente),
+        c.numero_cuota === cuotaPago.numero_cuota ? `${estadoLabel} ★` : estadoLabel,
+      ]
+    }),
+    theme: 'striped',
+    headStyles: { fillColor: [30, 64, 175], fontSize: 8 },
+    bodyStyles: { fontSize: 8 },
+    didParseCell: (data) => {
+      if (data.section === 'body' && data.row.index < cuotasHistorial.length) {
+        const cuota = cuotasHistorial[data.row.index]
+        if (cuota.numero_cuota === cuotaPago.numero_cuota) {
+          data.cell.styles.fillColor = [219, 234, 254]
+          data.cell.styles.fontStyle = 'bold'
+        }
+      }
+    },
+  })
+
+  const finalY = (doc as any).lastAutoTable.finalY + 12
+  doc.setFontSize(8)
+  doc.setTextColor(100, 100, 100)
+  doc.text(
+    `Documento generado por ${companyName}. La fila marcada con ★ corresponde al pago de este recibo.`,
+    margin,
+    finalY,
+    { maxWidth: pageW - margin * 2 }
+  )
+
+  doc.save(
+    `Recibo_Evolucion_Cuota${cuotaPago.numero_cuota}_${cliente.nombre.replace(/\s+/g, '_')}_${nRecibo}.pdf`
+  )
 }
 

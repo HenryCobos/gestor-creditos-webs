@@ -9,21 +9,56 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/components/ui/use-toast'
 import Link from 'next/link'
 import { ArrowLeft, Mail, CheckCircle2 } from 'lucide-react'
+import { normalizeEmail } from '@/lib/utils/email-validation'
+
+// URL a la que Supabase redirige tras hacer clic en el link del correo. Debe estar en Supabase → Authentication → URL Configuration → Redirect URLs (ej. https://tudominio.com/auth/callback).
+const getRedirectTo = () => `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback?next=/actualizar-contrasena`
+
+function getRecoveryErrorMessage(message: string): string {
+  const m = (message || '').toLowerCase()
+  if (m.includes('redirect') || m.includes('url') || m.includes('allow')) {
+    return 'Configuración de URL de redirección. El administrador debe agregar esta URL en Supabase: Authentication → URL Configuration → Redirect URLs.'
+  }
+  if (m.includes('rate') || m.includes('limit') || m.includes('throttl')) {
+    return 'Demasiados intentos. Espera unos minutos y vuelve a intentar.'
+  }
+  if (m.includes('not authorized') || m.includes('email address not authorized')) {
+    return 'El correo por defecto de Supabase solo envía a direcciones autorizadas. El administrador debe configurar SMTP personalizado en Supabase (Project Settings → Auth → SMTP).'
+  }
+  if (m.includes('email') && m.includes('send')) {
+    return 'No se pudo enviar el correo. Suele deberse a la configuración de email en Supabase: configura SMTP personalizado en Project Settings → Auth → SMTP.'
+  }
+  return message || 'No se pudo enviar el email. Intenta de nuevo.'
+}
 
 export default function RecuperarContrasenaPage() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
+  const [recoveryError, setRecoveryError] = useState<string | null>(null)
   const { toast } = useToast()
   const supabase = createClient()
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()
+    setRecoveryError(null)
     setLoading(true)
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/callback?next=/actualizar-contrasena`,
+      const normalizedEmail = normalizeEmail(email.trim())
+      const redirectTo = getRedirectTo()
+      if (!redirectTo.startsWith('http')) {
+        toast({
+          title: 'Error',
+          description: 'Configuración incorrecta. Contacta al administrador.',
+          variant: 'destructive',
+        })
+        setLoading(false)
+        return
+      }
+
+      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+        redirectTo,
       })
 
       if (error) {
@@ -31,17 +66,21 @@ export default function RecuperarContrasenaPage() {
       }
 
       setEmailSent(true)
+      setRecoveryError(null)
       toast({
         title: '¡Email enviado!',
-        description: 'Revisa tu correo para restablecer tu contraseña.',
+        description: 'Revisa tu correo (y la carpeta de spam) para restablecer tu contraseña.',
       })
     } catch (error: any) {
-      console.error('Error al enviar email:', error)
+      console.error('Error al enviar email de recuperación:', error)
+      const rawMessage = error?.message || ''
+      const description = getRecoveryErrorMessage(rawMessage)
       toast({
         title: 'Error',
-        description: error.message || 'No se pudo enviar el email. Intenta de nuevo.',
+        description,
         variant: 'destructive',
       })
+      setRecoveryError(rawMessage)
     } finally {
       setLoading(false)
     }
@@ -127,6 +166,12 @@ export default function RecuperarContrasenaPage() {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Enviando...' : 'Enviar Link de Recuperación'}
             </Button>
+            {recoveryError && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                <p className="font-medium">Si el error sigue:</p>
+                <p className="mt-1">En Supabase → Project Settings → Auth → SMTP, configura un proveedor de correo (SendGrid, Resend, etc.). El correo por defecto tiene límites y suele fallar con usuarios finales.</p>
+              </div>
+            )}
           </form>
           <div className="mt-6 text-center">
             <Link href="/login" className="text-sm text-primary hover:underline inline-flex items-center gap-2">

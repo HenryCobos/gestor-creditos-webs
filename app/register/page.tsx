@@ -108,9 +108,12 @@ export default function RegisterPage() {
 
     } catch (error: any) {
       console.error('Error al registrar:', error)
+      const isDbError = error?.message?.toLowerCase().includes('database error saving new user')
       toast({
         title: 'Error al crear cuenta',
-        description: error.message || 'Ocurrió un error. Por favor intenta de nuevo.',
+        description: isDbError
+          ? 'Error de configuración del servidor. Por favor contacta al administrador o intenta más tarde.'
+          : (error.message || 'Ocurrió un error. Por favor intenta de nuevo.'),
         variant: 'destructive',
       })
     } finally {

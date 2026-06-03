@@ -159,141 +159,210 @@ export async function loadOrganizationSubscription(): Promise<UserSubscription |
   }
 }
 
-// NUEVA FUNCIÓN: Cargar límites a nivel de organización
-export async function loadOrganizationUsageLimits(): Promise<UsageLimits | null> {
+export interface LimitesOrganizacion {
+  organization_id: string
+  plan_nombre: string
+  plan_slug: string
+  limite_clientes: number
+  limite_prestamos: number
+  clientes_usados: number
+  prestamos_usados: number
+  clientes_disponibles: number
+  prestamos_disponibles: number
+  porcentaje_clientes: number
+  porcentaje_prestamos: number
+  puede_crear_cliente: boolean
+  puede_crear_prestamo: boolean
+}
+
+function toNumber(value: unknown): number {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+function formatSupabaseError(err: unknown): string {
+  if (!err || typeof err !== 'object') return 'Error desconocido'
+  const e = err as { message?: string; code?: string; details?: string; hint?: string }
+  return e.message || e.details || e.hint || e.code || JSON.stringify(err)
+}
+
+function buildLimitesOrganizacion(
+  organizationId: string,
+  plan: { nombre: string; slug: string; limite_clientes: number; limite_prestamos: number },
+  clientesUsados: number,
+  prestamosUsados: number
+): LimitesOrganizacion {
+  const limiteClientes = plan.limite_clientes
+  const limitePrestamos = plan.limite_prestamos
+  const clientesDisponibles = Math.max(0, limiteClientes - clientesUsados)
+  const prestamosDisponibles = Math.max(0, limitePrestamos - prestamosUsados)
+
+  return {
+    organization_id: organizationId,
+    plan_nombre: plan.nombre,
+    plan_slug: plan.slug,
+    limite_clientes: limiteClientes,
+    limite_prestamos: limitePrestamos,
+    clientes_usados: clientesUsados,
+    prestamos_usados: prestamosUsados,
+    clientes_disponibles: clientesDisponibles,
+    prestamos_disponibles: prestamosDisponibles,
+    porcentaje_clientes:
+      limiteClientes > 0
+        ? Math.round((clientesUsados / limiteClientes) * 10000) / 100
+        : 0,
+    porcentaje_prestamos:
+      limitePrestamos > 0
+        ? Math.round((prestamosUsados / limitePrestamos) * 10000) / 100
+        : 0,
+    puede_crear_cliente: clientesUsados < limiteClientes,
+    puede_crear_prestamo: prestamosUsados < limitePrestamos,
+  }
+}
+
+function mapRpcRowToLimites(row: Record<string, unknown>): LimitesOrganizacion {
+  const limiteClientes = toNumber(row.limite_clientes)
+  const limitePrestamos = toNumber(row.limite_prestamos)
+  const clientesUsados = toNumber(row.clientes_usados)
+  const prestamosUsados = toNumber(row.prestamos_usados)
+
+  return buildLimitesOrganizacion(
+    String(row.organization_id),
+    {
+      nombre: String(row.plan_nombre ?? 'Plan'),
+      slug: String(row.plan_slug ?? 'free'),
+      limite_clientes: limiteClientes,
+      limite_prestamos: limitePrestamos,
+    },
+    clientesUsados,
+    prestamosUsados
+  )
+}
+
+/** Límites de la organización: RPC + fallback manual si la RPC no devuelve filas */
+export async function fetchLimitesOrganizacion(): Promise<LimitesOrganizacion | null> {
   const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   if (!user) return null
 
-  try {
-    // 1) Intentar obtener límites usando la función RPC principal
-    const { data: limites, error } = await supabase
-      .rpc('get_limites_organizacion')
-      .single()
+  // 1) RPC (maybeSingle: 0 filas no lanza error como .single())
+  const { data: rpcData, error: rpcError } = await supabase
+    .rpc('get_limites_organizacion')
+    .maybeSingle()
 
-    if (!error && limites) {
-      console.log('[loadOrganizationUsageLimits] ✅ Límites de organización (RPC):', limites)
+  if (!rpcError && rpcData) {
+    return mapRpcRowToLimites(rpcData as Record<string, unknown>)
+  }
 
-      // Casting explícito para TypeScript
-      const limitesData = limites as any
-      const clientesUsados = limitesData.clientes_usados || 0
-      const limiteClientes = limitesData.limite_clientes || 0
-      const prestamosUsados = limitesData.prestamos_usados || 0
-      const limitePrestamos = limitesData.limite_prestamos || 0
+  if (rpcError) {
+    console.warn(
+      '[fetchLimitesOrganizacion] RPC falló, usando fallback:',
+      formatSupabaseError(rpcError)
+    )
+  } else {
+    console.warn(
+      '[fetchLimitesOrganizacion] RPC sin filas (org sin plan_id válido), usando fallback'
+    )
+  }
 
-      return {
-        clientes: {
-          current: clientesUsados,
-          limit: limiteClientes,
-          canAdd: clientesUsados < limiteClientes,
-        },
-        prestamos: {
-          current: prestamosUsados,
-          limit: limitePrestamos,
-          canAdd: prestamosUsados < limitePrestamos,
-        },
-        usuarios: {
-          current: 0,
-          limit: 999,
-          canAdd: true,
-        },
+  // 2) Fallback manual
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('organization_id')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile?.organization_id) return null
+
+  const orgId = profile.organization_id as string
+
+  const { data: org, error: orgError } = await supabase
+    .from('organizations')
+    .select(
+      `
+      id,
+      plan:planes(nombre, slug, limite_clientes, limite_prestamos)
+    `
+    )
+    .eq('id', orgId)
+    .single()
+
+  const planRaw = org?.plan as
+    | {
+        nombre?: string
+        slug?: string
+        limite_clientes?: number
+        limite_prestamos?: number
       }
-    }
+    | null
+    | undefined
 
-    console.log('[loadOrganizationUsageLimits] ⚠️ Error o sin datos desde RPC, usando fallback manual:', error)
+  if (orgError || !planRaw) {
+    console.warn('[fetchLimitesOrganizacion] Fallback: organización sin plan:', orgError)
+    return null
+  }
 
-    // 2) FALLBACK SEGURO (sin recursion):
-    //    Calcular límites a partir de la organización y sus usuarios.
+  const { data: orgUsers, error: usersError } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('organization_id', orgId)
 
-    // 2.1 Obtener perfil para conocer organization_id
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single()
+  if (usersError || !orgUsers?.length) return null
 
-    if (!profile?.organization_id) {
-      console.log('[loadOrganizationUsageLimits] Fallback: usuario sin organization_id')
-      return null
-    }
+  const userIds = orgUsers.map((u) => u.id)
 
-    const orgId = profile.organization_id as string
+  const [clientesAgg, prestamosAgg] = await Promise.all([
+    supabase.from('clientes').select('id', { count: 'exact', head: true }).in('user_id', userIds),
+    supabase.from('prestamos').select('id', { count: 'exact', head: true }).in('user_id', userIds),
+  ])
 
-    // 2.2 Obtener plan de la organización
-    const { data: org, error: orgError } = await supabase
-      .from('organizations')
-      .select(`
-        id,
-        plan:planes(limite_clientes, limite_prestamos)
-      `)
-      .eq('id', orgId)
-      .single()
+  return buildLimitesOrganizacion(
+    orgId,
+    {
+      nombre: planRaw.nombre ?? 'Plan',
+      slug: planRaw.slug ?? 'free',
+      limite_clientes: planRaw.limite_clientes ?? 0,
+      limite_prestamos: planRaw.limite_prestamos ?? 0,
+    },
+    clientesAgg.count ?? 0,
+    prestamosAgg.count ?? 0
+  )
+}
 
-    if (orgError || !org?.plan) {
-      console.log('[loadOrganizationUsageLimits] Fallback: organización sin plan o error:', orgError)
-      return null
-    }
+// Cargar límites a nivel de organización (para subscription store)
+export async function loadOrganizationUsageLimits(): Promise<UsageLimits | null> {
+  try {
+    const limites = await fetchLimitesOrganizacion()
+    if (!limites) return null
 
-    const planData = org.plan as any
-    const limiteClientes = planData.limite_clientes || 0
-    const limitePrestamos = planData.limite_prestamos || 0
-
-    // 2.3 Obtener IDs de usuarios de la organización
-    const { data: orgUsers, error: usersError } = await supabase
+    const supabase = createClient()
+    const { data: orgUsers } = await supabase
       .from('profiles')
       .select('id')
-      .eq('organization_id', orgId)
-
-    if (usersError || !orgUsers || orgUsers.length === 0) {
-      console.log('[loadOrganizationUsageLimits] Fallback: sin usuarios en organización o error:', usersError)
-      return null
-    }
-
-    const userIds = orgUsers.map(u => u.id)
-
-    // 2.4 Contar clientes y préstamos de TODOS los usuarios de la organización
-    const [clientesAgg, prestamosAgg] = await Promise.all([
-      supabase
-        .from('clientes')
-        .select('id', { count: 'exact', head: true })
-        .in('user_id', userIds),
-      supabase
-        .from('prestamos')
-        .select('id', { count: 'exact', head: true })
-        .in('user_id', userIds),
-    ])
-
-    const clientesUsados = clientesAgg.count || 0
-    const prestamosUsados = prestamosAgg.count || 0
-
-    console.log('[loadOrganizationUsageLimits] ✅ Fallback manual calculado:', {
-      clientesUsados,
-      prestamosUsados,
-      limiteClientes,
-      limitePrestamos,
-    })
+      .eq('organization_id', limites.organization_id)
 
     return {
       clientes: {
-        current: clientesUsados,
-        limit: limiteClientes,
-        canAdd: clientesUsados < limiteClientes,
+        current: limites.clientes_usados,
+        limit: limites.limite_clientes,
+        canAdd: limites.puede_crear_cliente,
       },
       prestamos: {
-        current: prestamosUsados,
-        limit: limitePrestamos,
-        canAdd: prestamosUsados < limitePrestamos,
+        current: limites.prestamos_usados,
+        limit: limites.limite_prestamos,
+        canAdd: limites.puede_crear_prestamo,
       },
       usuarios: {
-        current: userIds.length,
+        current: orgUsers?.length ?? 1,
         limit: 999,
         canAdd: true,
       },
     }
-
   } catch (error) {
-    console.error('[loadOrganizationUsageLimits] Error:', error)
+    console.error('[loadOrganizationUsageLimits] Error:', formatSupabaseError(error))
     return null
   }
 }

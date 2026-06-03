@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getDashboardShell } from '@/lib/get-dashboard-shell'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -23,142 +24,36 @@ import { CompanyHeader } from '@/components/company-header'
 import { MobileMenu } from '@/components/mobile-menu'
 
 async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const shell = await getDashboardShell()
 
-  if (!user) {
+  if (!shell) {
     redirect('/login')
   }
 
-  // Obtener perfil del usuario
-  let { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+  const { user, profile: shellProfile, userRole, planInfo } = shell
+  let profile = shellProfile
 
-  // Determinar el rol del usuario (fuente principal: user_roles en organizaciones)
-  let userRole = profile?.role || 'admin'
-  if (profile?.organization_id) {
-    const { data: roleData } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('organization_id', profile.organization_id)
-      .maybeSingle()
-
-    userRole = roleData?.role || userRole
-  }
-  
-  // Obtener el plan de la ORGANIZACIÓN (con fallbacks robustos)
-  let planInfo: { id: string; nombre: string; slug: string } | null = null
-  if (profile?.organization_id) {
-    const { data: organization } = await supabase
-      .from('organizations')
-      .select(`
-        id,
-        nombre_negocio,
-        plan_id,
-        subscription_status,
-        plan:planes(id, nombre, slug)
-      `)
-      .eq('id', profile.organization_id)
-      .single()
-
-    const orgPlan = Array.isArray(organization?.plan)
-      ? organization?.plan[0]
-      : organization?.plan
-
-    if (orgPlan) {
-      planInfo = orgPlan
-    }
-
-    // Fallback 1: si hay plan_id pero la relación no vino poblada
-    if (!planInfo && organization?.plan_id) {
-      const { data: planById } = await supabase
-        .from('planes')
-        .select('id, nombre, slug')
-        .eq('id', organization.plan_id)
-        .maybeSingle()
-
-      if (planById) {
-        planInfo = planById
-      }
-    }
-  }
-
-  // Fallback 2: usar RPC de límites de organización (fuente usada en el resto del sistema)
-  if (!planInfo && profile?.organization_id) {
-    const { data: limitesOrg } = await supabase
-      .rpc('get_limites_organizacion')
-      .single()
-
-    const planSlug = (limitesOrg as any)?.plan_slug as string | undefined
-    const planNombre = (limitesOrg as any)?.plan_nombre as string | undefined
-
-    if (planSlug) {
-      const { data: planBySlug } = await supabase
-        .from('planes')
-        .select('id, nombre, slug')
-        .eq('slug', planSlug)
-        .maybeSingle()
-
-      if (planBySlug) {
-        planInfo = planBySlug
-      } else {
-        planInfo = {
-          id: '',
-          nombre: planNombre || 'Plan Activo',
-          slug: planSlug,
-        }
-      }
-    } else if (planNombre) {
-      planInfo = {
-        id: '',
-        nombre: planNombre,
-        slug: 'custom',
-      }
-    }
-  }
-
-  if (!planInfo) {
-    // Si no hay organización o plan, obtener el plan gratuito
-    const { data: freePlan } = await supabase
-      .from('planes')
-      .select('id, nombre, slug')
-      .eq('slug', 'free')
-      .single()
-    planInfo = freePlan
-  }
-
-  // Si no hay perfil, crear uno básico (sin plan individual)
+  // Perfil inexistente: crear uno básico (caso raro)
   if (!profile) {
-    console.log('🔧 Creando perfil para usuario nuevo...')
-    
-    const { error: upsertError } = await supabase
-      .from('profiles')
-      .upsert({
+    const supabase = await createClient()
+    await supabase.from('profiles').upsert(
+      {
         id: user.id,
         email: user.email || '',
-        full_name: user.user_metadata?.full_name || user.email || 'Usuario',
-        role: 'admin', // Por defecto admin
+        full_name: user.email || 'Usuario',
+        role: 'admin',
         activo: true,
-      }, {
-        onConflict: 'id'
-      })
-
-    if (upsertError) {
-      console.error('Error al crear perfil:', upsertError)
+      },
+      { onConflict: 'id' }
+    )
+    profile = {
+      id: user.id,
+      email: user.email || null,
+      full_name: user.email || null,
+      role: 'admin',
+      organization_id: null,
+      activo: true,
     }
-
-    // Recargar el perfil
-    const { data: updatedProfile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single()
-
-    profile = updatedProfile
   }
 
   const handleSignOut = async () => {
@@ -176,7 +71,7 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
           <CompanyHeader />
           <MobileMenu 
             user={profile}
-            planName={planInfo?.nombre || 'Gratuito'}
+            planName={planInfo.nombre}
             onSignOut={handleSignOut}
             userRole={userRole}
           />
@@ -191,14 +86,12 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
             <p className="text-sm text-muted-foreground mt-2">
               {profile?.full_name || user.email}
             </p>
-            {planInfo && (
-              <Link href="/dashboard/subscription">
-                <div className="mt-3 px-3 py-2 bg-primary/10 dark:bg-primary/20 rounded-lg border border-primary/20 hover:shadow-md transition-all cursor-pointer">
-                  <p className="text-xs text-primary font-medium">Plan Actual</p>
-                  <p className="text-sm font-bold text-primary">{planInfo.nombre}</p>
-                </div>
-              </Link>
-            )}
+            <Link href="/dashboard/subscription" prefetch>
+              <div className="mt-3 px-3 py-2 bg-primary/10 dark:bg-primary/20 rounded-lg border border-primary/20 hover:shadow-md transition-all cursor-pointer">
+                <p className="text-xs text-primary font-medium">Plan Actual</p>
+                <p className="text-sm font-bold text-primary">{planInfo.nombre}</p>
+              </div>
+            </Link>
             {/* Botón pequeño para guía rápida */}
             <div className="mt-3">
               <Link href="/guia-rapida-gestor-creditos.html" target="_blank">
@@ -211,7 +104,7 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
           </div>
 
           <nav className="flex-1 p-4 space-y-1 overflow-y-auto overflow-x-hidden">
-            <Link href="/dashboard">
+            <Link href="/dashboard" prefetch>
               <Button variant="ghost" className="w-full justify-start">
                 <Home className="mr-2 h-4 w-4" />
                 Dashboard
@@ -219,19 +112,19 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
             </Link>
 
             {/* Menú común para todos */}
-            <Link href="/dashboard/clientes">
+            <Link href="/dashboard/clientes" prefetch>
               <Button variant="ghost" className="w-full justify-start">
                 <Users className="mr-2 h-4 w-4" />
                 {userRole === 'cobrador' ? 'Mis Clientes' : 'Clientes'}
               </Button>
             </Link>
-            <Link href="/dashboard/prestamos">
+            <Link href="/dashboard/prestamos" prefetch>
               <Button variant="ghost" className="w-full justify-start">
                 <DollarSign className="mr-2 h-4 w-4" />
                 {userRole === 'cobrador' ? 'Mis Préstamos' : 'Préstamos'}
               </Button>
             </Link>
-            <Link href="/dashboard/cuotas">
+            <Link href="/dashboard/cuotas" prefetch>
               <Button variant="ghost" className="w-full justify-start">
                 <CreditCard className="mr-2 h-4 w-4" />
                 {userRole === 'cobrador' ? 'Mis Cuotas' : 'Cuotas'}
@@ -241,7 +134,7 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
             {/* Solo para administradores */}
             {userRole === 'admin' && (
               <>
-                <Link href="/dashboard/productos">
+                <Link href="/dashboard/productos" prefetch>
                   <Button variant="ghost" className="w-full justify-start">
                     <Package className="mr-2 h-4 w-4" />
                     Productos
@@ -254,19 +147,19 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
                   <p className="text-xs text-muted-foreground mt-2 px-2">Gestión de Rutas</p>
                 </div>
 
-                <Link href="/dashboard/usuarios">
+                <Link href="/dashboard/usuarios" prefetch>
                   <Button variant="ghost" className="w-full justify-start">
                     <UserCog className="mr-2 h-4 w-4" />
                     Usuarios
                   </Button>
                 </Link>
-                <Link href="/dashboard/rutas">
+                <Link href="/dashboard/rutas" prefetch>
                   <Button variant="ghost" className="w-full justify-start">
                     <MapPin className="mr-2 h-4 w-4" />
                     Rutas
                   </Button>
                 </Link>
-                <Link href="/dashboard/reportes">
+                <Link href="/dashboard/reportes" prefetch>
                   <Button variant="ghost" className="w-full justify-start">
                     <FileText className="mr-2 h-4 w-4" />
                     Reportes
@@ -285,13 +178,13 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
                   </p>
                 </div>
 
-                <Link href="/dashboard/gastos">
+                <Link href="/dashboard/gastos" prefetch>
                   <Button variant="ghost" className="w-full justify-start">
                     <Receipt className="mr-2 h-4 w-4" />
                     {userRole === 'cobrador' ? 'Mis Gastos' : 'Gastos'}
                   </Button>
                 </Link>
-                <Link href="/dashboard/caja">
+                <Link href="/dashboard/caja" prefetch>
                   <Button variant="ghost" className="w-full justify-start">
                     <Calculator className="mr-2 h-4 w-4" />
                     {userRole === 'cobrador' ? 'Mi Caja' : 'Arqueos'}
@@ -306,7 +199,7 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
                 <div className="py-2">
                   <div className="border-t border-border"></div>
                 </div>
-                <Link href="/dashboard/tutoriales">
+                <Link href="/dashboard/tutoriales" prefetch>
                   <Button variant="ghost" className="w-full justify-start">
                     <PlayCircle className="mr-2 h-4 w-4" />
                     Tutoriales
@@ -314,7 +207,7 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
                 </Link>
               </>
             )}
-            <Link href="/dashboard/configuracion">
+            <Link href="/dashboard/configuracion" prefetch>
               <Button variant="ghost" className="w-full justify-start">
                 <Settings className="mr-2 h-4 w-4" />
                 Configuración

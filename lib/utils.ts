@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { startOfDay } from "date-fns"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -55,7 +56,18 @@ export function calculateLoanDetails(
   }
 }
 
+/** Retrasada solo si la fecha de vencimiento es anterior a hoy (mismo día = pendiente). */
 export function isDateOverdue(date: string | Date): boolean {
-  return new Date(date) < new Date()
+  let dueDate: Date
+  if (typeof date === 'string') {
+    const datePart = date.includes('T') ? date.split('T')[0] : date
+    const [year, month, day] = datePart.split('-').map(Number)
+    dueDate = new Date(year, month - 1, day)
+  } else {
+    dueDate = date
+  }
+  const due = startOfDay(dueDate)
+  const today = startOfDay(new Date())
+  return today > due
 }
 

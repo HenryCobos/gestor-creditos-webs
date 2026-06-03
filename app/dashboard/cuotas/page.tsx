@@ -294,7 +294,7 @@ export default function CuotasPage() {
         console.error('[handleRegistrarPago] Error en API:', data)
         toast({
           title: 'Error',
-          description: data.error || 'No se pudo registrar el pago',
+          description: `${data.error || 'No se pudo registrar el pago'}${data.details ? `: ${data.details}` : ''}`,
           variant: 'destructive',
         })
         return

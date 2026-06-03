@@ -50,7 +50,7 @@ import {
 import { useStore, type Gasto, type CategoriaGasto } from '@/lib/store'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useConfigStore } from '@/lib/config-store'
-import { format } from 'date-fns'
+import { format, startOfMonth } from 'date-fns'
 
 const getCategoriaIcon = (categoria: CategoriaGasto) => {
   switch (categoria) {
@@ -80,7 +80,10 @@ export default function GastosPage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [organizationId, setOrganizationId] = useState<string | null>(null)
   const [rutas, setRutas] = useState<any[]>([])
-  const [filtroFecha, setFiltroFecha] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const hoy = format(new Date(), 'yyyy-MM-dd')
+  const inicioMes = format(startOfMonth(new Date()), 'yyyy-MM-dd')
+  const [filtroFechaDesde, setFiltroFechaDesde] = useState(inicioMes)
+  const [filtroFechaHasta, setFiltroFechaHasta] = useState(hoy)
   const [filtroCobrador, setFiltroCobrador] = useState<string>('todos')
   const [filtroRuta, setFiltroRuta] = useState<string>('todos')
   const [cobradores, setCobradores] = useState<any[]>([])
@@ -100,6 +103,28 @@ export default function GastosPage() {
   useEffect(() => {
     checkPermissionsAndLoad()
   }, [])
+
+  useEffect(() => {
+    if (!userId || !userRole) return
+    if (userRole === 'admin' && organizationId) {
+      loadGastos(organizationId)
+    } else if (userRole === 'cobrador') {
+      loadGastosCobrador(userId)
+    }
+  }, [filtroFechaDesde, filtroFechaHasta, filtroCobrador, filtroRuta, userId, userRole, organizationId])
+
+  const aplicarFiltroFechas = <T extends { gte: (col: string, val: string) => T; lte: (col: string, val: string) => T }>(
+    query: T
+  ) => {
+    let q = query
+    if (filtroFechaDesde) {
+      q = q.gte('fecha_gasto', filtroFechaDesde)
+    }
+    if (filtroFechaHasta) {
+      q = q.lte('fecha_gasto', filtroFechaHasta)
+    }
+    return q
+  }
 
   const checkPermissionsAndLoad = async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -133,10 +158,8 @@ export default function GastosPage() {
       if (role === 'admin') {
         loadRutas(profile.organization_id)
         loadCobradores(profile.organization_id)
-        loadGastos(profile.organization_id)
       } else if (role === 'cobrador') {
         loadRutasCobrador(user.id)
-        loadGastosCobrador(user.id)
       }
     }
   }
@@ -233,10 +256,7 @@ export default function GastosPage() {
         .select('*')
         .eq('organization_id', orgId)
 
-      // Aplicar filtros
-      if (filtroFecha) {
-        query = query.eq('fecha_gasto', filtroFecha)
-      }
+      query = aplicarFiltroFechas(query)
       if (filtroCobrador !== 'todos') {
         query = query.eq('cobrador_id', filtroCobrador)
       }
@@ -329,10 +349,7 @@ export default function GastosPage() {
         .select('*')
         .eq('cobrador_id', cobradorId)
 
-      // Aplicar filtro de fecha
-      if (filtroFecha) {
-        query = query.eq('fecha_gasto', filtroFecha)
-      }
+      query = aplicarFiltroFechas(query)
 
       query = query.order('fecha_gasto', { ascending: false })
 
@@ -760,30 +777,35 @@ export default function GastosPage() {
         </Dialog>
       </div>
 
-      {/* Filtros (solo para admin) */}
+      {/* Filtros */}
       {userRole === 'admin' && (
         <Card>
           <CardContent className="pt-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="space-y-2">
-                <Label>Fecha</Label>
+                <Label>Desde</Label>
                 <Input
                   type="date"
-                  value={filtroFecha}
-                  onChange={(e) => {
-                    setFiltroFecha(e.target.value)
-                    setTimeout(() => loadGastos(organizationId!), 100)
-                  }}
+                  value={filtroFechaDesde}
+                  max={filtroFechaHasta || undefined}
+                  onChange={(e) => setFiltroFechaDesde(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Hasta</Label>
+                <Input
+                  type="date"
+                  value={filtroFechaHasta}
+                  min={filtroFechaDesde || undefined}
+                  max={hoy}
+                  onChange={(e) => setFiltroFechaHasta(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
                 <Label>Cobrador</Label>
                 <Select
                   value={filtroCobrador}
-                  onValueChange={(value) => {
-                    setFiltroCobrador(value)
-                    setTimeout(() => loadGastos(organizationId!), 100)
-                  }}
+                  onValueChange={setFiltroCobrador}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -802,10 +824,7 @@ export default function GastosPage() {
                 <Label>Ruta</Label>
                 <Select
                   value={filtroRuta}
-                  onValueChange={(value) => {
-                    setFiltroRuta(value)
-                    setTimeout(() => loadGastos(organizationId!), 100)
-                  }}
+                  onValueChange={setFiltroRuta}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -824,10 +843,10 @@ export default function GastosPage() {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setFiltroFecha(format(new Date(), 'yyyy-MM-dd'))
+                    setFiltroFechaDesde(inicioMes)
+                    setFiltroFechaHasta(hoy)
                     setFiltroCobrador('todos')
                     setFiltroRuta('todos')
-                    setTimeout(() => loadGastos(organizationId!), 100)
                   }}
                   className="w-full"
                 >
@@ -835,6 +854,52 @@ export default function GastosPage() {
                 </Button>
               </div>
             </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              Mostrando gastos del {formatDate(filtroFechaDesde)} al {formatDate(filtroFechaHasta)}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {userRole === 'cobrador' && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Desde</Label>
+                <Input
+                  type="date"
+                  value={filtroFechaDesde}
+                  max={filtroFechaHasta || undefined}
+                  onChange={(e) => setFiltroFechaDesde(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Hasta</Label>
+                <Input
+                  type="date"
+                  value={filtroFechaHasta}
+                  min={filtroFechaDesde || undefined}
+                  max={hoy}
+                  onChange={(e) => setFiltroFechaHasta(e.target.value)}
+                />
+              </div>
+              <div className="flex items-end">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setFiltroFechaDesde(inicioMes)
+                    setFiltroFechaHasta(hoy)
+                  }}
+                >
+                  Limpiar Filtros
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              Mostrando gastos del {formatDate(filtroFechaDesde)} al {formatDate(filtroFechaHasta)}
+            </p>
           </CardContent>
         </Card>
       )}
@@ -900,7 +965,7 @@ export default function GastosPage() {
           ) : gastos.length === 0 ? (
             <div className="text-center py-8 space-y-4">
               <DollarSign className="h-12 w-12 mx-auto text-gray-400" />
-              <p className="text-gray-500">No hay gastos registrados para esta fecha</p>
+              <p className="text-gray-500">No hay gastos en el rango seleccionado</p>
             </div>
           ) : (
             <>

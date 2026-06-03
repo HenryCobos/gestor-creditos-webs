@@ -1,165 +1,178 @@
-import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
+import { getSupabaseAdmin } from '@/lib/supabase/admin'
 
-// Cliente con Service Role Key para operaciones privilegiadas
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-)
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+const isDev = process.env.NODE_ENV === 'development'
 
 export async function POST(request: Request) {
   try {
-    // 1. Verificar autenticación usando el cliente del servidor
-    const supabase = await createServerClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      console.error('[API registrar-pago] Error de autenticación:', authError)
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
       return NextResponse.json(
-        { error: 'No autenticado' },
-        { status: 401 }
-      )
-    }
-    
-    console.log('[API registrar-pago] Usuario autenticado:', user.id)
-
-    // 2. Obtener datos del request
-    const body = await request.json()
-    const {
-      cuota_id,
-      prestamo_id,
-      monto_pagado,
-      metodo_pago,
-      notas
-    } = body
-
-    console.log('[API registrar-pago] Datos recibidos:', {
-      cuota_id,
-      prestamo_id,
-      monto_pagado,
-      metodo_pago: metodo_pago || 'sin método'
-    })
-
-    // 3. Validar datos requeridos
-    if (!cuota_id || !prestamo_id || !monto_pagado || monto_pagado <= 0) {
-      console.error('[API registrar-pago] Datos inválidos:', {
-        cuota_id,
-        prestamo_id,
-        monto_pagado
-      })
-      return NextResponse.json(
-        { error: 'Datos inválidos' },
-        { status: 400 }
-      )
-    }
-
-    // 4. Obtener información del usuario (rol y organización)
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('organization_id, role')
-      .eq('id', user.id)
-      .single()
-
-    if (!profile?.organization_id) {
-      return NextResponse.json(
-        { error: 'Usuario sin organización' },
-        { status: 403 }
-      )
-    }
-
-    // 5. Obtener información del préstamo para validar permisos
-    // Seleccionar solo columnas básicas que seguro existen
-    const { data: prestamo, error: prestamoError } = await supabaseAdmin
-      .from('prestamos')
-      .select('id, user_id, ruta_id, cliente_id')
-      .eq('id', prestamo_id)
-      .maybeSingle()
-
-    if (prestamoError) {
-      console.error('[API registrar-pago] Error al buscar préstamo:', prestamoError)
-      console.error('[API registrar-pago] Detalles del error:', JSON.stringify(prestamoError, null, 2))
-      return NextResponse.json(
-        { error: 'Error al buscar préstamo', details: prestamoError.message },
+        {
+          error: 'Configuración del servidor incompleta',
+          details: 'Falta SUPABASE_SERVICE_ROLE_KEY en el entorno local',
+        },
         { status: 500 }
       )
     }
 
-    if (!prestamo) {
-      console.error('[API registrar-pago] Préstamo no encontrado con ID:', prestamo_id)
+    const supabaseAdmin = getSupabaseAdmin()
+    const supabase = await createServerClient()
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const { cuota_id, prestamo_id, monto_pagado, metodo_pago, notas } = body
+
+    if (!cuota_id || !prestamo_id || !monto_pagado || monto_pagado <= 0) {
+      return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 })
+    }
+
+    if (!UUID_RE.test(String(prestamo_id)) || !UUID_RE.test(String(cuota_id))) {
+      return NextResponse.json({ error: 'ID de préstamo o cuota inválido' }, { status: 400 })
+    }
+
+    // Consultas en paralelo (antes eran ~8 secuenciales)
+    const [profileRes, prestamoRes, cuotaRes] = await Promise.all([
+      supabaseAdmin
+        .from('profiles')
+        .select('organization_id, role')
+        .eq('id', user.id)
+        .maybeSingle(),
+      supabaseAdmin
+        .from('prestamos')
+        .select('id, user_id, ruta_id, cliente_id')
+        .eq('id', prestamo_id)
+        .maybeSingle(),
+      supabaseAdmin
+        .from('cuotas')
+        .select('monto_cuota, monto_pagado, estado, prestamo_id')
+        .eq('id', cuota_id)
+        .maybeSingle(),
+    ])
+
+    if (prestamoRes.error) {
       return NextResponse.json(
-        { error: 'Préstamo no encontrado' },
-        { status: 404 }
+        {
+          error: 'Error al buscar préstamo',
+          details: prestamoRes.error.message,
+          code: prestamoRes.error.code,
+        },
+        { status: 500 }
       )
     }
 
-    console.log('[API registrar-pago] Préstamo encontrado:', {
-      id: prestamo.id,
-      user_id: prestamo.user_id,
-      ruta_id: prestamo.ruta_id,
-      cliente_id: prestamo.cliente_id,
-    })
+    const prestamo = prestamoRes.data
+    if (!prestamo) {
+      return NextResponse.json({ error: 'Préstamo no encontrado' }, { status: 404 })
+    }
 
-    // 6. Verificar que el préstamo pertenece a la organización del usuario
-    // Como prestamos NO tiene organization_id, verificamos por el dueño del préstamo
-    console.log('[API registrar-pago] Verificando organización del dueño del préstamo...')
-    
-    const { data: prestamoOwnerProfile } = await supabaseAdmin
-      .from('profiles')
-      .select('organization_id')
-      .eq('id', prestamo.user_id)
-      .single()
+    if (cuotaRes.error || !cuotaRes.data) {
+      return NextResponse.json({ error: 'Cuota no encontrada' }, { status: 404 })
+    }
 
-    if (!prestamoOwnerProfile?.organization_id) {
-      console.error('[API registrar-pago] Dueño del préstamo sin organización')
+    const cuotaActual = cuotaRes.data
+    if (cuotaActual.prestamo_id !== prestamo_id) {
       return NextResponse.json(
-        { error: 'El préstamo no está asociado a ninguna organización' },
+        { error: 'La cuota no pertenece al préstamo indicado' },
+        { status: 400 }
+      )
+    }
+
+    const profile = profileRes.data
+    const esDuenoPrestamo = prestamo.user_id === user.id
+    let organizationId = profile?.organization_id ?? null
+
+    if (!organizationId) {
+      const [ownedOrgsRes, roleRowRes, ownerProfileRes] = await Promise.all([
+        supabaseAdmin.from('organizations').select('id').eq('owner_id', user.id).limit(1),
+        supabaseAdmin
+          .from('user_roles')
+          .select('organization_id')
+          .eq('user_id', user.id)
+          .limit(1),
+        supabaseAdmin
+          .from('profiles')
+          .select('organization_id')
+          .eq('id', prestamo.user_id)
+          .maybeSingle(),
+      ])
+
+      organizationId =
+        ownedOrgsRes.data?.[0]?.id ??
+        roleRowRes.data?.[0]?.organization_id ??
+        ownerProfileRes.data?.organization_id ??
+        null
+    }
+
+    const prestamoOrgId =
+      organizationId && esDuenoPrestamo
+        ? organizationId
+        : (
+            await supabaseAdmin
+              .from('profiles')
+              .select('organization_id')
+              .eq('id', prestamo.user_id)
+              .maybeSingle()
+          ).data?.organization_id ?? organizationId
+
+    if (organizationId && !profile?.organization_id) {
+      void supabaseAdmin
+        .from('profiles')
+        .update({
+          organization_id: organizationId,
+          role: profile?.role || 'admin',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id)
+    }
+
+    if (!organizationId && !esDuenoPrestamo) {
+      return NextResponse.json(
+        { error: 'Usuario sin organización. Contacta soporte para vincular tu cuenta.' },
         { status: 403 }
       )
     }
 
-    if (prestamoOwnerProfile.organization_id !== profile.organization_id) {
-      console.error('[API registrar-pago] Organizaciones no coinciden:', {
-        prestamo_owner_org: prestamoOwnerProfile.organization_id,
-        user_org: profile.organization_id
-      })
+    if (
+      prestamoOrgId &&
+      organizationId &&
+      prestamoOrgId !== organizationId
+    ) {
       return NextResponse.json(
         { error: 'No tienes permiso para registrar pagos en este préstamo' },
         { status: 403 }
       )
     }
 
-    console.log('[API registrar-pago] ✅ Validación de organización exitosa')
+    let userRole: 'admin' | 'cobrador' =
+      profile?.role === 'admin' ? 'admin' : esDuenoPrestamo ? 'admin' : 'cobrador'
 
-    // 7. Obtener rol del usuario
-    const { data: roleData } = await supabaseAdmin
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('organization_id', profile.organization_id)
-      .maybeSingle()
+    if (organizationId && userRole !== 'admin') {
+      const { data: roleData } = await supabaseAdmin
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('organization_id', organizationId)
+        .maybeSingle()
 
-    let userRole: 'admin' | 'cobrador' = profile?.role === 'admin' ? 'admin' : 'cobrador'
-    if (roleData?.role === 'admin' || roleData?.role === 'cobrador') {
-      userRole = roleData.role
+      if (roleData?.role === 'admin' || roleData?.role === 'cobrador') {
+        userRole = roleData.role
+      }
     }
 
-    // 8. Si es cobrador, verificar acceso al préstamo
-    // Permisos válidos para cobrador:
-    // - préstamo propio (legacy)
-    // - préstamo asignado a su ruta (prestamos.ruta_id)
-    // - préstamo de cliente asignado a una de sus rutas (ruta_clientes)
-    // Los admins pueden registrar pagos de cualquier préstamo de la organización
     if (userRole === 'cobrador') {
-      let tienePermisoCobrador = prestamo.user_id === user.id
+      let tienePermisoCobrador = esDuenoPrestamo
 
-      // Caso 1: préstamo vinculado directamente a ruta del cobrador
       if (!tienePermisoCobrador && prestamo.ruta_id) {
         const { data: rutaAsignada } = await supabaseAdmin
           .from('rutas')
@@ -171,86 +184,50 @@ export async function POST(request: Request) {
         tienePermisoCobrador = !!rutaAsignada
       }
 
-      // Caso 2: cliente del préstamo asignado a ruta del cobrador
       if (!tienePermisoCobrador && prestamo.cliente_id) {
         const { data: clienteEnRuta } = await supabaseAdmin
           .from('ruta_clientes')
-          .select('id, ruta_id, rutas!inner(cobrador_id)')
+          .select('id, rutas!inner(cobrador_id)')
           .eq('cliente_id', prestamo.cliente_id)
           .eq('activo', true)
           .eq('rutas.cobrador_id', user.id)
           .limit(1)
 
-        tienePermisoCobrador = !!clienteEnRuta && clienteEnRuta.length > 0
+        tienePermisoCobrador = !!clienteEnRuta?.length
       }
-      
+
       if (!tienePermisoCobrador) {
-        console.error('[API registrar-pago] Cobrador sin permiso para préstamo:', {
-          cobrador_id: user.id,
-          prestamo_owner_id: prestamo.user_id,
-          prestamo_ruta_id: prestamo.ruta_id,
-          prestamo_cliente_id: prestamo.cliente_id,
-        })
         return NextResponse.json(
           { error: 'No tienes permiso para registrar pagos en este préstamo' },
           { status: 403 }
         )
       }
-      
-      console.log('[API registrar-pago] ✅ Cobrador con permiso por asignación/propiedad')
-    } else {
-      console.log('[API registrar-pago] ✅ Admin tiene permiso (mismo organization)')
-    }
-
-    // 9. Obtener información de la cuota actual
-    const { data: cuotaActual } = await supabaseAdmin
-      .from('cuotas')
-      .select('monto_cuota, monto_pagado, estado, prestamo_id')
-      .eq('id', cuota_id)
-      .single()
-
-    if (!cuotaActual) {
-      return NextResponse.json(
-        { error: 'Cuota no encontrada' },
-        { status: 404 }
-      )
-    }
-
-    // Asegurar que la cuota pertenece al préstamo recibido
-    if (cuotaActual.prestamo_id !== prestamo_id) {
-      return NextResponse.json(
-        { error: 'La cuota no pertenece al préstamo indicado' },
-        { status: 400 }
-      )
     }
 
     const nuevoMontoPagado = cuotaActual.monto_pagado + parseFloat(monto_pagado)
     const esPagoCompleto = nuevoMontoPagado >= cuotaActual.monto_cuota
 
-    // 10. Registrar el pago usando el user_id del DUEÑO del préstamo (no el que registra)
     const { data: pagoInsertado, error: pagoError } = await supabaseAdmin
       .from('pagos')
-      .insert([{
-        user_id: prestamo.user_id, // Usar el user_id del dueño del préstamo
+      .insert({
+        user_id: prestamo.user_id,
         cuota_id,
         prestamo_id,
         monto_pagado: parseFloat(monto_pagado),
         metodo_pago: metodo_pago || null,
         notas: notas || null,
-        fecha_pago: new Date().toISOString()
-      }])
+        fecha_pago: new Date().toISOString(),
+      })
       .select()
       .single()
 
     if (pagoError) {
-      console.error('Error al insertar pago:', pagoError)
       return NextResponse.json(
         { error: 'No se pudo registrar el pago', details: pagoError.message },
         { status: 500 }
       )
     }
 
-    // 11. Actualizar la cuota
     const { error: cuotaError } = await supabaseAdmin
       .from('cuotas')
       .update({
@@ -261,31 +238,23 @@ export async function POST(request: Request) {
       .eq('id', cuota_id)
 
     if (cuotaError) {
-      console.error('Error al actualizar cuota:', cuotaError)
-      // Intentar revertir el pago insertado
-      await supabaseAdmin
-        .from('pagos')
-        .delete()
-        .eq('id', pagoInsertado.id)
-
+      await supabaseAdmin.from('pagos').delete().eq('id', pagoInsertado.id)
       return NextResponse.json(
         { error: 'No se pudo actualizar la cuota', details: cuotaError.message },
         { status: 500 }
       )
     }
 
-    // 12. Si es pago completo, verificar si todas las cuotas del préstamo están pagadas
     if (esPagoCompleto) {
-      const { data: cuotasPrestamo } = await supabaseAdmin
+      const { data: cuotaPendiente } = await supabaseAdmin
         .from('cuotas')
-        .select('id, estado')
+        .select('id')
         .eq('prestamo_id', prestamo_id)
+        .neq('estado', 'pagada')
+        .neq('id', cuota_id)
+        .limit(1)
 
-      const todasPagadas = cuotasPrestamo?.every(
-        c => c.estado === 'pagada' || c.id === cuota_id
-      )
-
-      if (todasPagadas) {
+      if (!cuotaPendiente?.length) {
         await supabaseAdmin
           .from('prestamos')
           .update({ estado: 'pagado' })
@@ -293,20 +262,23 @@ export async function POST(request: Request) {
       }
     }
 
-    // 13. Responder con éxito
+    if (isDev) {
+      console.log('[API registrar-pago] OK', { userId: user.id, prestamo_id, esPagoCompleto })
+    }
+
     return NextResponse.json({
       success: true,
       pago: pagoInsertado,
       esPagoCompleto,
-      message: esPagoCompleto 
-        ? 'Cuota pagada completamente' 
-        : 'Pago parcial registrado'
+      message: esPagoCompleto
+        ? 'Cuota pagada completamente'
+        : 'Pago parcial registrado',
     })
-
-  } catch (error: any) {
-    console.error('Error en registrar-pago:', error)
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Error desconocido'
+    console.error('[API registrar-pago]', message)
     return NextResponse.json(
-      { error: 'Error interno del servidor', details: error.message },
+      { error: 'Error interno del servidor', details: message },
       { status: 500 }
     )
   }

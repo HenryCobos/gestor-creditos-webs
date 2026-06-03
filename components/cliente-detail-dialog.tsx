@@ -176,7 +176,7 @@ export function ClienteDetailDialog({
       if (!response.ok) {
         toast({
           title: 'Error',
-          description: data.error || 'No se pudo registrar el pago',
+          description: `${data.error || 'No se pudo registrar el pago'}${data.details ? `: ${data.details}` : ''}`,
           variant: 'destructive',
         })
         return

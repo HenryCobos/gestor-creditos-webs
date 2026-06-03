@@ -5,71 +5,205 @@ import { addDays, addWeeks, addMonths } from 'date-fns'
 export type FrecuenciaPago = 'diario' | 'semanal' | 'quincenal' | 'mensual'
 export type TipoInteres = 'simple' | 'compuesto'
 export type TipoPrestamo = 'amortizacion' | 'solo_intereses' | 'empeño' | 'venta_credito' | 'abierto'
-export type TipoCalculoInteres = 'por_periodo' | 'global' | 'frances' // Por período, Global, o Sistema Francés
+export type TipoCalculoInteres = 'por_periodo' | 'global' | 'frances' | 'total_acordado'
+export type TipoDuracion = 'meses' | 'dias' | 'semanas' | 'quincenas'
+
+export interface DuracionPrestamoInput {
+  tipoDuracion: TipoDuracion
+  numeroMeses?: number
+  numeroDias?: number
+  numeroSemanas?: number
+  numeroQuincenas?: number
+}
 
 export interface CalculoPrestamoParams {
   monto: number
-  interesPorcentaje: number // Interés MENSUAL (siempre mensual)
-  numeroMeses?: number // Duración del préstamo en MESES (opcional si se usa numeroDias)
-  numeroDias?: number // Duración del préstamo en DÍAS (opcional si se usa numeroMeses)
-  frecuenciaPago: FrecuenciaPago // Frecuencia de pago (diario, semanal, quincenal, mensual)
+  interesPorcentaje: number // Interés MENSUAL (siempre mensual), o derivado en total_acordado
+  numeroMeses?: number
+  numeroDias?: number
+  numeroSemanas?: number
+  numeroQuincenas?: number
+  frecuenciaPago: FrecuenciaPago
   tipoInteres?: TipoInteres
   tipoPrestamo?: TipoPrestamo
-  tipoCalculoInteres?: TipoCalculoInteres // Por período (mensual) o global
+  tipoCalculoInteres?: TipoCalculoInteres
+  /** Monto total pactado a cobrar (modo total_acordado) */
+  montoTotalAcordado?: number
 }
 
 export interface CalculoPrestamoResult {
   interes: number
   montoTotal: number
   montoCuota: number
-  montoInteresCuota?: number // Solo para modo "solo intereses"
-  montoCapitalFinal?: number // Capital a pagar al final en "solo intereses"
+  montoInteresCuota?: number
+  montoCapitalFinal?: number
+  /** Monto por cuota (última puede incluir centavos de ajuste) */
+  montosCuotas?: number[]
+  /** % sobre capital, solo informativo en total_acordado */
+  interesPorcentajeDerivado?: number
+}
+
+export function getValorDuracion(duracion: DuracionPrestamoInput): number | undefined {
+  switch (duracion.tipoDuracion) {
+    case 'meses':
+      return duracion.numeroMeses
+    case 'dias':
+      return duracion.numeroDias
+    case 'semanas':
+      return duracion.numeroSemanas
+    case 'quincenas':
+      return duracion.numeroQuincenas
+    default:
+      return undefined
+  }
+}
+
+export function tieneDuracionValida(duracion: DuracionPrestamoInput): boolean {
+  const v = getValorDuracion(duracion)
+  return v !== undefined && !isNaN(v) && v > 0
+}
+
+export function getNombreTipoDuracion(tipo: TipoDuracion): string {
+  const nombres: Record<TipoDuracion, string> = {
+    meses: 'Meses',
+    dias: 'Días',
+    semanas: 'Semanas',
+    quincenas: 'Quincenas',
+  }
+  return nombres[tipo]
 }
 
 /**
- * Calcula el número de cuotas según la duración (meses o días) y la frecuencia de pago
+ * Calcula el número de cuotas según duración y frecuencia de pago.
+ * Prioridad: quincenas > semanas > días > meses (solo una unidad activa).
  */
 export function calcularNumeroCuotas(
   numeroMeses: number | undefined,
   frecuenciaPago: FrecuenciaPago,
-  numeroDias?: number | undefined
+  numeroDias?: number | undefined,
+  numeroSemanas?: number | undefined,
+  numeroQuincenas?: number | undefined
 ): number {
-  // Si se especifica número de días, calcular cuotas directamente según frecuencia
+  if (numeroQuincenas !== undefined && numeroQuincenas > 0) {
+    switch (frecuenciaPago) {
+      case 'quincenal':
+        return numeroQuincenas
+      case 'semanal':
+        return numeroQuincenas * 2
+      case 'diario':
+        return numeroQuincenas * 15
+      case 'mensual':
+        return Math.max(1, Math.round(numeroQuincenas / 2))
+      default:
+        return numeroQuincenas
+    }
+  }
+
+  if (numeroSemanas !== undefined && numeroSemanas > 0) {
+    switch (frecuenciaPago) {
+      case 'semanal':
+        return numeroSemanas
+      case 'diario':
+        return numeroSemanas * 7
+      case 'quincenal':
+        return Math.max(1, Math.round(numeroSemanas / 2))
+      case 'mensual':
+        return Math.max(1, Math.round(numeroSemanas / 4))
+      default:
+        return numeroSemanas
+    }
+  }
+
   if (numeroDias !== undefined && numeroDias > 0) {
     switch (frecuenciaPago) {
       case 'diario':
-        return numeroDias // 1 día = 1 cuota diaria
+        return numeroDias
       case 'semanal':
-        return Math.round(numeroDias / 7) // Dividir días entre 7
+        return Math.round(numeroDias / 7)
       case 'quincenal':
-        return Math.round(numeroDias / 15) // Dividir días entre 15
+        return Math.round(numeroDias / 15)
       case 'mensual':
-        return Math.round(numeroDias / 30) // Dividir días entre 30
+        return Math.round(numeroDias / 30)
       default:
         return numeroDias
     }
   }
-  
-  // Si se usa meses (comportamiento original)
+
   if (numeroMeses !== undefined && numeroMeses > 0) {
     switch (frecuenciaPago) {
       case 'diario':
-        // Aproximadamente 30 días por mes
         return Math.round(numeroMeses * 30)
       case 'semanal':
-        // Aproximadamente 4 semanas por mes
-        return numeroMeses * 4
+        return Math.round(numeroMeses * 4)
       case 'quincenal':
-        // 2 quincenas por mes
-        return numeroMeses * 2
+        return Math.round(numeroMeses * 2)
       case 'mensual':
-        return numeroMeses
+        return Math.round(numeroMeses)
       default:
-        return numeroMeses
+        return Math.round(numeroMeses)
     }
   }
-  
+
   return 0
+}
+
+export function calcularNumeroCuotasDesdeDuracion(
+  duracion: DuracionPrestamoInput,
+  frecuenciaPago: FrecuenciaPago
+): number {
+  return calcularNumeroCuotas(
+    duracion.tipoDuracion === 'meses' ? duracion.numeroMeses : undefined,
+    frecuenciaPago,
+    duracion.tipoDuracion === 'dias' ? duracion.numeroDias : undefined,
+    duracion.tipoDuracion === 'semanas' ? duracion.numeroSemanas : undefined,
+    duracion.tipoDuracion === 'quincenas' ? duracion.numeroQuincenas : undefined
+  )
+}
+
+/**
+ * Divide el monto total en cuotas iguales; la última absorbe centavos restantes.
+ */
+export function calcularMontosCuotasTotalAcordado(
+  montoTotal: number,
+  numeroCuotas: number
+): number[] {
+  if (numeroCuotas <= 0) return []
+  const centavosTotal = Math.round(montoTotal * 100)
+  const baseCentavos = Math.floor(centavosTotal / numeroCuotas)
+  const resto = centavosTotal - baseCentavos * numeroCuotas
+
+  return Array.from({ length: numeroCuotas }, (_, i) => {
+    const centavos = baseCentavos + (i === numeroCuotas - 1 ? resto : 0)
+    return Number((centavos / 100).toFixed(2))
+  })
+}
+
+/** Interés % sobre capital a partir del total pactado (informativo / guardado en BD) */
+export function calcularInteresPorcentajeDesdeTotal(
+  montoPrestado: number,
+  montoTotalAcordado: number
+): number {
+  if (montoPrestado <= 0) return 0
+  const ganancia = Math.max(0, montoTotalAcordado - montoPrestado)
+  return Number(((ganancia / montoPrestado) * 100).toFixed(2))
+}
+
+export function calcularFechaFinDesdeDuracion(
+  fechaInicio: Date,
+  duracion: DuracionPrestamoInput
+): Date {
+  const valor = getValorDuracion(duracion) ?? 0
+  switch (duracion.tipoDuracion) {
+    case 'dias':
+      return addDays(fechaInicio, valor)
+    case 'semanas':
+      return addWeeks(fechaInicio, valor)
+    case 'quincenas':
+      return addWeeks(fechaInicio, valor * 2)
+    case 'meses':
+    default:
+      return addMonths(fechaInicio, valor)
+  }
 }
 
 /**
@@ -209,13 +343,20 @@ export function calculateLoanDetails(
     interesPorcentaje, 
     numeroMeses,
     numeroDias,
+    numeroSemanas,
+    numeroQuincenas,
     frecuenciaPago,
     tipoInteres = 'simple',
     tipoPrestamo = 'amortizacion'
   } = params
   
-  // Calcular número de cuotas basado en meses/días y frecuencia
-  const numeroCuotas = calcularNumeroCuotas(numeroMeses, frecuenciaPago, numeroDias)
+  const numeroCuotas = calcularNumeroCuotas(
+    numeroMeses,
+    frecuenciaPago,
+    numeroDias,
+    numeroSemanas,
+    numeroQuincenas
+  )
   
   // Determinar número de meses equivalentes para el cálculo de interés
   // Si se especifica días, convertir a meses (30 días = 1 mes)
@@ -257,6 +398,25 @@ export function calculateLoanDetails(
 
   // Modo "Amortización" (por defecto): Pago de capital + interés
   const tipoCalculo = params.tipoCalculoInteres || 'por_periodo'
+
+  // Total acordado: el usuario define el monto total a cobrar (trato cerrado)
+  if (tipoCalculo === 'total_acordado') {
+    const montoTotal =
+      params.montoTotalAcordado !== undefined && params.montoTotalAcordado > 0
+        ? params.montoTotalAcordado
+        : monto
+    const interes = Math.max(0, Number((montoTotal - monto).toFixed(2)))
+    const montosCuotas = calcularMontosCuotasTotalAcordado(montoTotal, numeroCuotas)
+    const interesPorcentajeDerivado = calcularInteresPorcentajeDesdeTotal(monto, montoTotal)
+
+    return {
+      interes,
+      montoTotal: Number(montoTotal.toFixed(2)),
+      montoCuota: montosCuotas[0] ?? (numeroCuotas > 0 ? Number((montoTotal / numeroCuotas).toFixed(2)) : 0),
+      montosCuotas,
+      interesPorcentajeDerivado,
+    }
+  }
 
   // Sistema Francés: cuota nivelada con interés sobre saldo decreciente
   if (tipoCalculo === 'frances') {

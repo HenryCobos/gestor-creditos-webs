@@ -5,7 +5,20 @@ import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DollarSign, Users, TrendingUp, AlertCircle, CreditCard, Crown } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
-import { DashboardCharts } from '@/components/dashboard-charts'
+import dynamic from 'next/dynamic'
+
+const DashboardCharts = dynamic(
+  () =>
+    import('@/components/dashboard-charts').then((m) => ({
+      default: m.DashboardCharts,
+    })),
+  {
+    loading: () => (
+      <div className="h-64 animate-pulse bg-muted rounded-lg" aria-hidden />
+    ),
+    ssr: false,
+  }
+)
 import { useConfigStore } from '@/lib/config-store'
 import { useSubscriptionStore } from '@/lib/subscription-store'
 import { loadOrganizationSubscription, loadOrganizationUsageLimits } from '@/lib/subscription-helpers'

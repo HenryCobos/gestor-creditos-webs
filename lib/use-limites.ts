@@ -1,22 +1,12 @@
 // Hook para obtener y gestionar límites de la organización
 import { useEffect, useState } from 'react'
 import { createClient } from './supabase/client'
+import {
+  fetchLimitesOrganizacion,
+  type LimitesOrganizacion,
+} from './subscription-helpers'
 
-export interface LimitesOrganizacion {
-  organization_id: string
-  plan_nombre: string
-  plan_slug: string
-  limite_clientes: number
-  limite_prestamos: number
-  clientes_usados: number
-  prestamos_usados: number
-  clientes_disponibles: number
-  prestamos_disponibles: number
-  porcentaje_clientes: number
-  porcentaje_prestamos: number
-  puede_crear_cliente: boolean
-  puede_crear_prestamo: boolean
-}
+export type { LimitesOrganizacion }
 
 export interface UsoUsuario {
   user_id: string
@@ -36,22 +26,27 @@ export function useLimitesOrganizacion() {
   const [limites, setLimites] = useState<LimitesOrganizacion | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
 
   const fetchLimites = async () => {
     try {
       setLoading(true)
-      const { data, error: rpcError } = await supabase
-        .rpc('get_limites_organizacion')
-        .single()
+      const data = await fetchLimitesOrganizacion()
 
-      if (rpcError) throw rpcError
+      if (!data) {
+        setLimites(null)
+        setError(null)
+        return
+      }
 
-      setLimites(data as LimitesOrganizacion)
+      setLimites(data)
       setError(null)
-    } catch (err: any) {
-      console.error('Error fetching limites:', err)
-      setError(err.message)
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === 'object' && 'message' in err
+          ? String((err as { message?: string }).message)
+          : 'No se pudieron cargar los límites'
+      console.error('Error fetching limites:', message, err)
+      setError(message)
       setLimites(null)
     } finally {
       setLoading(false)
@@ -80,9 +75,13 @@ export function useUsoPorUsuario() {
 
       setUsoUsuarios((data || []) as UsoUsuario[])
       setError(null)
-    } catch (err: any) {
-      console.error('Error fetching uso por usuario:', err)
-      setError(err.message)
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === 'object' && 'message' in err
+          ? String((err as { message?: string }).message)
+          : 'Error al cargar uso por usuario'
+      console.error('Error fetching uso por usuario:', message, err)
+      setError(message)
       setUsoUsuarios([])
     } finally {
       setLoading(false)
@@ -100,17 +99,21 @@ export function useUsoPorUsuario() {
         .update({
           limite_clientes: limiteClientes,
           limite_prestamos: limitePrestamos,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .eq('id', userId)
 
       if (error) throw error
 
-      await fetchUso() // Refrescar datos
+      await fetchUso()
       return { success: true }
-    } catch (err: any) {
-      console.error('Error updating limites:', err)
-      return { success: false, error: err.message }
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === 'object' && 'message' in err
+          ? String((err as { message?: string }).message)
+          : 'Error al actualizar límites'
+      console.error('Error updating limites:', message, err)
+      return { success: false, error: message }
     }
   }
 
@@ -118,11 +121,11 @@ export function useUsoPorUsuario() {
     fetchUso()
   }, [])
 
-  return { 
-    usoUsuarios, 
-    loading, 
-    error, 
+  return {
+    usoUsuarios,
+    loading,
+    error,
     refetch: fetchUso,
-    updateLimitesUsuario 
+    updateLimitesUsuario,
   }
 }

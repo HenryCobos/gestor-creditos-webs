@@ -1,8 +1,13 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next'
+import path from 'path'
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  reactCompiler: true,
+  // Evita warning por package-lock.json en carpeta padre (C:\Users\HENRY\)
+  outputFileTracingRoot: path.join(__dirname),
+  experimental: {
+    // Tree-shake de iconos y gráficos — bundles más pequeños al cambiar de ruta
+    optimizePackageImports: ['lucide-react', 'recharts', 'date-fns'],
+  },
   images: {
     remotePatterns: [
       {
@@ -12,6 +17,6 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-};
+}
 
-export default nextConfig;
+export default nextConfig

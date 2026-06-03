@@ -41,11 +41,13 @@ import { CheckCircle, DollarSign, Eye, X, FileText, Package, XCircle, Repeat, Tr
 import { formatCurrency, formatDate, isDateOverdue } from '@/lib/utils'
 import { useConfigStore } from '@/lib/config-store'
 import type { Prestamo, Garantia } from '@/lib/store'
-import { generarContratoPrestamo, generarReciboCuota } from '@/lib/pdf-generator'
+import { generarContratoPrestamo, generarReciboPagoConEvolucion } from '@/lib/pdf-generator'
+import { Checkbox } from '@/components/ui/checkbox'
 import { AbonoCapitalDialog } from '@/components/abono-capital-dialog'
 import { RenovarEmpenoDialog } from '@/components/renovar-empeno-dialog'
 import { PagoAbiertoDialog } from '@/components/pago-abierto-dialog'
 import { getCuotasSegunRol } from '@/lib/queries-con-roles'
+import { format } from 'date-fns'
 
 interface Cuota {
   id: string
@@ -83,6 +85,7 @@ export function PrestamoDetailDialog({
   const [montoPago, setMontoPago] = useState('')
   const [metodoPago, setMetodoPago] = useState('')
   const [notas, setNotas] = useState('')
+  const [emitirReciboAlPagar, setEmitirReciboAlPagar] = useState(true)
   const [abonoCapitalDialogOpen, setAbonoCapitalDialogOpen] = useState(false)
   const [renovarEmpenoDialogOpen, setRenovarEmpenoDialogOpen] = useState(false)
   const [pagoAbiertoDialogOpen, setPagoAbiertoDialogOpen] = useState(false)
@@ -110,10 +113,15 @@ export function PrestamoDetailDialog({
         .filter(cuota => cuota.prestamo_id === prestamo.id)
         .sort((a, b) => a.numero_cuota - b.numero_cuota)
 
-      // Actualizar estado de cuotas retrasadas
-      const cuotasActualizadas = data.map(cuota => {
-        if (cuota.estado === 'pendiente' && isDateOverdue(cuota.fecha_vencimiento)) {
+      // Sincronizar estado según fecha de vencimiento (mismo día no es retrasada)
+      const cuotasActualizadas = data.map((cuota) => {
+        if (cuota.estado === 'pagada') return cuota
+        const vencida = isDateOverdue(cuota.fecha_vencimiento)
+        if (vencida && cuota.estado !== 'retrasada') {
           return { ...cuota, estado: 'retrasada' as const }
+        }
+        if (!vencida && cuota.estado === 'retrasada') {
+          return { ...cuota, estado: 'pendiente' as const }
         }
         return cuota
       })
@@ -207,39 +215,59 @@ export function PrestamoDetailDialog({
     })
   }
 
-  const handleGenerarRecibo = (cuota: Cuota) => {
+  const emitirReciboPdf = (
+    cuota: Cuota,
+    extras?: { metodo_pago?: string | null; notas?: string | null }
+  ) => {
     if (!prestamo || !prestamo.cliente) return
 
-    generarReciboCuota(
+    const cuotasParaPdf = cuotas.map((c) => ({
+      id: c.id,
+      numero_cuota: c.numero_cuota,
+      monto_cuota: c.monto_cuota,
+      monto_pagado: c.monto_pagado,
+      fecha_vencimiento: c.fecha_vencimiento,
+      fecha_pago: c.fecha_pago,
+      estado: c.estado,
+    }))
+
+    generarReciboPagoConEvolucion(
       {
         id: cuota.id,
         numero_cuota: cuota.numero_cuota,
         monto_cuota: cuota.monto_cuota,
         monto_pagado: cuota.monto_pagado,
         fecha_vencimiento: cuota.fecha_vencimiento,
-        fecha_pago: cuota.fecha_pago,
+        fecha_pago: cuota.fecha_pago ?? format(new Date(), "yyyy-MM-dd'T'12:00:00"),
         estado: cuota.estado,
       },
+      cuotasParaPdf,
       {
         id: prestamo.id,
         monto_prestado: prestamo.monto_prestado,
         monto_total: prestamo.monto_total,
         numero_cuotas: prestamo.numero_cuotas,
         frecuencia_pago: prestamo.frecuencia_pago,
+        fecha_inicio: prestamo.fecha_inicio,
+        interes_porcentaje: prestamo.interes_porcentaje,
       },
       {
         nombre: prestamo.cliente.nombre,
         dni: prestamo.cliente.dni,
         telefono: prestamo.cliente.telefono || undefined,
       },
-      config.companyName,
-      config.currency,
-      config.currencySymbol
+      {
+        metodo_pago: extras?.metodo_pago,
+        notas: extras?.notas,
+        companyName: config.companyName,
+        currency: config.currency,
+        currencySymbol: config.currencySymbol,
+      }
     )
 
     toast({
       title: 'Recibo generado',
-      description: `Comprobante de la cuota N° ${cuota.numero_cuota} descargado correctamente`,
+      description: `PDF con evolución hasta la cuota N° ${cuota.numero_cuota}`,
     })
   }
 
@@ -277,9 +305,10 @@ export function PrestamoDetailDialog({
       const data = await response.json()
 
       if (!response.ok) {
+        const detalle = data.details ? `: ${data.details}` : ''
         toast({
           title: 'Error',
-          description: data.error || 'No se pudo registrar el pago',
+          description: `${data.error || 'No se pudo registrar el pago'}${detalle}`,
           variant: 'destructive',
         })
         return
@@ -290,7 +319,32 @@ export function PrestamoDetailDialog({
         description: data.message || 'Pago registrado correctamente',
       })
 
-      // Recargar cuotas y refrescar listados del padre
+      const esCompleto = Boolean(data.esPagoCompleto)
+      const nuevoMontoPagado = Math.min(
+        (selectedCuota.monto_pagado || 0) + monto,
+        selectedCuota.monto_cuota
+      )
+      const cuotaPagada: Cuota = {
+        ...selectedCuota,
+        monto_pagado: nuevoMontoPagado,
+        estado: esCompleto
+          ? 'pagada'
+          : isDateOverdue(selectedCuota.fecha_vencimiento)
+            ? 'retrasada'
+            : 'pendiente',
+        fecha_pago: esCompleto
+          ? format(new Date(), "yyyy-MM-dd'T'12:00:00")
+          : selectedCuota.fecha_pago,
+      }
+
+      if (emitirReciboAlPagar) {
+        const cuotasActualizadas = cuotas.map((c) =>
+          c.id === selectedCuota.id ? cuotaPagada : c
+        )
+        setCuotas(cuotasActualizadas)
+        emitirReciboPdf(cuotaPagada, { metodo_pago: metodoPago, notas })
+      }
+
       loadCuotas()
       resetPagoForm()
       if (onUpdate) onUpdate()
@@ -528,6 +582,7 @@ export function PrestamoDetailDialog({
                        prestamo.tipo_prestamo === 'solo_intereses' ? 'Solo Intereses' :
                        prestamo.tipo_prestamo === 'abierto' ? 'Préstamo Abierto' :
                        prestamo.tipo_calculo_interes === 'frances' ? 'Amortización Francesa' :
+                       prestamo.tipo_calculo_interes === 'total_acordado' ? 'Total Acordado' :
                        'Amortización'}
                     </span>
                   </div>
@@ -734,20 +789,30 @@ export function PrestamoDetailDialog({
                                   Pagar
                                 </Button>
                               ) : (
-                                <DropdownMenu>
+                                <div className="flex justify-end gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="gap-1"
+                                    onClick={() => emitirReciboPdf(cuota)}
+                                  >
+                                    <Receipt className="h-3 w-3" />
+                                    Recibo
+                                  </Button>
+                                  <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
-                                    <Button size="sm" variant="outline" className="gap-1">
+                                    <Button size="sm" variant="outline" className="gap-1 px-2">
                                       <MoreHorizontal className="h-3 w-3" />
                                       <span className="sr-only">Opciones</span>
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
                                     <DropdownMenuItem
-                                      onClick={() => handleGenerarRecibo(cuota)}
+                                      onClick={() => emitirReciboPdf(cuota)}
                                       className="gap-2 cursor-pointer"
                                     >
                                       <Receipt className="h-4 w-4 text-blue-600" />
-                                      Recibo PDF
+                                      Recibo PDF (evolución)
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                       onClick={() => {
@@ -761,6 +826,7 @@ export function PrestamoDetailDialog({
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
+                                </div>
                               )}
                             </TableCell>
                           </TableRow>
@@ -842,6 +908,17 @@ export function PrestamoDetailDialog({
                   value={notas}
                   onChange={(e) => setNotas(e.target.value)}
                 />
+              </div>
+
+              <div className="flex items-center space-x-2 pt-1">
+                <Checkbox
+                  id="emitir_recibo"
+                  checked={emitirReciboAlPagar}
+                  onCheckedChange={(checked) => setEmitirReciboAlPagar(checked === true)}
+                />
+                <Label htmlFor="emitir_recibo" className="text-sm font-normal cursor-pointer">
+                  Descargar recibo PDF con evolución del préstamo
+                </Label>
               </div>
 
               <div className="flex justify-end space-x-2">
