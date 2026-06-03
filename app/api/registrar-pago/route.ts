@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
+import {
+  buildNotasConCascada,
+  calcularAplicacionCascada,
+  mensajePagoCascada,
+  roundMoney,
+} from '@/lib/aplicar-pago-cuotas'
+import { isDateOverdue } from '@/lib/utils'
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -55,7 +62,7 @@ export async function POST(request: Request) {
         .maybeSingle(),
       supabaseAdmin
         .from('cuotas')
-        .select('monto_cuota, monto_pagado, estado, prestamo_id')
+        .select('id, numero_cuota, monto_cuota, monto_pagado, estado, prestamo_id, fecha_vencimiento')
         .eq('id', cuota_id)
         .maybeSingle(),
     ])
@@ -204,8 +211,49 @@ export async function POST(request: Request) {
       }
     }
 
-    const nuevoMontoPagado = cuotaActual.monto_pagado + parseFloat(monto_pagado)
-    const esPagoCompleto = nuevoMontoPagado >= cuotaActual.monto_cuota
+    const montoCobrado = roundMoney(parseFloat(monto_pagado))
+    const fechaCobroIso = new Date().toISOString()
+    const fechaCobroDia = fechaCobroIso.split('T')[0]
+
+    const { data: todasCuotas, error: cuotasError } = await supabaseAdmin
+      .from('cuotas')
+      .select('id, numero_cuota, monto_cuota, monto_pagado, estado, fecha_vencimiento')
+      .eq('prestamo_id', prestamo_id)
+      .order('numero_cuota', { ascending: true })
+
+    if (cuotasError || !todasCuotas?.length) {
+      return NextResponse.json(
+        { error: 'No se pudieron cargar las cuotas del préstamo' },
+        { status: 500 }
+      )
+    }
+
+    const { aplicaciones, excedente, totalPendienteDesdeInicio } = calcularAplicacionCascada(
+      todasCuotas,
+      cuotaActual.numero_cuota,
+      montoCobrado
+    )
+
+    if (aplicaciones.length === 0) {
+      return NextResponse.json(
+        {
+          error: 'No hay saldo pendiente en esta cuota ni en las siguientes',
+        },
+        { status: 400 }
+      )
+    }
+
+    if (excedente > 0.01) {
+      return NextResponse.json(
+        {
+          error: 'El monto supera el saldo pendiente',
+          details: `Máximo aplicable desde la cuota #${cuotaActual.numero_cuota}: ${totalPendienteDesdeInicio}`,
+        },
+        { status: 400 }
+      )
+    }
+
+    const notasFinales = buildNotasConCascada(notas, aplicaciones)
 
     const { data: pagoInsertado, error: pagoError } = await supabaseAdmin
       .from('pagos')
@@ -213,10 +261,10 @@ export async function POST(request: Request) {
         user_id: prestamo.user_id,
         cuota_id,
         prestamo_id,
-        monto_pagado: parseFloat(monto_pagado),
+        monto_pagado: montoCobrado,
         metodo_pago: metodo_pago || null,
-        notas: notas || null,
-        fecha_pago: new Date().toISOString(),
+        notas: notasFinales,
+        fecha_pago: fechaCobroIso,
       })
       .select()
       .single()
@@ -228,51 +276,90 @@ export async function POST(request: Request) {
       )
     }
 
-    const { error: cuotaError } = await supabaseAdmin
-      .from('cuotas')
-      .update({
-        monto_pagado: nuevoMontoPagado,
-        estado: esPagoCompleto ? 'pagada' : cuotaActual.estado,
-        fecha_pago: esPagoCompleto ? new Date().toISOString().split('T')[0] : null,
-      })
-      .eq('id', cuota_id)
+    const updates: { id: string; patch: Record<string, unknown> }[] = []
 
-    if (cuotaError) {
-      await supabaseAdmin.from('pagos').delete().eq('id', pagoInsertado.id)
-      return NextResponse.json(
-        { error: 'No se pudo actualizar la cuota', details: cuotaError.message },
-        { status: 500 }
-      )
-    }
+    for (const app of aplicaciones) {
+      const cuotaRef = todasCuotas.find((c) => c.id === app.cuota_id)
+      if (!cuotaRef) continue
 
-    if (esPagoCompleto) {
-      const { data: cuotaPendiente } = await supabaseAdmin
-        .from('cuotas')
-        .select('id')
-        .eq('prestamo_id', prestamo_id)
-        .neq('estado', 'pagada')
-        .neq('id', cuota_id)
-        .limit(1)
-
-      if (!cuotaPendiente?.length) {
-        await supabaseAdmin
-          .from('prestamos')
-          .update({ estado: 'pagado' })
-          .eq('id', prestamo_id)
+      if (app.queda_pagada) {
+        updates.push({
+          id: app.cuota_id,
+          patch: {
+            monto_pagado: app.nuevo_monto_pagado,
+            estado: 'pagada',
+            fecha_pago: fechaCobroDia,
+          },
+        })
+      } else {
+        const retrasada =
+          cuotaRef.fecha_vencimiento &&
+          isDateOverdue(cuotaRef.fecha_vencimiento)
+        updates.push({
+          id: app.cuota_id,
+          patch: {
+            monto_pagado: app.nuevo_monto_pagado,
+            estado: retrasada ? 'retrasada' : 'pendiente',
+            fecha_pago: null,
+          },
+        })
       }
     }
 
+    for (const { id, patch } of updates) {
+      const { error: cuotaError } = await supabaseAdmin
+        .from('cuotas')
+        .update(patch)
+        .eq('id', id)
+
+      if (cuotaError) {
+        await supabaseAdmin.from('pagos').delete().eq('id', pagoInsertado.id)
+        return NextResponse.json(
+          { error: 'No se pudo actualizar las cuotas', details: cuotaError.message },
+          { status: 500 }
+        )
+      }
+    }
+
+    const { data: cuotaPendiente } = await supabaseAdmin
+      .from('cuotas')
+      .select('id')
+      .eq('prestamo_id', prestamo_id)
+      .neq('estado', 'pagada')
+      .limit(1)
+
+    if (!cuotaPendiente?.length) {
+      await supabaseAdmin
+        .from('prestamos')
+        .update({ estado: 'pagado' })
+        .eq('id', prestamo_id)
+    } else {
+      await supabaseAdmin
+        .from('prestamos')
+        .update({ estado: 'activo' })
+        .eq('id', prestamo_id)
+        .eq('estado', 'pagado')
+    }
+
+    const esPagoCompletoCuotaInicio = aplicaciones.some(
+      (a) => a.cuota_id === cuota_id && a.queda_pagada
+    )
+
     if (isDev) {
-      console.log('[API registrar-pago] OK', { userId: user.id, prestamo_id, esPagoCompleto })
+      console.log('[API registrar-pago] OK cascada', {
+        prestamo_id,
+        montoCobrado,
+        cuotas: aplicaciones.map((a) => a.numero_cuota),
+      })
     }
 
     return NextResponse.json({
       success: true,
       pago: pagoInsertado,
-      esPagoCompleto,
-      message: esPagoCompleto
-        ? 'Cuota pagada completamente'
-        : 'Pago parcial registrado',
+      esPagoCompleto: esPagoCompletoCuotaInicio,
+      aplicaciones,
+      cuotasAfectadas: aplicaciones.length,
+      message: mensajePagoCascada(montoCobrado, aplicaciones),
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error desconocido'

@@ -48,6 +48,12 @@ import { RenovarEmpenoDialog } from '@/components/renovar-empeno-dialog'
 import { PagoAbiertoDialog } from '@/components/pago-abierto-dialog'
 import { getCuotasSegunRol } from '@/lib/queries-con-roles'
 import { format } from 'date-fns'
+import {
+  parseCascadaDesdeNotas,
+  previewAplicacionCascada,
+  roundMoney,
+  totalPendienteDesdeCuota,
+} from '@/lib/aplicar-pago-cuotas'
 
 interface Cuota {
   id: string
@@ -103,9 +109,9 @@ export function PrestamoDetailDialog({
     }
   }, [prestamo, open])
 
-  const loadCuotas = async () => {
-    if (!prestamo) return
-    
+  const loadCuotas = async (): Promise<Cuota[]> => {
+    if (!prestamo) return []
+
     setLoading(true)
     try {
       const cuotasRol = await getCuotasSegunRol()
@@ -124,8 +130,9 @@ export function PrestamoDetailDialog({
           return { ...cuota, estado: 'pendiente' as const }
         }
         return cuota
-      })
-      setCuotas(cuotasActualizadas as Cuota[])
+      }) as Cuota[]
+      setCuotas(cuotasActualizadas)
+      return cuotasActualizadas
     } catch (error) {
       toast({
         title: 'Error',
@@ -133,8 +140,10 @@ export function PrestamoDetailDialog({
         variant: 'destructive',
       })
       console.error('Error cargando cuotas por rol:', error)
+      return []
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const loadGarantias = async () => {
@@ -217,11 +226,13 @@ export function PrestamoDetailDialog({
 
   const emitirReciboPdf = (
     cuota: Cuota,
-    extras?: { metodo_pago?: string | null; notas?: string | null }
+    extras?: { metodo_pago?: string | null; notas?: string | null },
+    cuotasSnapshot?: Cuota[]
   ) => {
     if (!prestamo || !prestamo.cliente) return
 
-    const cuotasParaPdf = cuotas.map((c) => ({
+    const lista = cuotasSnapshot ?? cuotas
+    const cuotasParaPdf = lista.map((c) => ({
       id: c.id,
       numero_cuota: c.numero_cuota,
       monto_cuota: c.monto_cuota,
@@ -319,33 +330,14 @@ export function PrestamoDetailDialog({
         description: data.message || 'Pago registrado correctamente',
       })
 
-      const esCompleto = Boolean(data.esPagoCompleto)
-      const nuevoMontoPagado = Math.min(
-        (selectedCuota.monto_pagado || 0) + monto,
-        selectedCuota.monto_cuota
-      )
-      const cuotaPagada: Cuota = {
-        ...selectedCuota,
-        monto_pagado: nuevoMontoPagado,
-        estado: esCompleto
-          ? 'pagada'
-          : isDateOverdue(selectedCuota.fecha_vencimiento)
-            ? 'retrasada'
-            : 'pendiente',
-        fecha_pago: esCompleto
-          ? format(new Date(), "yyyy-MM-dd'T'12:00:00")
-          : selectedCuota.fecha_pago,
-      }
+      const cuotasActualizadas = await loadCuotas()
 
       if (emitirReciboAlPagar) {
-        const cuotasActualizadas = cuotas.map((c) =>
-          c.id === selectedCuota.id ? cuotaPagada : c
-        )
-        setCuotas(cuotasActualizadas)
-        emitirReciboPdf(cuotaPagada, { metodo_pago: metodoPago, notas })
+        const cuotaRecibo =
+          cuotasActualizadas.find((c) => c.id === selectedCuota.id) ?? selectedCuota
+        emitirReciboPdf(cuotaRecibo, { metodo_pago: metodoPago, notas }, cuotasActualizadas)
       }
 
-      loadCuotas()
       resetPagoForm()
       if (onUpdate) onUpdate()
     } catch (error: any) {
@@ -371,7 +363,25 @@ export function PrestamoDetailDialog({
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    // Eliminar todos los pagos asociados a esta cuota
+    const { data: pagosCuota, error: pagosFetchError } = await supabase
+      .from('pagos')
+      .select('id, notas, monto_pagado')
+      .eq('cuota_id', cuotaADesmarcar.id)
+
+    if (pagosFetchError) {
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar los pagos',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const cascada =
+      pagosCuota
+        ?.map((p) => parseCascadaDesdeNotas(p.notas))
+        .find((c) => c && c.length > 0) ?? null
+
     const { error: deletePagosError } = await supabase
       .from('pagos')
       .delete()
@@ -386,26 +396,56 @@ export function PrestamoDetailDialog({
       return
     }
 
-    // Determinar nuevo estado de la cuota
-    const nuevoEstado = isDateOverdue(cuotaADesmarcar.fecha_vencimiento) ? 'retrasada' : 'pendiente'
+    const revertirCuota = async (cuotaId: string, montoARestar: number) => {
+      const cuotaRef = cuotas.find((c) => c.id === cuotaId) ?? cuotaADesmarcar
+      const nuevoMontoPagado = Math.max(
+        0,
+        roundMoney((cuotaRef.monto_pagado || 0) - montoARestar)
+      )
+      const quedaPagada = nuevoMontoPagado >= cuotaRef.monto_cuota - 0.001
+      const nuevoEstado = quedaPagada
+        ? 'pagada'
+        : isDateOverdue(cuotaRef.fecha_vencimiento)
+          ? 'retrasada'
+          : 'pendiente'
 
-    // Actualizar la cuota a estado pendiente
-    const { error: updateError } = await supabase
-      .from('cuotas')
-      .update({
-        monto_pagado: 0,
-        estado: nuevoEstado,
-        fecha_pago: null,
-      })
-      .eq('id', cuotaADesmarcar.id)
+      return supabase
+        .from('cuotas')
+        .update({
+          monto_pagado: nuevoMontoPagado,
+          estado: nuevoEstado,
+          fecha_pago: quedaPagada ? cuotaRef.fecha_pago : null,
+        })
+        .eq('id', cuotaId)
+    }
 
-    if (updateError) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo actualizar la cuota',
-        variant: 'destructive',
-      })
-      return
+    if (cascada?.length) {
+      for (const item of cascada) {
+        const { error: updateError } = await revertirCuota(item.cuota_id, item.monto)
+        if (updateError) {
+          toast({
+            title: 'Error',
+            description: 'No se pudo revertir el pago en cascada',
+            variant: 'destructive',
+          })
+          return
+        }
+      }
+    } else {
+      const montoRevertir =
+        pagosCuota?.reduce((s, p) => s + (p.monto_pagado || 0), 0) ?? 0
+      const { error: updateError } = await revertirCuota(
+        cuotaADesmarcar.id,
+        montoRevertir
+      )
+      if (updateError) {
+        toast({
+          title: 'Error',
+          description: 'No se pudo actualizar la cuota',
+          variant: 'destructive',
+        })
+        return
+      }
     }
 
     // Si el préstamo estaba marcado como pagado, cambiarlo a activo
@@ -869,25 +909,45 @@ export function PrestamoDetailDialog({
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Monto pendiente:</span>
+                  <span className="text-gray-600">Pendiente esta cuota:</span>
                   <span className="font-semibold text-red-600">
                     {formatCurrency(selectedCuota.monto_cuota - selectedCuota.monto_pagado, config.currency)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm border-t pt-1 mt-1">
+                  <span className="text-gray-600">Pendiente desde aquí (siguientes):</span>
+                  <span className="font-semibold text-red-600">
+                    {formatCurrency(
+                      totalPendienteDesdeCuota(cuotas, selectedCuota.numero_cuota),
+                      config.currency
+                    )}
                   </span>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="monto">Monto del Pago *</Label>
+                <Label htmlFor="monto">Monto cobrado hoy *</Label>
                 <Input
                   id="monto"
                   type="number"
                   step="0.01"
                   min="0.01"
-                  max={selectedCuota.monto_cuota - selectedCuota.monto_pagado}
                   value={montoPago}
                   onChange={(e) => setMontoPago(e.target.value)}
                   required
                 />
+                <p className="text-xs text-muted-foreground">
+                  Puede ser mayor que una cuota: el excedente se aplica a las siguientes en orden.
+                </p>
+                {montoPago && parseFloat(montoPago) > 0 && (
+                  <p className="text-xs text-blue-700 bg-blue-50 p-2 rounded">
+                    {previewAplicacionCascada(
+                      cuotas,
+                      selectedCuota.numero_cuota,
+                      parseFloat(montoPago)
+                    )}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">

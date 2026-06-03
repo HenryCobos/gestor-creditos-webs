@@ -120,12 +120,20 @@ export default function ReportesPage() {
 
     const { desde, hasta } = getFechasFiltro()
 
-    // Cargar todos los datos usando funciones con soporte de roles
     const [prestamosData, cuotasData, clientesData] = await Promise.all([
       getPrestamosInteligente(),
       getCuotasSegunRol(),
-      getClientesInteligente()
+      getClientesInteligente(),
     ])
+
+    let pagosEnPeriodo: { monto_pagado: number; fecha_pago: string }[] | null = null
+    if (desde || hasta) {
+      let pagosQuery = supabase.from('pagos').select('monto_pagado, fecha_pago')
+      if (desde) pagosQuery = pagosQuery.gte('fecha_pago', desde.toISOString())
+      if (hasta) pagosQuery = pagosQuery.lte('fecha_pago', hasta.toISOString())
+      const { data: pagosData } = await pagosQuery
+      pagosEnPeriodo = pagosData
+    }
 
     // Aplicar filtros de fecha si corresponde (sobre los datos ya obtenidos)
     let prestamos = prestamosData || []
@@ -161,7 +169,25 @@ export default function ReportesPage() {
         })
       }
       const totalPrestado = prestamos.reduce((sum, p) => sum + (typeof p.monto_prestado === 'number' ? p.monto_prestado : parseFloat(String(p.monto_prestado))), 0)
-      const totalRecuperado = cuotasFiltradas.reduce((sum, c) => sum + (typeof c.monto_pagado === 'number' ? c.monto_pagado : parseFloat(String(c.monto_pagado))), 0)
+      // Con filtro de fechas: total cobrado según fecha real del pago (arqueos / cobradores)
+      const totalRecuperado =
+        (desde || hasta) && pagosEnPeriodo
+          ? pagosEnPeriodo.reduce(
+              (sum, p) =>
+                sum +
+                (typeof p.monto_pagado === 'number'
+                  ? p.monto_pagado
+                  : parseFloat(String(p.monto_pagado))),
+              0
+            )
+          : cuotasFiltradas.reduce(
+              (sum, c) =>
+                sum +
+                (typeof c.monto_pagado === 'number'
+                  ? c.monto_pagado
+                  : parseFloat(String(c.monto_pagado))),
+              0
+            )
       // Calcular total pendiente sumando la diferencia entre monto de cuota y monto pagado
       const totalPendiente = cuotasFiltradas.reduce((sum, c) => {
         const montoCuota = typeof c.monto_cuota === 'number' ? c.monto_cuota : parseFloat(String(c.monto_cuota))

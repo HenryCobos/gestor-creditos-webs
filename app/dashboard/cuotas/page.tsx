@@ -45,6 +45,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { getCuotasSegunRol } from '@/lib/queries-con-roles'
+import {
+  previewAplicacionCascada,
+  totalPendienteDesdeCuota,
+} from '@/lib/aplicar-pago-cuotas'
 import { CuotaCardMobile } from '@/components/CuotaCardMobile'
 
 interface Pago {
@@ -820,25 +824,59 @@ export default function CuotasPage() {
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Monto pendiente:</span>
+                  <span className="text-gray-600">Pendiente esta cuota:</span>
                   <span className="font-semibold text-red-600">
                     {formatCurrency(selectedCuota.monto_cuota - selectedCuota.monto_pagado, config.currency)}
                   </span>
                 </div>
+                {(() => {
+                  const delPrestamo = cuotas.filter(
+                    (c) => c.prestamo.id === selectedCuota.prestamo.id
+                  )
+                  return (
+                    <div className="flex justify-between text-sm border-t pt-1 mt-1">
+                      <span className="text-gray-600">Pendiente desde aquí:</span>
+                      <span className="font-semibold text-red-600">
+                        {formatCurrency(
+                          totalPendienteDesdeCuota(delPrestamo, selectedCuota.numero_cuota),
+                          config.currency
+                        )}
+                      </span>
+                    </div>
+                  )
+                })()}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="monto">Monto del Pago *</Label>
+                <Label htmlFor="monto">Monto cobrado hoy *</Label>
                 <Input
                   id="monto"
                   type="number"
                   step="0.01"
                   min="0.01"
-                  max={selectedCuota.monto_cuota - selectedCuota.monto_pagado}
                   value={montoPago}
                   onChange={(e) => setMontoPago(e.target.value)}
                   required
                 />
+                <p className="text-xs text-muted-foreground">
+                  Si cobras más de una cuota, el excedente se aplica a las siguientes.
+                </p>
+                {montoPago &&
+                  parseFloat(montoPago) > 0 &&
+                  (() => {
+                    const delPrestamo = cuotas.filter(
+                      (c) => c.prestamo.id === selectedCuota.prestamo.id
+                    )
+                    return (
+                      <p className="text-xs text-blue-700 bg-blue-50 p-2 rounded">
+                        {previewAplicacionCascada(
+                          delPrestamo,
+                          selectedCuota.numero_cuota,
+                          parseFloat(montoPago)
+                        )}
+                      </p>
+                    )
+                  })()}
               </div>
 
               <div className="space-y-2">
