@@ -186,7 +186,7 @@ function formatSupabaseError(err: unknown): string {
   return e.message || e.details || e.hint || e.code || JSON.stringify(err)
 }
 
-function buildLimitesOrganizacion(
+export function buildLimitesOrganizacion(
   organizationId: string,
   plan: { nombre: string; slug: string; limite_clientes: number; limite_prestamos: number },
   clientesUsados: number,
@@ -239,7 +239,7 @@ function mapRpcRowToLimites(row: Record<string, unknown>): LimitesOrganizacion {
   )
 }
 
-/** Límites de la organización: RPC + fallback manual si la RPC no devuelve filas */
+/** Límites de la organización (totales compartidos admin + cobrador) */
 export async function fetchLimitesOrganizacion(): Promise<LimitesOrganizacion | null> {
   const supabase = createClient()
   const {
@@ -248,7 +248,26 @@ export async function fetchLimitesOrganizacion(): Promise<LimitesOrganizacion | 
 
   if (!user) return null
 
-  // 1) RPC (maybeSingle: 0 filas no lanza error como .single())
+  // 1) API con service role — conteo real de la org (no depende de RLS del cobrador)
+  try {
+    const res = await fetch('/api/limites-organizacion', { credentials: 'include' })
+    if (res.ok) {
+      const json = await res.json()
+      if (json.limites) {
+        return json.limites as LimitesOrganizacion
+      }
+    } else {
+      console.warn(
+        '[fetchLimitesOrganizacion] API respondió',
+        res.status,
+        await res.text().catch(() => '')
+      )
+    }
+  } catch (apiErr) {
+    console.warn('[fetchLimitesOrganizacion] API no disponible:', apiErr)
+  }
+
+  // 2) RPC SECURITY DEFINER (respaldo)
   const { data: rpcData, error: rpcError } = await supabase
     .rpc('get_limites_organizacion')
     .maybeSingle()
@@ -259,77 +278,12 @@ export async function fetchLimitesOrganizacion(): Promise<LimitesOrganizacion | 
 
   if (rpcError) {
     console.warn(
-      '[fetchLimitesOrganizacion] RPC falló, usando fallback:',
+      '[fetchLimitesOrganizacion] RPC falló:',
       formatSupabaseError(rpcError)
     )
-  } else {
-    console.warn(
-      '[fetchLimitesOrganizacion] RPC sin filas (org sin plan_id válido), usando fallback'
-    )
   }
 
-  // 2) Fallback manual
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('organization_id')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile?.organization_id) return null
-
-  const orgId = profile.organization_id as string
-
-  const { data: org, error: orgError } = await supabase
-    .from('organizations')
-    .select(
-      `
-      id,
-      plan:planes(nombre, slug, limite_clientes, limite_prestamos)
-    `
-    )
-    .eq('id', orgId)
-    .single()
-
-  const planRaw = org?.plan as
-    | {
-        nombre?: string
-        slug?: string
-        limite_clientes?: number
-        limite_prestamos?: number
-      }
-    | null
-    | undefined
-
-  if (orgError || !planRaw) {
-    console.warn('[fetchLimitesOrganizacion] Fallback: organización sin plan:', orgError)
-    return null
-  }
-
-  const { data: orgUsers, error: usersError } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('organization_id', orgId)
-
-  if (usersError || !orgUsers?.length) return null
-
-  const userIds = orgUsers.map((u) => u.id)
-
-  const [clientesAgg, prestamosAgg] = await Promise.all([
-    supabase.from('clientes').select('id', { count: 'exact', head: true }).in('user_id', userIds),
-    supabase.from('prestamos').select('id', { count: 'exact', head: true }).in('user_id', userIds),
-  ])
-
-  return buildLimitesOrganizacion(
-    orgId,
-    {
-      nombre: planRaw.nombre ?? 'Plan',
-      slug: planRaw.slug ?? 'free',
-      limite_clientes: planRaw.limite_clientes ?? 0,
-      limite_prestamos: planRaw.limite_prestamos ?? 0,
-    },
-    clientesAgg.count ?? 0,
-    prestamosAgg.count ?? 0
-  )
+  return null
 }
 
 // Cargar límites a nivel de organización (para subscription store)
