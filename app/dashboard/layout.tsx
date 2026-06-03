@@ -187,7 +187,7 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
                 <Link href="/dashboard/caja" prefetch>
                   <Button variant="ghost" className="w-full justify-start">
                     <Calculator className="mr-2 h-4 w-4" />
-                    {userRole === 'cobrador' ? 'Mi Caja' : 'Arqueos'}
+                    Caja
                   </Button>
                 </Link>
               </>

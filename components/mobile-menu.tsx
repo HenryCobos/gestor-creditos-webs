@@ -96,7 +96,7 @@ export function MobileMenu({ user, planName, onSignOut, userRole = 'admin' }: Mo
     {
       href: '/dashboard/caja',
       icon: Calculator,
-      label: userRole === 'cobrador' ? 'Mi Caja' : 'Arqueos'
+      label: 'Caja'
     }
   ]
 
