@@ -1,14 +1,19 @@
 'use client'
 
-import { useLimitesOrganizacion } from '@/lib/use-limites'
+import type { LimitesOrganizacion } from '@/lib/limites-organizacion-shared'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { AlertTriangle, CheckCircle, Crown, Users, FileText } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { AlertTriangle, CheckCircle, Crown, Users, FileText, RefreshCw } from 'lucide-react'
 
-export function LimitesOrganizacionCard() {
-  const { limites, loading, error } = useLimitesOrganizacion()
+type Props = {
+  limites: LimitesOrganizacion | null
+  loading: boolean
+  onRetry?: () => void
+}
 
+export function LimitesOrganizacionCard({ limites, loading, onRetry }: Props) {
   if (loading) {
     return (
       <Card>
@@ -19,14 +24,34 @@ export function LimitesOrganizacionCard() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">Cargando...</p>
+          <p className="text-sm text-muted-foreground">Cargando límites...</p>
         </CardContent>
       </Card>
     )
   }
 
-  if (error || !limites) {
-    return null
+  if (!limites) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Crown className="h-5 w-5" />
+            Plan de la Organización
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            No se pudieron cargar los límites del plan. Intenta de nuevo.
+          </p>
+          {onRetry && (
+            <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Reintentar
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+    )
   }
 
   const alertaNivelClientes = limites.porcentaje_clientes >= 90
@@ -43,7 +68,6 @@ export function LimitesOrganizacionCard() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Alertas */}
         {(alertaNivelClientes || alertaNivelPrestamos) && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
@@ -58,7 +82,6 @@ export function LimitesOrganizacionCard() {
           </Alert>
         )}
 
-        {/* Clientes */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -69,13 +92,13 @@ export function LimitesOrganizacionCard() {
               {limites.clientes_usados} / {limites.limite_clientes}
             </span>
           </div>
-          <Progress 
-            value={limites.porcentaje_clientes} 
+          <Progress
+            value={limites.porcentaje_clientes}
             className={
-              limites.porcentaje_clientes >= 90 
-                ? 'bg-red-200' 
-                : limites.porcentaje_clientes >= 75 
-                ? 'bg-yellow-200' 
+              limites.porcentaje_clientes >= 90
+                ? 'bg-red-200'
+                : limites.porcentaje_clientes >= 75
+                ? 'bg-yellow-200'
                 : ''
             }
           />
@@ -85,7 +108,6 @@ export function LimitesOrganizacionCard() {
           </div>
         </div>
 
-        {/* Préstamos */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -96,13 +118,13 @@ export function LimitesOrganizacionCard() {
               {limites.prestamos_usados} / {limites.limite_prestamos}
             </span>
           </div>
-          <Progress 
+          <Progress
             value={limites.porcentaje_prestamos}
             className={
-              limites.porcentaje_prestamos >= 90 
-                ? 'bg-red-200' 
-                : limites.porcentaje_prestamos >= 75 
-                ? 'bg-yellow-200' 
+              limites.porcentaje_prestamos >= 90
+                ? 'bg-red-200'
+                : limites.porcentaje_prestamos >= 75
+                ? 'bg-yellow-200'
                 : ''
             }
           />
@@ -112,7 +134,6 @@ export function LimitesOrganizacionCard() {
           </div>
         </div>
 
-        {/* Estado */}
         {limites.puede_crear_cliente && limites.puede_crear_prestamo ? (
           <div className="flex items-center gap-2 text-sm text-green-600">
             <CheckCircle className="h-4 w-4" />

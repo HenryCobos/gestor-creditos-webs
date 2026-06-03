@@ -1,10 +1,8 @@
 // Hook para obtener y gestionar límites de la organización
 import { useEffect, useState } from 'react'
 import { createClient } from './supabase/client'
-import {
-  fetchLimitesOrganizacion,
-  type LimitesOrganizacion,
-} from './subscription-helpers'
+import { fetchLimitesOrganizacion } from './subscription-helpers'
+import type { LimitesOrganizacion } from './limites-organizacion-shared'
 
 export type { LimitesOrganizacion }
 

@@ -159,26 +159,11 @@ export async function loadOrganizationSubscription(): Promise<UserSubscription |
   }
 }
 
-export interface LimitesOrganizacion {
-  organization_id: string
-  plan_nombre: string
-  plan_slug: string
-  limite_clientes: number
-  limite_prestamos: number
-  clientes_usados: number
-  prestamos_usados: number
-  clientes_disponibles: number
-  prestamos_disponibles: number
-  porcentaje_clientes: number
-  porcentaje_prestamos: number
-  puede_crear_cliente: boolean
-  puede_crear_prestamo: boolean
-}
-
-function toNumber(value: unknown): number {
-  const n = Number(value)
-  return Number.isFinite(n) ? n : 0
-}
+export type { LimitesOrganizacion } from '@/lib/limites-organizacion-shared'
+import {
+  mapRpcRowToLimites,
+  type LimitesOrganizacion,
+} from '@/lib/limites-organizacion-shared'
 
 function formatSupabaseError(err: unknown): string {
   if (!err || typeof err !== 'object') return 'Error desconocido'
@@ -186,57 +171,26 @@ function formatSupabaseError(err: unknown): string {
   return e.message || e.details || e.hint || e.code || JSON.stringify(err)
 }
 
-export function buildLimitesOrganizacion(
-  organizationId: string,
-  plan: { nombre: string; slug: string; limite_clientes: number; limite_prestamos: number },
-  clientesUsados: number,
-  prestamosUsados: number
-): LimitesOrganizacion {
-  const limiteClientes = plan.limite_clientes
-  const limitePrestamos = plan.limite_prestamos
-  const clientesDisponibles = Math.max(0, limiteClientes - clientesUsados)
-  const prestamosDisponibles = Math.max(0, limitePrestamos - prestamosUsados)
+export { buildLimitesOrganizacion } from '@/lib/limites-organizacion-shared'
 
+export function mapLimitesToUsageLimits(limites: LimitesOrganizacion): UsageLimits {
   return {
-    organization_id: organizationId,
-    plan_nombre: plan.nombre,
-    plan_slug: plan.slug,
-    limite_clientes: limiteClientes,
-    limite_prestamos: limitePrestamos,
-    clientes_usados: clientesUsados,
-    prestamos_usados: prestamosUsados,
-    clientes_disponibles: clientesDisponibles,
-    prestamos_disponibles: prestamosDisponibles,
-    porcentaje_clientes:
-      limiteClientes > 0
-        ? Math.round((clientesUsados / limiteClientes) * 10000) / 100
-        : 0,
-    porcentaje_prestamos:
-      limitePrestamos > 0
-        ? Math.round((prestamosUsados / limitePrestamos) * 10000) / 100
-        : 0,
-    puede_crear_cliente: clientesUsados < limiteClientes,
-    puede_crear_prestamo: prestamosUsados < limitePrestamos,
-  }
-}
-
-function mapRpcRowToLimites(row: Record<string, unknown>): LimitesOrganizacion {
-  const limiteClientes = toNumber(row.limite_clientes)
-  const limitePrestamos = toNumber(row.limite_prestamos)
-  const clientesUsados = toNumber(row.clientes_usados)
-  const prestamosUsados = toNumber(row.prestamos_usados)
-
-  return buildLimitesOrganizacion(
-    String(row.organization_id),
-    {
-      nombre: String(row.plan_nombre ?? 'Plan'),
-      slug: String(row.plan_slug ?? 'free'),
-      limite_clientes: limiteClientes,
-      limite_prestamos: limitePrestamos,
+    clientes: {
+      current: limites.clientes_usados,
+      limit: limites.limite_clientes,
+      canAdd: limites.puede_crear_cliente,
     },
-    clientesUsados,
-    prestamosUsados
-  )
+    prestamos: {
+      current: limites.prestamos_usados,
+      limit: limites.limite_prestamos,
+      canAdd: limites.puede_crear_prestamo,
+    },
+    usuarios: {
+      current: 1,
+      limit: 999,
+      canAdd: true,
+    },
+  }
 }
 
 /** Límites de la organización (totales compartidos admin + cobrador) */
@@ -248,9 +202,32 @@ export async function fetchLimitesOrganizacion(): Promise<LimitesOrganizacion | 
 
   if (!user) return null
 
-  // 1) API con service role — conteo real de la org (no depende de RLS del cobrador)
+  // 1) RPC (rápido, SECURITY DEFINER)
+  const { data: rpcData, error: rpcError } = await supabase
+    .rpc('get_limites_organizacion')
+    .maybeSingle()
+
+  if (!rpcError && rpcData) {
+    return mapRpcRowToLimites(rpcData as Record<string, unknown>)
+  }
+
+  if (rpcError) {
+    console.warn(
+      '[fetchLimitesOrganizacion] RPC falló:',
+      formatSupabaseError(rpcError)
+    )
+  }
+
+  // 2) API con service role (respaldo; timeout para no colgar la UI)
   try {
-    const res = await fetch('/api/limites-organizacion', { credentials: 'include' })
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 12_000)
+    const res = await fetch('/api/limites-organizacion', {
+      credentials: 'include',
+      signal: controller.signal,
+    })
+    clearTimeout(timeoutId)
+
     if (res.ok) {
       const json = await res.json()
       if (json.limites) {
@@ -267,22 +244,6 @@ export async function fetchLimitesOrganizacion(): Promise<LimitesOrganizacion | 
     console.warn('[fetchLimitesOrganizacion] API no disponible:', apiErr)
   }
 
-  // 2) RPC SECURITY DEFINER (respaldo)
-  const { data: rpcData, error: rpcError } = await supabase
-    .rpc('get_limites_organizacion')
-    .maybeSingle()
-
-  if (!rpcError && rpcData) {
-    return mapRpcRowToLimites(rpcData as Record<string, unknown>)
-  }
-
-  if (rpcError) {
-    console.warn(
-      '[fetchLimitesOrganizacion] RPC falló:',
-      formatSupabaseError(rpcError)
-    )
-  }
-
   return null
 }
 
@@ -291,30 +252,7 @@ export async function loadOrganizationUsageLimits(): Promise<UsageLimits | null>
   try {
     const limites = await fetchLimitesOrganizacion()
     if (!limites) return null
-
-    const supabase = createClient()
-    const { data: orgUsers } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('organization_id', limites.organization_id)
-
-    return {
-      clientes: {
-        current: limites.clientes_usados,
-        limit: limites.limite_clientes,
-        canAdd: limites.puede_crear_cliente,
-      },
-      prestamos: {
-        current: limites.prestamos_usados,
-        limit: limites.limite_prestamos,
-        canAdd: limites.puede_crear_prestamo,
-      },
-      usuarios: {
-        current: orgUsers?.length ?? 1,
-        limit: 999,
-        canAdd: true,
-      },
-    }
+    return mapLimitesToUsageLimits(limites)
   } catch (error) {
     console.error('[loadOrganizationUsageLimits] Error:', formatSupabaseError(error))
     return null

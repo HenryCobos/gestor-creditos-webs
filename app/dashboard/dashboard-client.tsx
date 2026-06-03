@@ -21,7 +21,12 @@ const DashboardCharts = dynamic(
 )
 import { useConfigStore } from '@/lib/config-store'
 import { useSubscriptionStore } from '@/lib/subscription-store'
-import { loadOrganizationSubscription, loadOrganizationUsageLimits } from '@/lib/subscription-helpers'
+import {
+  fetchLimitesOrganizacion,
+  loadOrganizationSubscription,
+  mapLimitesToUsageLimits,
+} from '@/lib/subscription-helpers'
+import type { LimitesOrganizacion } from '@/lib/limites-organizacion-shared'
 import { getClientesInteligente, getPrestamosInteligente, getCuotasSegunRol } from '@/lib/queries-con-roles'
 import { LimitesOrganizacionCard } from '@/components/limites-organizacion-card'
 import Link from 'next/link'
@@ -44,6 +49,7 @@ interface Cuota {
 export function DashboardClient() {
   const [loadingMetrics, setLoadingMetrics] = useState(true)
   const [loadingPlan, setLoadingPlan] = useState(true)
+  const [limitesOrg, setLimitesOrg] = useState<LimitesOrganizacion | null>(null)
   const [prestamos, setPrestamos] = useState<Prestamo[]>([])
   const [clientes, setClientes] = useState<any[]>([])
   const [cuotas, setCuotas] = useState<Cuota[]>([])
@@ -64,25 +70,22 @@ export function DashboardClient() {
   }, [])
   
   const loadSubscriptionData = async () => {
+    setLoadingPlan(true)
     try {
-      // Intentar cargar plan de organización primero
-      const [subscription, limits] = await Promise.all([
+      const [subscription, limites] = await Promise.all([
         loadOrganizationSubscription(),
-        loadOrganizationUsageLimits(),
+        fetchLimitesOrganizacion(),
       ])
-      
+
       if (subscription) {
-        console.log('[Dashboard] ✅ Suscripción de organización cargada:', subscription)
         setUserSubscription(subscription)
-      } else {
-        console.error('[Dashboard] No se pudo cargar la suscripción')
       }
-      
-      if (limits) {
-        console.log('[Dashboard] ✅ Límites de organización cargados:', limits)
-        setUsageLimits(limits)
+
+      if (limites) {
+        setLimitesOrg(limites)
+        setUsageLimits(mapLimitesToUsageLimits(limites))
       } else {
-        console.log('[Dashboard] No se pudieron cargar los límites')
+        setLimitesOrg(null)
       }
     } catch (error) {
       console.error('[Dashboard] Error al cargar suscripción:', error)
@@ -157,7 +160,11 @@ export function DashboardClient() {
   return (
     <div className="space-y-8">
       {/* Card de Límites de Organización */}
-      <LimitesOrganizacionCard />
+      <LimitesOrganizacionCard
+        limites={limitesOrg}
+        loading={loadingPlan}
+        onRetry={loadSubscriptionData}
+      />
 
       {/* Banner de Suscripción - Siempre visible para plan gratuito o mientras carga */}
       {(!loadingPlan && currentPlan?.slug === 'free') && (
@@ -214,83 +221,73 @@ export function DashboardClient() {
         ) : null}
       </div>
       
-      {/* Indicador de uso del plan - Siempre visible */}
-      {!loadingPlan && (
-        <Card className="border-l-4 border-l-blue-500">
-          <CardContent className="pt-6">
-            {usageLimits && currentPlan && currentPlan.slug !== 'enterprise' ? (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-600">Clientes</span>
-                      <span className="text-sm font-bold text-gray-900">
-                        {usageLimits.clientes.current} / {usageLimits.clientes.limit}
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className={`h-2 rounded-full transition-all ${
-                          usageLimits.clientes.current >= usageLimits.clientes.limit 
-                            ? 'bg-red-500' 
-                            : usageLimits.clientes.current / usageLimits.clientes.limit > 0.8
-                            ? 'bg-yellow-500'
-                            : 'bg-green-500'
-                        }`}
-                        style={{ 
-                          width: `${Math.min((usageLimits.clientes.current / usageLimits.clientes.limit) * 100, 100)}%` 
-                        }}
-                      />
-                    </div>
+      {/* Resumen compacto de uso (mismos datos que la tarjeta de plan arriba) */}
+      {!loadingPlan &&
+        usageLimits &&
+        currentPlan &&
+        currentPlan.slug !== 'enterprise' && (
+          <Card className="border-l-4 border-l-blue-500">
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-600">Clientes</span>
+                    <span className="text-sm font-bold text-gray-900">
+                      {usageLimits.clientes.current} / {usageLimits.clientes.limit}
+                    </span>
                   </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-600">Préstamos Activos</span>
-                      <span className="text-sm font-bold text-gray-900">
-                        {usageLimits.prestamos.current} / {usageLimits.prestamos.limit}
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className={`h-2 rounded-full transition-all ${
-                          usageLimits.prestamos.current >= usageLimits.prestamos.limit 
-                            ? 'bg-red-500' 
-                            : usageLimits.prestamos.current / usageLimits.prestamos.limit > 0.8
-                            ? 'bg-yellow-500'
-                            : 'bg-green-500'
-                        }`}
-                        style={{ 
-                          width: `${Math.min((usageLimits.prestamos.current / usageLimits.prestamos.limit) * 100, 100)}%` 
-                        }}
-                      />
-                    </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full transition-all ${
+                        usageLimits.clientes.current >= usageLimits.clientes.limit
+                          ? 'bg-red-500'
+                          : usageLimits.clientes.current / usageLimits.clientes.limit > 0.8
+                          ? 'bg-yellow-500'
+                          : 'bg-green-500'
+                      }`}
+                      style={{
+                        width: `${Math.min((usageLimits.clientes.current / usageLimits.clientes.limit) * 100, 100)}%`,
+                      }}
+                    />
                   </div>
                 </div>
-                {(!usageLimits.clientes.canAdd || !usageLimits.prestamos.canAdd) && (
-                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                    <p className="text-sm text-yellow-800">
-                      ⚠️ Has alcanzado el límite de tu plan. <Link href="/dashboard/subscription" className="font-semibold underline">Actualiza tu plan</Link> para continuar.
-                    </p>
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-600">Préstamos (org.)</span>
+                    <span className="text-sm font-bold text-gray-900">
+                      {usageLimits.prestamos.current} / {usageLimits.prestamos.limit}
+                    </span>
                   </div>
-                )}
-              </>
-            ) : (
-              <div className="animate-pulse">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
-                    <div className="h-2 bg-gray-200 rounded w-full"></div>
-                  </div>
-                  <div>
-                    <div className="h-4 bg-gray-200 rounded w-32 mb-2"></div>
-                    <div className="h-2 bg-gray-200 rounded w-full"></div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full transition-all ${
+                        usageLimits.prestamos.current >= usageLimits.prestamos.limit
+                          ? 'bg-red-500'
+                          : usageLimits.prestamos.current / usageLimits.prestamos.limit > 0.8
+                          ? 'bg-yellow-500'
+                          : 'bg-green-500'
+                      }`}
+                      style={{
+                        width: `${Math.min((usageLimits.prestamos.current / usageLimits.prestamos.limit) * 100, 100)}%`,
+                      }}
+                    />
                   </div>
                 </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+              {(!usageLimits.clientes.canAdd || !usageLimits.prestamos.canAdd) && (
+                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                  <p className="text-sm text-yellow-800">
+                    Has alcanzado el límite de tu plan.{' '}
+                    <Link href="/dashboard/subscription" className="font-semibold underline">
+                      Actualiza tu plan
+                    </Link>{' '}
+                    para continuar.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
       {/* Tarjetas de métricas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

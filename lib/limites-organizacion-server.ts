@@ -1,8 +1,9 @@
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import {
   buildLimitesOrganizacion,
+  normalizePlanFromJoin,
   type LimitesOrganizacion,
-} from '@/lib/subscription-helpers'
+} from '@/lib/limites-organizacion-shared'
 
 /**
  * Conteo de límites a nivel organización (bypass RLS).
@@ -18,24 +19,31 @@ export async function getLimitesOrganizacionForOrg(
     .select(
       `
       id,
+      plan_id,
       plan:planes(nombre, slug, limite_clientes, limite_prestamos)
     `
     )
     .eq('id', organizationId)
     .single()
 
-  const planRaw = org?.plan as
-    | {
-        nombre?: string
-        slug?: string
-        limite_clientes?: number
-        limite_prestamos?: number
-      }
-    | null
-    | undefined
+  if (orgError) {
+    console.warn('[getLimitesOrganizacionForOrg] Error org:', orgError.message)
+    return null
+  }
 
-  if (orgError || !planRaw) {
-    console.warn('[getLimitesOrganizacionForOrg] Org sin plan:', orgError?.message)
+  let planRaw = normalizePlanFromJoin(org?.plan)
+
+  if (!planRaw?.limite_clientes && org?.plan_id) {
+    const { data: planById } = await admin
+      .from('planes')
+      .select('nombre, slug, limite_clientes, limite_prestamos')
+      .eq('id', org.plan_id)
+      .maybeSingle()
+    if (planById) planRaw = planById
+  }
+
+  if (!planRaw) {
+    console.warn('[getLimitesOrganizacionForOrg] Org sin plan')
     return null
   }
 

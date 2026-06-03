@@ -40,9 +40,10 @@ export async function GET() {
 
     return NextResponse.json({ limites })
   } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Error desconocido'
     console.error('[api/limites-organizacion]', e)
     return NextResponse.json(
-      { error: 'Error al cargar límites de la organización' },
+      { error: 'Error al cargar límites de la organización', details: msg },
       { status: 500 }
     )
   }
