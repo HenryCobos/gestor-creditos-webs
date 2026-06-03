@@ -36,14 +36,7 @@ import {
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useConfigStore } from '@/lib/config-store'
 import { format, startOfMonth } from 'date-fns'
-import {
-  fetchResumenCajaRuta,
-  fetchResumenTodasRutas,
-  loadRutasCaja,
-  type MovimientoCaja,
-  type ResumenCajaRuta,
-  type RutaCajaOption,
-} from '@/lib/caja-movimientos'
+import { loadRutasCaja, type MovimientoCaja, type ResumenCajaRuta, type RutaCajaOption } from '@/lib/caja-movimientos'
 
 export default function CajaPage() {
   const hoy = format(new Date(), 'yyyy-MM-dd')
@@ -66,36 +59,44 @@ export default function CajaPage() {
   const esVistaTodas = userRole === 'admin' && filtroRuta === 'todas'
 
   const cargarDatos = useCallback(async () => {
-    if (!organizationId || !userRole) return
+    if (!organizationId || !userRole || !filtroRuta) return
 
     setLoading(true)
     try {
+      const params = new URLSearchParams({
+        desde: fechaDesde,
+        hasta: fechaHasta,
+      })
       if (esVistaTodas) {
-        const lista = await fetchResumenTodasRutas(
-          supabase,
-          rutas,
-          fechaDesde,
-          fechaHasta
-        )
-        setResumenTodas(lista)
+        params.set('todas', '1')
+      } else {
+        params.set('rutaId', filtroRuta)
+      }
+
+      const res = await fetch(`/api/caja/resumen?${params.toString()}`)
+      const json = await res.json()
+
+      if (!res.ok) {
+        throw new Error(json.error || 'Error al cargar caja')
+      }
+
+      if (json.rutas?.length) {
+        setRutas(json.rutas)
+      }
+
+      if (esVistaTodas) {
+        setResumenTodas(json.resumenTodas || [])
         setResumenRuta(null)
-      } else if (filtroRuta) {
-        const rutaMeta = rutas.find((r) => r.id === filtroRuta)
-        const resumen = await fetchResumenCajaRuta(
-          supabase,
-          filtroRuta,
-          fechaDesde,
-          fechaHasta,
-          rutaMeta
-        )
-        setResumenRuta(resumen)
+      } else {
+        setResumenRuta(json.resumen || null)
         setResumenTodas([])
       }
     } catch (e) {
       console.error('[Caja] Error cargando datos:', e)
       toast({
         title: 'Error',
-        description: 'No se pudieron cargar los movimientos de caja',
+        description:
+          e instanceof Error ? e.message : 'No se pudieron cargar los movimientos de caja',
         variant: 'destructive',
       })
     } finally {
@@ -106,10 +107,8 @@ export default function CajaPage() {
     userRole,
     esVistaTodas,
     filtroRuta,
-    rutas,
     fechaDesde,
     fechaHasta,
-    supabase,
     toast,
   ])
 

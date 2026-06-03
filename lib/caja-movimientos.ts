@@ -1,5 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { endOfDay, parseISO, startOfDay } from 'date-fns'
+import {
+  estaEnRangoCalendario,
+  rangoFechasLocales,
+} from '@/lib/fecha-calendario'
 
 export type TipoMovimientoCaja =
   | 'pago_recibido'
@@ -41,12 +44,6 @@ export interface RutaCajaOption {
   cobrador_nombre: string | null
 }
 
-function rangoIso(desde: string, hasta: string) {
-  const d = startOfDay(parseISO(desde)).toISOString()
-  const h = endOfDay(parseISO(hasta)).toISOString()
-  return { desde: d, hasta: h }
-}
-
 function labelTipo(tipo: TipoMovimientoCaja): string {
   const map: Record<TipoMovimientoCaja, string> = {
     pago_recibido: 'Cobro recibido',
@@ -58,6 +55,100 @@ function labelTipo(tipo: TipoMovimientoCaja): string {
     transferencia_salida: 'Transferencia enviada',
   }
   return map[tipo]
+}
+
+type PagoRow = {
+  id: string
+  prestamo_id: string
+  monto_pagado: number
+  fecha_pago: string
+  metodo_pago: string | null
+}
+
+async function cargarPagosRuta(
+  supabase: SupabaseClient,
+  prestamoIds: string[],
+  fechaDesde: string,
+  fechaHasta: string,
+  preferRpc: boolean
+): Promise<PagoRow[]> {
+  if (prestamoIds.length === 0) return []
+
+  const prestamoIdSet = new Set(prestamoIds)
+  const { desde, hasta } = rangoFechasLocales(fechaDesde, fechaHasta)
+
+  if (preferRpc) {
+    const { data: pagosRpc, error: rpcError } = await supabase.rpc(
+      'get_pagos_segun_rol'
+    )
+
+    if (!rpcError && pagosRpc?.length) {
+      return (pagosRpc as PagoRow[]).filter(
+        (p) =>
+          prestamoIdSet.has(p.prestamo_id) &&
+          estaEnRangoCalendario(p.fecha_pago, fechaDesde, fechaHasta)
+      )
+    }
+  }
+
+  const { data: pagosDirect, error: directError } = await supabase
+    .from('pagos')
+    .select('id, prestamo_id, monto_pagado, fecha_pago, metodo_pago')
+    .in('prestamo_id', prestamoIds)
+    .gte('fecha_pago', desde)
+    .lte('fecha_pago', hasta)
+    .order('fecha_pago', { ascending: false })
+
+  if (directError) {
+    console.error('[caja] Error cargando pagos:', directError)
+    return []
+  }
+
+  return (pagosDirect || []).filter((p) =>
+    estaEnRangoCalendario(p.fecha_pago, fechaDesde, fechaHasta)
+  )
+}
+
+async function cargarPrestamoIdsRuta(
+  supabase: SupabaseClient,
+  rutaId: string,
+  preferRpc: boolean
+): Promise<{ ids: string[]; clientePorPrestamo: Map<string, string> }> {
+  const clientePorPrestamo = new Map<string, string>()
+
+  if (preferRpc) {
+    const { data: prestamosRpc, error: rpcError } = await supabase.rpc(
+      'get_prestamos_segun_rol'
+    )
+
+    if (!rpcError && prestamosRpc?.length) {
+      const enRuta = (
+        prestamosRpc as { id: string; ruta_id?: string | null }[]
+      ).filter((p) => p.ruta_id === rutaId)
+      return { ids: enRuta.map((p) => p.id), clientePorPrestamo }
+    }
+  }
+
+  const { data: prestamos, error } = await supabase
+    .from('prestamos')
+    .select('id, cliente:clientes(nombre)')
+    .eq('ruta_id', rutaId)
+
+  if (error) {
+    console.error('[caja] Error cargando préstamos de ruta:', error)
+    return { ids: [], clientePorPrestamo }
+  }
+
+  for (const pr of prestamos || []) {
+    const nombre =
+      (pr.cliente as { nombre?: string } | null)?.nombre || 'Cliente'
+    clientePorPrestamo.set(pr.id, nombre)
+  }
+
+  return {
+    ids: (prestamos || []).map((p) => p.id),
+    clientePorPrestamo,
+  }
 }
 
 export async function loadRutasCaja(
@@ -81,7 +172,7 @@ export async function loadRutasCaja(
   if (error || !rutas?.length) return []
 
   const cobradorIds = [...new Set(rutas.map((r) => r.cobrador_id).filter(Boolean))] as string[]
-  let cobradoresMap = new Map<string, string>()
+  const cobradoresMap = new Map<string, string>()
 
   if (cobradorIds.length > 0) {
     const { data: usuarios } = await supabase.rpc('get_usuarios_organizacion')
@@ -107,9 +198,11 @@ export async function fetchResumenCajaRuta(
   rutaId: string,
   fechaDesde: string,
   fechaHasta: string,
-  rutaMeta?: RutaCajaOption
+  rutaMeta?: RutaCajaOption,
+  options?: { preferRpc?: boolean }
 ): Promise<ResumenCajaRuta | null> {
-  const { desde, hasta } = rangoIso(fechaDesde, fechaHasta)
+  const preferRpc = options?.preferRpc !== false
+  const { desde, hasta } = rangoFechasLocales(fechaDesde, fechaHasta)
 
   let meta = rutaMeta
   if (!meta) {
@@ -131,36 +224,34 @@ export async function fetchResumenCajaRuta(
 
   const movimientos: MovimientoCaja[] = []
 
-  const { data: prestamosRuta } = await supabase
-    .from('prestamos')
-    .select('id')
-    .eq('ruta_id', rutaId)
-
-  const prestamoIds = (prestamosRuta || []).map((p) => p.id)
+  const { ids: prestamoIds, clientePorPrestamo } =
+    await cargarPrestamoIdsRuta(supabase, rutaId, preferRpc)
 
   if (prestamoIds.length > 0) {
-    const { data: pagos } = await supabase
-      .from('pagos')
-      .select(
-        `
-        id,
-        monto_pagado,
-        fecha_pago,
-        metodo_pago,
-        prestamo:prestamos(
-          cliente:clientes(nombre)
-        )
-      `
-      )
-      .in('prestamo_id', prestamoIds)
-      .gte('fecha_pago', desde)
-      .lte('fecha_pago', hasta)
-      .order('fecha_pago', { ascending: false })
+    const pagos = await cargarPagosRuta(
+      supabase,
+      prestamoIds,
+      fechaDesde,
+      fechaHasta,
+      preferRpc
+    )
 
-    ;(pagos || []).forEach((p) => {
-      const cliente =
-        (p.prestamo as { cliente?: { nombre?: string } } | null)?.cliente?.nombre ||
-        'Cliente'
+    if (pagos.length > 0 && clientePorPrestamo.size === 0) {
+      const { data: prestamosNombres } = await supabase
+        .from('prestamos')
+        .select('id, cliente:clientes(nombre)')
+        .in('id', [...new Set(pagos.map((p) => p.prestamo_id))])
+
+      for (const pr of prestamosNombres || []) {
+        clientePorPrestamo.set(
+          pr.id,
+          (pr.cliente as { nombre?: string } | null)?.nombre || 'Cliente'
+        )
+      }
+    }
+
+    for (const p of pagos) {
+      const cliente = clientePorPrestamo.get(p.prestamo_id) || 'Cliente'
       movimientos.push({
         id: `pago-${p.id}`,
         fecha: p.fecha_pago,
@@ -170,7 +261,7 @@ export async function fetchResumenCajaRuta(
         concepto: labelTipo('pago_recibido'),
         detalle: `${cliente}${p.metodo_pago ? ` · ${p.metodo_pago}` : ''}`,
       })
-    })
+    }
   }
 
   const { data: prestamos } = await supabase
@@ -182,6 +273,7 @@ export async function fetchResumenCajaRuta(
     .order('created_at', { ascending: false })
 
   ;(prestamos || []).forEach((pr) => {
+    if (!estaEnRangoCalendario(pr.created_at, fechaDesde, fechaHasta)) return
     movimientos.push({
       id: `prestamo-${pr.id}`,
       fecha: pr.created_at,
@@ -216,7 +308,7 @@ export async function fetchResumenCajaRuta(
 
   const { data: movsCapital } = await supabase
     .from('movimientos_capital_ruta')
-    .select('id, tipo_movimiento, monto, fecha_movimiento, concepto, saldo_nuevo')
+    .select('id, tipo_movimiento, monto, fecha_movimiento, concepto')
     .eq('ruta_id', rutaId)
     .in('tipo_movimiento', [
       'ingreso',
@@ -237,7 +329,8 @@ export async function fetchResumenCajaRuta(
     }
     const tipo = tipoMap[m.tipo_movimiento] || 'ingreso_capital'
     const esEntrada =
-      m.tipo_movimiento === 'ingreso' || m.tipo_movimiento === 'transferencia_entrada'
+      m.tipo_movimiento === 'ingreso' ||
+      m.tipo_movimiento === 'transferencia_entrada'
     movimientos.push({
       id: `mov-${m.id}`,
       fecha: m.fecha_movimiento,
@@ -281,7 +374,8 @@ export async function fetchResumenTodasRutas(
   supabase: SupabaseClient,
   rutas: RutaCajaOption[],
   fechaDesde: string,
-  fechaHasta: string
+  fechaHasta: string,
+  options?: { preferRpc?: boolean }
 ): Promise<ResumenCajaRuta[]> {
   const resultados: ResumenCajaRuta[] = []
   for (const ruta of rutas) {
@@ -290,7 +384,8 @@ export async function fetchResumenTodasRutas(
       ruta.id,
       fechaDesde,
       fechaHasta,
-      ruta
+      ruta,
+      options
     )
     if (resumen) resultados.push({ ...resumen, movimientos: [] })
   }
