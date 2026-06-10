@@ -25,7 +25,7 @@ UPDATE planes
 SET caracteristicas = jsonb_set(
   COALESCE(caracteristicas, '{}'::jsonb), 
   '{paypal_plan_id_monthly}', 
-  '"P-XXXXXXXX"'::jsonb  -- ⚠️ REEMPLAZAR con tu Plan ID Mensual
+  '"P-67J01139RE989703RNEN20DO"'::jsonb  -- ✅ Plan Profesional Mensual
 )
 WHERE slug = 'pro';
 
@@ -34,7 +34,7 @@ UPDATE planes
 SET caracteristicas = jsonb_set(
   COALESCE(caracteristicas, '{}'::jsonb), 
   '{paypal_plan_id_yearly}', 
-  '"P-XXXXXXXX"'::jsonb  -- ⚠️ REEMPLAZAR con tu Plan ID Anual
+  '"P-2S618637AV136383VNEN55MY"'::jsonb  -- ✅ Plan Profesional Anual
 )
 WHERE slug = 'pro';
 
@@ -47,7 +47,7 @@ UPDATE planes
 SET caracteristicas = jsonb_set(
   COALESCE(caracteristicas, '{}'::jsonb), 
   '{paypal_plan_id_monthly}', 
-  '"P-XXXXXXXX"'::jsonb  -- ⚠️ REEMPLAZAR con tu Plan ID Mensual
+  '"P-7RK51070YF818864DNEN57QA"'::jsonb  -- ✅ Plan Business Mensual
 )
 WHERE slug = 'business';
 
@@ -56,7 +56,7 @@ UPDATE planes
 SET caracteristicas = jsonb_set(
   COALESCE(caracteristicas, '{}'::jsonb), 
   '{paypal_plan_id_yearly}', 
-  '"P-XXXXXXXX"'::jsonb  -- ⚠️ REEMPLAZAR con tu Plan ID Anual
+  '"P-0VZ5S7548H525804HNEN6CBA"'::jsonb  -- ✅ Plan Business Anual
 )
 WHERE slug = 'business';
 
@@ -69,7 +69,7 @@ UPDATE planes
 SET caracteristicas = jsonb_set(
   COALESCE(caracteristicas, '{}'::jsonb), 
   '{paypal_plan_id_monthly}', 
-  '"P-XXXXXXXX"'::jsonb  -- ⚠️ REEMPLAZAR con tu Plan ID Mensual
+  '"P-02U73090XU374650VNEN6FIQ"'::jsonb  -- ✅ Plan Enterprise Mensual
 )
 WHERE slug = 'enterprise';
 
@@ -78,7 +78,7 @@ UPDATE planes
 SET caracteristicas = jsonb_set(
   COALESCE(caracteristicas, '{}'::jsonb), 
   '{paypal_plan_id_yearly}', 
-  '"P-XXXXXXXX"'::jsonb  -- ⚠️ REEMPLAZAR con tu Plan ID Anual
+  '"P-3F668658YY202615DNEN6HHI"'::jsonb  -- ✅ Plan Enterprise Anual
 )
 WHERE slug = 'enterprise';
 

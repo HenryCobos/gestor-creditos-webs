@@ -10,4 +10,4 @@ SELECT
 FROM profiles p
 LEFT JOIN organizations o ON o.id = p.organization_id
 ORDER BY p.email
-LIMIT 20;
+LIMIT 400;

@@ -10,4 +10,4 @@ SELECT
 FROM organizations o
 LEFT JOIN planes pl ON pl.id = o.plan_id
 ORDER BY o.created_at DESC
-LIMIT 10;
+LIMIT 400;
