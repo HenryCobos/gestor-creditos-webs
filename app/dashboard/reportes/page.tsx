@@ -28,6 +28,8 @@ import { generarReporteGeneral, generarReporteCliente } from '@/lib/pdf-generato
 import { format, subDays, subMonths, startOfDay, endOfDay } from 'date-fns'
 import { useToast } from '@/components/ui/use-toast'
 import { getPrestamosInteligente, getClientesInteligente, getCuotasSegunRol } from '@/lib/queries-con-roles'
+import { useSubscriptionStore } from '@/lib/subscription-store'
+import { FeatureGateDialog } from '@/components/feature-gate-dialog'
 
 interface ReporteGeneral {
   totalPrestado: number
@@ -68,12 +70,16 @@ export default function ReportesPage() {
   const [rangoFecha, setRangoFecha] = useState<string>('todo')
   const [fechaDesde, setFechaDesde] = useState<string>('')
   const [fechaHasta, setFechaHasta] = useState<string>('')
+  const [showPdfGate, setShowPdfGate] = useState(false)
+  const [trialUsed, setTrialUsed] = useState(false)
   const supabase = createClient()
   const { config } = useConfigStore()
   const { toast } = useToast()
+  const { canExportPDF } = useSubscriptionStore()
 
   useEffect(() => {
     loadReportes()
+    fetch('/api/activate-trial').then(r => r.json()).then(d => setTrialUsed(d.trialUsed || false)).catch(() => {})
   }, [rangoFecha, fechaDesde, fechaHasta])
 
   const getFechasFiltro = () => {
@@ -279,6 +285,11 @@ export default function ReportesPage() {
   }
 
   const handleExportarReporte = async () => {
+    // Feature gate: solo planes de pago o trial activo exportan sin marca de agua
+    if (!canExportPDF()) {
+      setShowPdfGate(true)
+      return
+    }
     try {
       if (activeTab === 'general' && reporteGeneral) {
         // Exportar Reporte General
@@ -722,6 +733,13 @@ export default function ReportesPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      <FeatureGateDialog
+        open={showPdfGate}
+        onOpenChange={setShowPdfGate}
+        variant="pdf"
+        trialUsed={trialUsed}
+      />
     </div>
   )
 }

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { CheckCircle2, ArrowRight, LayoutDashboard, Check, Loader2 } from "lucide-react"
+import { CheckCircle2, ArrowRight, LayoutDashboard, Check, Loader2, Users, FileText, Bell, Star } from "lucide-react"
 import { loadUserSubscription } from "@/lib/subscription-helpers"
 import { getPlanBenefits } from "@/lib/subscription-helpers"
 
@@ -160,13 +160,77 @@ export default function CompraExitosaPage() {
             </div>
           )}
 
+          {/* Checklist de primeros pasos */}
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+              <p className="font-semibold text-gray-900 text-sm">🚀 Tus primeros 3 pasos con el Plan {planName}</p>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {[
+                {
+                  icon: Users,
+                  title: 'Agrega todos tus clientes',
+                  desc: 'Ya tienes capacidad ampliada. Importa o registra a todos tus clientes actuales.',
+                  link: '/dashboard/clientes',
+                  cta: 'Ir a Clientes →',
+                },
+                {
+                  icon: FileText,
+                  title: 'Genera tu primer PDF profesional',
+                  desc: 'Crea un contrato o reporte sin marca de agua — tus clientes lo notarán.',
+                  link: '/dashboard/reportes',
+                  cta: 'Ir a Reportes →',
+                },
+                {
+                  icon: Bell,
+                  title: 'Configura tu perfil de empresa',
+                  desc: 'Añade el nombre y logo de tu negocio para que aparezca en todos los documentos.',
+                  link: '/dashboard/configuracion',
+                  cta: 'Ir a Configuración →',
+                },
+              ].map(({ icon: Icon, title, desc, link, cta }) => (
+                <div key={title} className="flex items-start gap-3 px-4 py-3">
+                  <div className={`w-8 h-8 ${styles.iconBg} rounded-full flex items-center justify-center flex-shrink-0`}>
+                    <Icon className={`w-4 h-4 ${styles.iconColor}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm text-gray-900">{title}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
+                  </div>
+                  <Link href={link} className={`text-xs font-semibold ${styles.iconColor} hover:underline whitespace-nowrap flex-shrink-0`}>
+                    {cta}
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Solicitud de testimonio */}
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <Star className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-amber-900 text-sm">¿Cómo te sientes con el sistema?</p>
+                <p className="text-xs text-amber-700 mt-1">
+                  Ayuda a otros prestamistas. Cuéntanos en 1 línea cómo va tu experiencia — lo publicamos como testimonio anónimo.
+                </p>
+                <a
+                  href="mailto:hola@gestor-creditos.app?subject=Mi%20testimonio"
+                  className="inline-block mt-2 text-xs font-semibold text-amber-800 hover:text-amber-900 underline"
+                >
+                  Enviar mi testimonio →
+                </a>
+              </div>
+            </div>
+          </div>
+
           {/* Información Adicional */}
-          <div className="bg-white p-4 rounded-lg border border-gray-200 text-sm text-gray-700">
-            <p className="font-medium mb-2">📧 ¿Qué sucede ahora?</p>
-            <ul className="list-disc list-inside space-y-1 ml-1">
+          <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 text-sm text-gray-700">
+            <p className="font-medium mb-2 text-gray-800">📧 ¿Qué sucede ahora?</p>
+            <ul className="list-disc list-inside space-y-1 ml-1 text-gray-600">
               <li>Tu cuenta ha sido actualizada al plan <strong>{planName}</strong>.</li>
-              <li>Ya tienes acceso a todas las funciones de tu plan.</li>
-              <li>Hemos enviado el recibo a tu correo electrónico.</li>
+              <li>Ya tienes acceso completo a todas las funciones.</li>
+              <li>El recibo llegará a tu correo electrónico.</li>
               {subscription?.subscription_period && (
                 <li>Tu suscripción es <strong>{subscription.subscription_period === 'monthly' ? 'mensual' : 'anual'}</strong>.</li>
               )}
@@ -181,6 +245,15 @@ export default function CompraExitosaPage() {
               Ir al Dashboard
             </Button>
           </Link>
+          
+          {(planSlug === 'business' || planSlug === 'enterprise') && (
+            <Link href="/dashboard/usuarios" className="w-full">
+              <Button variant="outline" className="w-full gap-2">
+                <Users className="w-4 h-4" />
+                Invitar a un cobrador a tu equipo
+              </Button>
+            </Link>
+          )}
           
           <Link href="/dashboard/subscription" className="w-full">
             <Button variant="ghost" className="w-full text-gray-500 hover:text-gray-900">

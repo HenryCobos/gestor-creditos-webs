@@ -54,7 +54,7 @@ export function getEmailTemplate(day: number, userName: string, dashboardUrl: st
       html: getDayTwoEmail(userName, dashboardUrl)
     },
     3: {
-      subject: '💰 El número que debes revisar cada mañana (10 segundos)',
+      subject: '🚀 Prueba Pro GRATIS 7 días — sin tarjeta',
       html: getDayThreeEmail(userName, dashboardUrl)
     },
     4: {
@@ -66,7 +66,7 @@ export function getEmailTemplate(day: number, userName: string, dashboardUrl: st
       html: getDayFiveEmail(userName, dashboardUrl)
     },
     6: {
-      subject: '⏰ Cómo gestionar 100 clientes en 15 minutos al día',
+      subject: '⚡ Te quedan 5 cupos — ¿Necesitas más capacidad?',
       html: getDaySixEmail(userName, dashboardUrl)
     },
     7: {
@@ -185,36 +185,40 @@ function getDayThreeEmail(userName: string, dashboardUrl: string): string {
       <td align="center" style="padding: 40px 20px;">
         <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 12px;">
           <tr>
-            <td style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
-              <h1 style="color: #ffffff; margin: 0; font-size: 24px;">💰 El Dashboard Secreto</h1>
+            <td style="background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%); padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px;">🚀 7 días del Plan Pro — GRATIS</h1>
+              <p style="color: #bfdbfe; margin: 10px 0 0 0; font-size: 14px;">Sin tarjeta de crédito. Sin compromiso.</p>
             </td>
           </tr>
           <tr>
             <td style="padding: 30px;">
               <p style="font-size: 16px; line-height: 1.6; color: #374151;">Hola <strong>${userName}</strong>,</p>
-              <p style="font-size: 16px; line-height: 1.6; color: #374151;">Los prestamistas exitosos revisan <strong>UNA MÉTRICA</strong> cada mañana:</p>
-              
-              <div style="background: #dbeafe; padding: 25px; border-radius: 8px; margin: 20px 0; text-align: center;">
-                <p style="font-size: 28px; font-weight: bold; margin: 0; color: #1e40af;">"CUÁNTO DEBEN HOY"</p>
+              <p style="font-size: 16px; line-height: 1.6; color: #374151;">Llevas 3 días con el Gestor de Créditos. Es el momento perfecto para una pregunta honesta:</p>
+
+              <div style="background: #eff6ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6;">
+                <p style="font-size: 18px; font-weight: bold; margin: 0; color: #1e40af;">¿El plan gratuito (5 clientes) te alcanza?</p>
+                <p style="margin: 10px 0 0 0; color: #374151; font-size: 14px;">Si tienes más de 5 clientes — o piensas tenerlos — el Plan Pro es lo que necesitas.</p>
               </div>
 
-              <p style="font-size: 16px; line-height: 1.6; color: #374151;">Tu dashboard te muestra:</p>
-              <ul style="color: #374151;">
-                <li>Total por cobrar HOY</li>
-                <li>Quién debe (con nombres)</li>
-                <li>Tu proyección del mes</li>
-              </ul>
+              <p style="font-size: 15px; line-height: 1.6; color: #374151;"><strong>Plan Pro incluye:</strong></p>
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin: 10px 0;">
+                <tr><td style="padding: 6px 0; color: #374151; font-size: 14px;">✅ Hasta 50 clientes activos</td></tr>
+                <tr><td style="padding: 6px 0; color: #374151; font-size: 14px;">✅ 50 préstamos activos simultáneos</td></tr>
+                <tr><td style="padding: 6px 0; color: #374151; font-size: 14px;">✅ PDFs sin marca de agua (contratos profesionales)</td></tr>
+                <tr><td style="padding: 6px 0; color: #374151; font-size: 14px;">✅ Soporte prioritario por email</td></tr>
+                <tr><td style="padding: 6px 0; color: #374151; font-size: 14px;">✅ Reportes avanzados e historial 90 días</td></tr>
+              </table>
 
-              <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <p style="font-weight: bold; margin: 0 0 10px 0;">💡 TIP PRO:</p>
-                <p style="margin: 0;">Revisa tu dashboard cada mañana para mantener el control total de tus cobros.</p>
+              <div style="background: #f0fdf4; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #bbf7d0;">
+                <p style="margin: 0; color: #065f46; font-size: 14px;">💡 <strong>¿Vale la inversión?</strong> El Plan Pro cuesta $19/mes. Con un solo cliente pagando interés mensual, ya se paga solo.</p>
               </div>
 
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${dashboardUrl}" style="display: inline-block; background: #3b82f6; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">📊 Ver Mi Dashboard</a>
+                <a href="${dashboardUrl}" style="display: inline-block; background: linear-gradient(135deg, #3b82f6, #6366f1); color: white; padding: 16px 36px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">⚡ Activar trial gratis en el Dashboard</a>
               </div>
 
-              <p style="font-size: 16px; line-height: 1.6; color: #374151;">Mañana: "Cómo cobrar sin ser insistente" 😊</p>
+              <p style="font-size: 14px; color: #6b7280; text-align: center;">Solo funciona para usuarios registrados. Actívalo en tu dashboard → banner azul.</p>
+              <p style="font-size: 16px; line-height: 1.6; color: #374151;">Mañana: "El truco mental para cobrar más rápido" 😊</p>
             </td>
           </tr>
           ${getEmailFooter(dashboardUrl)}
@@ -347,36 +351,48 @@ function getDaySixEmail(userName: string, dashboardUrl: string): string {
         <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 12px;">
           <tr>
             <td style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
-              <h1 style="color: #ffffff; margin: 0; font-size: 24px;">⏰ De Caos a Control</h1>
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px;">⚡ ¿Te está quedando corto el plan gratuito?</h1>
+              <p style="color: #fef3c7; margin: 8px 0 0 0; font-size: 14px;">Solo te quedan 5 cupos en el plan gratuito</p>
             </td>
           </tr>
           <tr>
             <td style="padding: 30px;">
               <p style="font-size: 16px; line-height: 1.6; color: #374151;">Hola <strong>${userName}</strong>,</p>
-              <p style="font-size: 16px; line-height: 1.6; color: #374151;">Déjame adivinar... cuando empezaste tenías 5 clientes (fácil). Luego 10, luego 20... y ahora, ¿cuántos tienes?</p>
+              <p style="font-size: 16px; line-height: 1.6; color: #374151;">El plan gratuito tiene un límite de <strong>5 clientes y 5 préstamos</strong>. Para un prestamista en crecimiento, eso se llena muy rápido.</p>
               
-              <div style="background: #fee2e2; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <p style="font-weight: bold; margin: 0 0 10px 0; color: #991b1b;">🤯 EL PROBLEMA DEL CRECIMIENTO:</p>
-                <p style="margin: 0; color: #7f1d1d;">Más clientes = Más tiempo en cobrar, más Excel, más estrés</p>
+              <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0; border: 2px solid #f59e0b;">
+                <p style="font-size: 18px; font-weight: bold; margin: 0; color: #92400e;">¿Cuándo necesitas más capacidad?</p>
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin: 12px 0;">
+                  <tr><td style="padding: 5px 0; color: #374151; font-size: 14px;">⚠️ Cuando ya tienes 4-5 clientes y sigues consiguiendo más</td></tr>
+                  <tr><td style="padding: 5px 0; color: #374151; font-size: 14px;">⚠️ Cuando necesitas generar PDFs sin marca de agua</td></tr>
+                  <tr><td style="padding: 5px 0; color: #374151; font-size: 14px;">⚠️ Cuando quieres escalar pero el sistema te frena</td></tr>
+                </table>
               </div>
 
-              <p style="font-size: 18px; font-weight: bold; line-height: 1.6; color: #374151;">LA SOLUCIÓN no es trabajar más horas.<br>Es trabajar MÁS INTELIGENTE.</p>
-              
+              <div style="background: #eff6ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6;">
+                <p style="font-weight: bold; margin: 0 0 8px 0; color: #1e40af;">💡 Plan Pro — Solo $19/mes:</p>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                  <tr><td style="padding: 4px 0; color: #374151; font-size: 14px;">✅ 50 clientes activos (10x más que el gratuito)</td></tr>
+                  <tr><td style="padding: 4px 0; color: #374151; font-size: 14px;">✅ 50 préstamos activos</td></tr>
+                  <tr><td style="padding: 4px 0; color: #374151; font-size: 14px;">✅ PDFs profesionales sin marca de agua</td></tr>
+                  <tr><td style="padding: 4px 0; color: #374151; font-size: 14px;">✅ Soporte prioritario por email</td></tr>
+                </table>
+              </div>
+
+              <div style="background: #f0fdf4; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #bbf7d0;">
+                <p style="margin: 0; color: #065f46; font-size: 14px;">💰 <strong>¿Vale la inversión?</strong> Si cada cliente genera $30/mes en interés, con 1 cliente adicional ya pagaste el plan. Todo lo demás es ganancia.</p>
+              </div>
+
               <div style="background: #dbeafe; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <p style="font-weight: bold; margin: 0 0 10px 0;">⏱️ RUTINA DE 15 MINUTOS:</p>
-                <p style="margin: 5px 0;">5 min: Revisar dashboard (quién debe hoy)</p>
-                <p style="margin: 5px 0;">5 min: Enviar recordatorios a clientes con pagos pendientes</p>
-                <p style="margin: 5px 0;">5 min: Registrar pagos recibidos</p>
-              </div>
-
-              <div style="background: #dcfce7; padding: 25px; border-radius: 8px; margin: 20px 0; text-align: center; border: 2px solid #10b981;">
-                <p style="font-size: 20px; font-weight: bold; margin: 0 0 10px 0; color: #065f46;">💡 CALCULADORA:</p>
-                <p style="margin: 0; color: #064e3b;">Si cobras $100 por préstamo y tienes 50 clientes = $5,000/mes</p>
-                <p style="margin: 10px 0 0 0; font-size: 14px; color: #047857;">Plan Pro cuesta $19/mes. Tu retorno: 263x 🚀</p>
+                <p style="font-weight: bold; margin: 0 0 10px 0; color: #1e40af;">⏱️ RUTINA DE 15 MINUTOS CON PRO:</p>
+                <p style="margin: 5px 0; color: #374151; font-size: 14px;">5 min: Revisar dashboard completo (todos tus clientes)</p>
+                <p style="margin: 5px 0; color: #374151; font-size: 14px;">5 min: Enviar recordatorios automáticos</p>
+                <p style="margin: 5px 0; color: #374151; font-size: 14px;">5 min: Registrar cobros y generar recibos PDF</p>
               </div>
 
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${dashboardUrl}/subscription" style="display: inline-block; background: #f59e0b; color: white; padding: 18px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 18px;">⚡ Ver Planes Disponibles</a>
+                <a href="${dashboardUrl}/dashboard/subscription/upgrade" style="display: inline-block; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 18px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">⚡ Activar Plan Pro — $19/mes</a>
+                <p style="margin: 12px 0 0 0; font-size: 13px; color: #6b7280;">¿No estás seguro? El trial de 7 días está disponible en tu dashboard.</p>
               </div>
 
               <p style="font-size: 16px; line-height: 1.6; color: #374151;">Mañana: Último email con sorpresa final 🎁</p>

@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { DollarSign, Users, TrendingUp, AlertCircle, CreditCard, Crown } from 'lucide-react'
+import { DollarSign, Users, TrendingUp, AlertCircle, CreditCard, Crown, Gift, Zap } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import dynamic from 'next/dynamic'
+import { TrialBanner } from '@/components/trial-banner'
+import { isTrialActive } from '@/lib/trial-helpers'
 
 const DashboardCharts = dynamic(
   () =>
@@ -51,8 +53,12 @@ export function DashboardClient() {
   const [loadingPlan, setLoadingPlan] = useState(true)
   const [limitesOrg, setLimitesOrg] = useState<LimitesOrganizacion | null>(null)
   const [prestamos, setPrestamos] = useState<Prestamo[]>([])
-  const [clientes, setClientes] = useState<any[]>([])
+  const [clientes, setClientes] = useState<{ id: string; [key: string]: unknown }[]>([])
   const [cuotas, setCuotas] = useState<Cuota[]>([])
+  const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null)
+  const [trialPlanSlug, setTrialPlanSlug] = useState<string>('pro')
+  const [trialUsed, setTrialUsed] = useState(false)
+  const [activatingTrial, setActivatingTrial] = useState(false)
   const { config } = useConfigStore()
   const { 
     getCurrentPlan, 
@@ -63,10 +69,9 @@ export function DashboardClient() {
   const supabase = createClient()
 
   useEffect(() => {
-    // Cargar plan y límites primero
     loadSubscriptionData()
-    // Cargar métricas en paralelo
     loadData()
+    loadTrialInfo()
   }, [])
   
   const loadSubscriptionData = async () => {
@@ -91,6 +96,34 @@ export function DashboardClient() {
       console.error('[Dashboard] Error al cargar suscripción:', error)
     } finally {
       setLoadingPlan(false)
+    }
+  }
+
+  const loadTrialInfo = async () => {
+    try {
+      const res = await fetch('/api/activate-trial')
+      if (res.ok) {
+        const data = await res.json()
+        setTrialEndsAt(data.trialEndsAt || null)
+        setTrialPlanSlug(data.planSlug || 'pro')
+        setTrialUsed(data.trialUsed || false)
+      }
+    } catch {
+      // silencioso
+    }
+  }
+
+  const handleActivarTrial = async () => {
+    setActivatingTrial(true)
+    try {
+      const res = await fetch('/api/activate-trial', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) {
+        setTrialEndsAt(data.trial_ends_at)
+        setTrialUsed(true)
+      }
+    } finally {
+      setActivatingTrial(false)
     }
   }
 
@@ -164,23 +197,51 @@ export function DashboardClient() {
         limites={limitesOrg}
         loading={loadingPlan}
         onRetry={loadSubscriptionData}
+        trialUsed={trialUsed}
+        onActivarTrial={handleActivarTrial}
+        activatingTrial={activatingTrial}
       />
 
-      {/* Banner de Suscripción - Siempre visible para plan gratuito o mientras carga */}
-      {(!loadingPlan && currentPlan?.slug === 'free') && (
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg p-6 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-bold mb-2">🚀 Potencia tu Negocio</h3>
-              <p className="text-blue-100">
-                Estás en el Plan Gratuito. Actualiza para gestionar más clientes y préstamos.
-              </p>
+      {/* Banner de Trial activo */}
+      {isTrialActive(trialEndsAt) && (
+        <TrialBanner trialEndsAt={trialEndsAt} planSlug={trialPlanSlug} />
+      )}
+
+      {/* Banner de upgrade para plan gratuito sin trial activo */}
+      {!loadingPlan && currentPlan?.slug === 'free' && !isTrialActive(trialEndsAt) && (
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg p-5 text-white">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+                {trialUsed ? <Zap className="w-5 h-5" /> : <Gift className="w-5 h-5 text-yellow-300" />}
+              </div>
+              <div>
+                <h3 className="font-bold text-base">
+                  {trialUsed ? 'Potencia tu negocio — Plan Pro' : '7 días gratis del Plan Pro'}
+                </h3>
+                <p className="text-blue-100 text-sm mt-0.5">
+                  {trialUsed
+                    ? 'Gestiona hasta 50 clientes, exporta PDFs y escala tu negocio.'
+                    : 'Sin tarjeta de crédito. 50 clientes, PDFs sin marca de agua, soporte prioritario.'}
+                </p>
+              </div>
             </div>
-            <Link href="/dashboard/subscription">
-              <button className="bg-white text-blue-600 px-6 py-3 rounded-lg font-bold hover:bg-blue-50 transition-colors">
-                Ver Planes
-              </button>
-            </Link>
+            <div className="flex gap-2 flex-shrink-0">
+              {!trialUsed && (
+                <button
+                  onClick={handleActivarTrial}
+                  disabled={activatingTrial}
+                  className="bg-yellow-400 text-yellow-900 px-4 py-2 rounded-lg font-bold text-sm hover:bg-yellow-300 transition-colors whitespace-nowrap"
+                >
+                  {activatingTrial ? 'Activando...' : 'Prueba gratis 7 días'}
+                </button>
+              )}
+              <Link href="/dashboard/subscription">
+                <button className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-colors whitespace-nowrap">
+                  Ver planes
+                </button>
+              </Link>
+            </div>
           </div>
         </div>
       )}

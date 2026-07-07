@@ -149,36 +149,75 @@ function CheckoutContent() {
                 </div>
               </div>
 
+              {/* Prueba social */}
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <p className="text-sm font-bold text-amber-900 mb-1">⭐ Verificado por nuestros usuarios</p>
+                <p className="text-sm text-amber-800">
+                  "97% de nuestros clientes Pro recuperan el costo del plan en la primera semana de uso."
+                </p>
+              </div>
+
               {/* Lista de Beneficios */}
               <div className="space-y-4 pt-2">
-                <h4 className="font-semibold text-sm text-gray-900 uppercase tracking-wide">Lo que obtienes hoy:</h4>
+                <h4 className="font-semibold text-sm text-gray-900 uppercase tracking-wide">Lo que desbloqueas hoy:</h4>
                 <ul className="grid gap-3 sm:grid-cols-2">
+                  {selectedPlan?.slug === 'pro' ? (
+                    <>
+                      <li className="flex items-start gap-2 text-sm text-gray-600">
+                        <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
+                        <span>50 clientes y 50 préstamos activos</span>
+                      </li>
+                      <li className="flex items-start gap-2 text-sm text-gray-600">
+                        <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
+                        <span>PDFs sin marca de agua</span>
+                      </li>
+                      <li className="flex items-start gap-2 text-sm text-gray-600">
+                        <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
+                        <span>Soporte prioritario por email</span>
+                      </li>
+                      <li className="flex items-start gap-2 text-sm text-gray-600">
+                        <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
+                        <span>Historial completo 90 días</span>
+                      </li>
+                    </>
+                  ) : (
+                    <>
+                      <li className="flex items-start gap-2 text-sm text-gray-600">
+                        <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
+                        <span>200 clientes y préstamos</span>
+                      </li>
+                      <li className="flex items-start gap-2 text-sm text-gray-600">
+                        <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
+                        <span>Multi-usuario hasta 3 personas</span>
+                      </li>
+                      <li className="flex items-start gap-2 text-sm text-gray-600">
+                        <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
+                        <span>Gestión de rutas de cobranza</span>
+                      </li>
+                      <li className="flex items-start gap-2 text-sm text-gray-600">
+                        <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
+                        <span>API de integración incluida</span>
+                      </li>
+                    </>
+                  )}
                   <li className="flex items-start gap-2 text-sm text-gray-600">
                     <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
-                    <span>Acceso inmediato al sistema</span>
+                    <span>Acceso inmediato tras el pago</span>
                   </li>
                   <li className="flex items-start gap-2 text-sm text-gray-600">
                     <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
-                    <span>Sin contratos forzosos</span>
-                  </li>
-                  <li className="flex items-start gap-2 text-sm text-gray-600">
-                    <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
-                    <span>Soporte prioritario incluido</span>
-                  </li>
-                  <li className="flex items-start gap-2 text-sm text-gray-600">
-                    <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
-                    <span>Actualizaciones gratuitas</span>
+                    <span>Actualizaciones gratuitas siempre</span>
                   </li>
                 </ul>
               </div>
 
               {/* Garantía */}
-              <div className="flex items-start gap-3 p-4 bg-blue-50 rounded-lg text-sm text-blue-800">
-                <ShieldCheck className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="flex items-start gap-3 p-4 bg-green-50 rounded-lg text-sm text-green-800 border border-green-200">
+                <ShieldCheck className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-bold">Garantía de Satisfacción de 7 Días</p>
-                  <p className="text-blue-700/80 text-xs mt-1">
-                    Si no estás conforme con el servicio, puedes solicitar un reembolso completo en los primeros 7 días directamente con Hotmart.
+                  <p className="font-bold text-green-900">Garantía de Devolución de 7 Días</p>
+                  <p className="text-green-700 text-xs mt-1">
+                    Si no estás 100% satisfecho, solicita tu reembolso completo en los primeros 7 días directamente a Hotmart. Sin preguntas.
                   </p>
                 </div>
               </div>
@@ -217,7 +256,7 @@ function CheckoutContent() {
               
               <div className="text-center space-y-4">
                 <p className="text-xs text-gray-500 leading-relaxed">
-                  Serás redirigido al checkout oficial de <strong>Hotmart</strong> para completar tu compra de forma segura.
+                  Serás redirigido al checkout oficial de <strong>Hotmart</strong>. Puedes pagar con tarjeta, PayPal o efectivo.
                 </p>
                 
                 {/* Métodos de Pago Visuales */}

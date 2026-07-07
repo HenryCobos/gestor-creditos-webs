@@ -99,12 +99,17 @@ export default function RegisterPage() {
 
       // Mostrar mensaje de éxito
       toast({
-        title: '¡Cuenta creada con éxito! 🎉',
-        description: 'Tu cuenta está lista para usar',
+        title: '¡Cuenta creada con éxito!',
+        description: 'Preparando tu espacio de trabajo...',
       })
 
-      // Redirigir a página de bienvenida con instrucciones
-      router.push('/bienvenida')
+      // Si Supabase devolvió sesión directamente (sin confirmación de email),
+      // ir directo al onboarding. Si requiere confirmación, ir al login.
+      if (authData.session) {
+        router.push('/onboarding')
+      } else {
+        router.push(`/login?message=Revisa+tu+correo+para+confirmar+tu+cuenta&email=${encodeURIComponent(normalizedEmail)}`)
+      }
 
     } catch (error: any) {
       console.error('Error al registrar:', error)

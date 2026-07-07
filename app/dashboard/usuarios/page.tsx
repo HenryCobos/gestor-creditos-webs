@@ -35,6 +35,8 @@ import { Plus, Pencil, Trash2, UserPlus, Key, UserX, UserCheck } from 'lucide-re
 import { useStore, type Profile, type UserRole } from '@/lib/store'
 import { formatDate } from '@/lib/utils'
 import { UsuarioCardMobile } from '@/components/UsuarioCardMobile'
+import { useSubscriptionStore } from '@/lib/subscription-store'
+import { FeatureGateDialog } from '@/components/feature-gate-dialog'
 
 export default function UsuariosPage() {
   const [open, setOpen] = useState(false)
@@ -42,9 +44,11 @@ export default function UsuariosPage() {
   const [editingUsuario, setEditingUsuario] = useState<Profile | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [organizationId, setOrganizationId] = useState<string | null>(null)
+  const [showMultiUserGate, setShowMultiUserGate] = useState(false)
   const { toast } = useToast()
   const supabase = createClient()
   const { usuarios, setUsuarios } = useStore()
+  const { getCurrentPlan } = useSubscriptionStore()
 
   const [formData, setFormData] = useState({
     email: '',
@@ -463,7 +467,16 @@ export default function UsuariosPage() {
           if (!isOpen) resetForm()
         }}>
           <DialogTrigger asChild>
-            <Button className="w-full sm:w-auto">
+            <Button
+              className="w-full sm:w-auto"
+              onClick={(e) => {
+                const plan = getCurrentPlan()
+                if (plan?.slug === 'free') {
+                  e.preventDefault()
+                  setShowMultiUserGate(true)
+                }
+              }}
+            >
               <UserPlus className="mr-2 h-4 w-4" />
               Nuevo Usuario
             </Button>
@@ -679,6 +692,13 @@ export default function UsuariosPage() {
           )}
         </CardContent>
       </Card>
+
+      <FeatureGateDialog
+        open={showMultiUserGate}
+        onOpenChange={setShowMultiUserGate}
+        variant="multiusuario"
+        trialUsed={true}
+      />
     </div>
   )
 }
