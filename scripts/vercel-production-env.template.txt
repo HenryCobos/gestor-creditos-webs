@@ -1,10 +1,28 @@
 # Copiar estas variables en Vercel → Project → Settings → Environment Variables (Production)
+# O sincronizar automáticamente: node scripts/sync-vercel-env.mjs --push
 # NO commitear valores reales con secretos.
 
+# --- Core ---
+NEXT_PUBLIC_SUPABASE_URL=<desde Supabase → Settings → API>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<desde Supabase → Settings → API>
+SUPABASE_SERVICE_ROLE_KEY=<desde Supabase → Settings → API → service_role>
+NEXT_PUBLIC_APP_URL=https://gestor-creditos-webs.vercel.app
+
+# --- Email drip (Resend) ---
 RESEND_FROM_EMAIL=Henry - Gestor de Créditos <hola@ingresosonlinehoy.com>
 RESEND_API_KEY=<desde https://resend.com/api-keys>
 CRON_SECRET=<generar con: openssl rand -hex 32>
-NEXT_PUBLIC_APP_URL=https://gestor-creditos-webs.vercel.app
+
+# --- Hotmart ---
+HOTMART_WEBHOOK_SECRET=<token hottok de Hotmart webhook>
+
+# --- Analytics (opcional) ---
+NEXT_PUBLIC_GTM_ID=<GTM-XXXX>
+NEXT_PUBLIC_GA_MEASUREMENT_ID=<G-XXXX>
+NEXT_PUBLIC_GOOGLE_ADS_ID=<AW-XXXX>
+NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_SIGNUP=<AW-XXXX/label>
+NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_PURCHASE=<AW-XXXX/label>
 
 # Importante: NEXT_PUBLIC_APP_URL debe ser tu URL de Vercel actual.
 # NO uses ingresosonlinehoy.com aquí — solo sirve para el remitente del email.
+# RESEND_FROM_EMAIL usa ingresosonlinehoy.com (dominio verificado en Resend).

@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "setup:resend-mail": "node scripts/setup-resend-mail-domain.mjs"
+    "setup:resend-mail": "node scripts/setup-resend-mail-domain.mjs",
+    "env:audit": "node scripts/sync-vercel-env.mjs --audit",
+    "env:sync-vercel": "node scripts/sync-vercel-env.mjs --push"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.4",
