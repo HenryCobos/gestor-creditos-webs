@@ -697,7 +697,6 @@ export default function UsuariosPage() {
         open={showMultiUserGate}
         onOpenChange={setShowMultiUserGate}
         variant="multiusuario"
-        trialUsed={true}
       />
     </div>
   )

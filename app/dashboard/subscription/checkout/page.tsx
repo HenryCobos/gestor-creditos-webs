@@ -11,6 +11,7 @@ import { loadPlans } from '@/lib/subscription-helpers'
 import { trackBeginCheckout } from '@/lib/analytics'
 import { createClient } from '@/lib/supabase/client'
 import { getHotmartCheckoutUrl } from '@/lib/hotmart'
+import { planHasTrial } from '@/lib/plan-offers'
 
 function CheckoutContent() {
   const searchParams = useSearchParams()
@@ -64,7 +65,13 @@ function CheckoutContent() {
       selectedPlan.slug,
       period,
       user.email || '',
-      user.id
+      user.id,
+      {
+        useTrial: planHasTrial(
+          selectedPlan.slug as 'pro' | 'business' | 'enterprise',
+          period
+        ),
+      }
     )
 
     if (checkoutUrl) {

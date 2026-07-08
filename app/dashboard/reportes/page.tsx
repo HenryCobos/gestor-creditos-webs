@@ -71,7 +71,6 @@ export default function ReportesPage() {
   const [fechaDesde, setFechaDesde] = useState<string>('')
   const [fechaHasta, setFechaHasta] = useState<string>('')
   const [showPdfGate, setShowPdfGate] = useState(false)
-  const [trialUsed, setTrialUsed] = useState(false)
   const supabase = createClient()
   const { config } = useConfigStore()
   const { toast } = useToast()
@@ -79,7 +78,6 @@ export default function ReportesPage() {
 
   useEffect(() => {
     loadReportes()
-    fetch('/api/activate-trial').then(r => r.json()).then(d => setTrialUsed(d.trialUsed || false)).catch(() => {})
   }, [rangoFecha, fechaDesde, fechaHasta])
 
   const getFechasFiltro = () => {
@@ -738,7 +736,6 @@ export default function ReportesPage() {
         open={showPdfGate}
         onOpenChange={setShowPdfGate}
         variant="pdf"
-        trialUsed={trialUsed}
       />
     </div>
   )

@@ -8,6 +8,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { getHotmartCheckoutUrl } from '@/lib/hotmart'
+import { planHasTrial } from '@/lib/plan-offers'
+import { Gift } from 'lucide-react'
 import {
   ArrowLeft,
   ArrowRight,
@@ -97,13 +99,17 @@ export default function UpgradePage() {
 
   const handleContinuar = () => {
     if (!user) return
-    const url = getHotmartCheckoutUrl(planSeleccionado, periodo, user.email, user.id)
+    const url = getHotmartCheckoutUrl(planSeleccionado, periodo, user.email, user.id, {
+      useTrial: planHasTrial(planSeleccionado, periodo),
+    })
     if (url) {
       window.location.href = url
     } else {
       router.push(`/dashboard/subscription/checkout?plan=${planSeleccionado}&period=${periodo}`)
     }
   }
+
+  const hasTrial = planHasTrial(planSeleccionado, periodo)
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
@@ -274,9 +280,21 @@ export default function UpgradePage() {
           className="w-full h-14 text-lg font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-200"
           onClick={handleContinuar}
         >
-          Continuar al pago seguro →
-          <ArrowRight className="w-5 h-5 ml-2" />
+          {hasTrial ? (
+            <>
+              <Gift className="w-5 h-5 mr-2 inline" />
+              Probar 7 días gratis en Hotmart →
+            </>
+          ) : (
+            <>Continuar al pago seguro →</>
+          )}
+          <ArrowRight className="w-5 h-5 ml-2 inline" />
         </Button>
+        {planSeleccionado === 'pro' && periodo === 'monthly' && (
+          <p className="text-center text-xs text-gray-500">
+            El Plan Pro mensual no incluye trial. Anual sí incluye 7 días gratis.
+          </p>
+        )}
         <p className="text-center text-xs text-gray-400">
           Serás redirigido al checkout oficial de Hotmart. Pago 100% seguro.
         </p>

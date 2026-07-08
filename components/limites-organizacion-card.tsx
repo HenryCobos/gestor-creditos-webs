@@ -12,7 +12,6 @@ import {
   FileText,
   RefreshCw,
   TrendingUp,
-  Zap,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
@@ -20,9 +19,8 @@ type Props = {
   limites: LimitesOrganizacion | null
   loading: boolean
   onRetry?: () => void
-  trialUsed?: boolean
-  onActivarTrial?: () => void
-  activatingTrial?: boolean
+  onUpgradePro?: () => void
+  upgradingPro?: boolean
 }
 
 function getUrgencyLevel(pct: number): 'low' | 'medium' | 'high' | 'critical' {
@@ -61,9 +59,8 @@ export function LimitesOrganizacionCard({
   limites,
   loading,
   onRetry,
-  trialUsed = false,
-  onActivarTrial,
-  activatingTrial = false,
+  onUpgradePro,
+  upgradingPro = false,
 }: Props) {
   const router = useRouter()
 
@@ -242,16 +239,15 @@ export function LimitesOrganizacionCard({
                   : 'Límite de préstamos alcanzado'}
               </span>
             </div>
-            {/* Oferta de trial si no lo ha usado */}
-            {!trialUsed && onActivarTrial && (
+            {onUpgradePro && (
               <Button
                 size="sm"
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white w-full"
-                onClick={onActivarTrial}
-                disabled={activatingTrial}
+                className="bg-blue-600 hover:bg-blue-700 text-white w-full"
+                onClick={onUpgradePro}
+                disabled={upgradingPro}
               >
-                <Zap className="w-4 h-4 mr-2" />
-                {activatingTrial ? 'Activando...' : 'Prueba Pro 7 días gratis'}
+                <TrendingUp className="w-4 h-4 mr-2" />
+                {upgradingPro ? 'Redirigiendo...' : 'Activar Pro — $19/mes'}
               </Button>
             )}
           </div>

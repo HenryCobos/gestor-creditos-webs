@@ -20,6 +20,10 @@ import {
 import { useSubscriptionStore } from '@/lib/subscription-store'
 import { loadPlans, loadUserSubscription, loadUsageLimits, getPlanBenefits } from '@/lib/subscription-helpers'
 import type { Plan } from '@/lib/subscription-store'
+import { createClient } from '@/lib/supabase/client'
+import { getHotmartCheckoutUrl } from '@/lib/hotmart'
+import { planHasTrial } from '@/lib/plan-offers'
+import { Gift } from 'lucide-react'
 
 export default function SubscriptionPage() {
   const [loading, setLoading] = useState(true)
@@ -65,8 +69,25 @@ export default function SubscriptionPage() {
       return
     }
 
-    // Redirigir a PayPal o mostrar modal de pago
-    router.push(`/dashboard/subscription/checkout?plan=${plan.id}&period=${selectedPeriod}`)
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user?.email) {
+      router.push('/login')
+      return
+    }
+
+    const slug = plan.slug as 'pro' | 'business' | 'enterprise'
+    const url = getHotmartCheckoutUrl(slug, selectedPeriod, user.email, user.id, {
+      useTrial: planHasTrial(slug, selectedPeriod),
+    })
+
+    if (url) {
+      window.location.href = url
+    } else {
+      router.push(`/dashboard/subscription/checkout?plan=${plan.id}&period=${selectedPeriod}`)
+    }
   }
 
   const getPlanIcon = (slug: string) => {
@@ -269,6 +290,13 @@ export default function SubscriptionPage() {
                     Ahorras ${(plan.precio_mensual * 12 - plan.precio_anual).toFixed(0)} al año
                   </p>
                 )}
+                {plan.slug !== 'free' &&
+                  planHasTrial(plan.slug as 'pro' | 'business' | 'enterprise', selectedPeriod) && (
+                    <div className="flex items-center gap-1.5 mt-2 text-xs font-semibold text-emerald-700">
+                      <Gift className="w-3.5 h-3.5" />
+                      7 días de prueba gratis
+                    </div>
+                  )}
               </CardHeader>
 
               <CardContent className="space-y-4">
@@ -291,7 +319,9 @@ export default function SubscriptionPage() {
                     ? 'Plan Actual'
                     : plan.slug === 'free'
                     ? 'Contactar'
-                    : 'Seleccionar Plan'}
+                    : planHasTrial(plan.slug as 'pro' | 'business' | 'enterprise', selectedPeriod)
+                    ? 'Probar 7 días gratis →'
+                    : 'Ir a pagar en Hotmart →'}
                 </Button>
               </CardContent>
             </Card>

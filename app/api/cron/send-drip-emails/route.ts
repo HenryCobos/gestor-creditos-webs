@@ -90,7 +90,7 @@ export async function GET(request: Request) {
           if (template) {
             // Enviar email con Resend
             const resend = getResend()
-            const fromEmail = process.env.RESEND_FROM_EMAIL || 'Henry - Gestor de Créditos <onboarding@resend.dev>'
+            const fromEmail = process.env.RESEND_FROM_EMAIL || 'Henry - Gestor de Créditos <hola@ingresosonlinehoy.com>'
             const { data: emailData, error: emailError } = await resend.emails.send({
               from: fromEmail,
               to: campaign.email,
@@ -185,7 +185,7 @@ export async function GET(request: Request) {
           const html = getLimitWarningEmail(nombre, cuposRestantes, dashboardUrl)
 
           const resend = getResend()
-          const fromEmail = process.env.RESEND_FROM_EMAIL || 'Henry - Gestor de Créditos <onboarding@resend.dev>'
+          const fromEmail = process.env.RESEND_FROM_EMAIL || 'Henry - Gestor de Créditos <hola@ingresosonlinehoy.com>'
           const { error: emailErr } = await resend.emails.send({
             from: fromEmail,
             to: camp.email,

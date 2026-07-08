@@ -15,6 +15,29 @@ export const HOTMART_CONFIG = {
       yearly: 'https://pay.hotmart.com/C103126853X?off=lkmzhadk',
     },
   },
+  /**
+   * Ofertas de trial 7 días en Hotmart (códigos `off=` distintos).
+   * Cuando los configures en Hotmart, reemplaza null por la URL completa.
+   * Si es null, se usa LINKS estándar (mismo checkout, trial lo gestiona Hotmart).
+   */
+  TRIAL_LINKS: {
+    pro: {
+      yearly: null as string | null,
+    },
+    business: {
+      monthly: null as string | null,
+      yearly: null as string | null,
+    },
+    enterprise: {
+      monthly: null as string | null,
+      yearly: null as string | null,
+    },
+  },
+}
+
+export type HotmartCheckoutOptions = {
+  /** Si true y existe TRIAL_LINKS para ese plan, usa la oferta de trial */
+  useTrial?: boolean
 }
 
 /**
@@ -29,32 +52,37 @@ export function getHotmartCheckoutUrl(
   planSlug: string,
   period: 'monthly' | 'yearly',
   userEmail: string,
-  userId: string
+  userId: string,
+  options?: HotmartCheckoutOptions
 ): string | null {
-  // Normalizar el slug si es necesario (asegurar minúsculas)
-  const normalizedSlug = planSlug.toLowerCase()
-  
-  // Obtener la URL base según el plan y periodo
-  // @ts-ignore
-  const baseUrl = HOTMART_CONFIG.LINKS[normalizedSlug]?.[period]
+  const normalizedSlug = planSlug.toLowerCase() as keyof typeof HOTMART_CONFIG.LINKS
+  const useTrial = options?.useTrial ?? false
+
+  let baseUrl: string | null | undefined
+
+  if (useTrial) {
+    const trialLinks = HOTMART_CONFIG.TRIAL_LINKS[normalizedSlug as keyof typeof HOTMART_CONFIG.TRIAL_LINKS]
+    if (trialLinks) {
+      baseUrl = trialLinks[period as keyof typeof trialLinks] ?? undefined
+    }
+  }
+
+  if (!baseUrl) {
+    baseUrl = HOTMART_CONFIG.LINKS[normalizedSlug]?.[period]
+  }
 
   if (!baseUrl) {
     console.error(`No se encontró link de Hotmart para: ${normalizedSlug} - ${period}`)
     
-    // Fallback por si acaso (intentar mapear nombres comunes)
     if (normalizedSlug === 'professional') {
-      // @ts-ignore
-      return HOTMART_CONFIG.LINKS['pro']?.[period] 
-        ? `${HOTMART_CONFIG.LINKS['pro'][period]}&email=${encodeURIComponent(userEmail)}&sck=${userId}&checkoutMode=10`
+      const fallback = HOTMART_CONFIG.LINKS['pro']?.[period]
+      return fallback
+        ? `${fallback}&email=${encodeURIComponent(userEmail)}&sck=${userId}&checkoutMode=10`
         : null
     }
     
     return null
   }
 
-  // Construir URL con parámetros
-  // sck (Source Key): Usamos esto para pasar el ID del usuario y recuperarlo en el webhook
-  // email: Para que el usuario no tenga que escribirlo de nuevo
-  // checkoutMode: 10 (apariencia limpia)
   return `${baseUrl}&email=${encodeURIComponent(userEmail)}&sck=${userId}&checkoutMode=10`
 }

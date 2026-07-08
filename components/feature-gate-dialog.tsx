@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import {
   Dialog,
   DialogContent,
@@ -10,8 +9,10 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Zap, Star, Check } from 'lucide-react'
+import { Star, Check, Gift } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
+import { redirectToHotmartCheckout } from '@/lib/hotmart-checkout'
+import { planHasTrial } from '@/lib/plan-offers'
 
 type FeatureGateVariant = 'pdf' | 'multiusuario' | 'api' | 'custom'
 
@@ -19,24 +20,29 @@ interface FeatureGateDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   variant: FeatureGateVariant
-  trialUsed?: boolean
   customTitle?: string
   customDescription?: string
   requiredPlan?: string
 }
 
-const FEATURE_CONFIG: Record<FeatureGateVariant, {
-  icon: string
-  title: string
-  description: string
-  benefits: string[]
-  plan: string
-  price: string
-}> = {
+const FEATURE_CONFIG: Record<
+  FeatureGateVariant,
+  {
+    icon: string
+    title: string
+    description: string
+    benefits: string[]
+    plan: string
+    price: string
+    slug: 'pro' | 'business' | 'enterprise'
+    period: 'monthly' | 'yearly'
+  }
+> = {
   pdf: {
     icon: '📄',
     title: 'PDFs sin marca de agua — Plan Pro',
-    description: 'Los reportes y contratos PDF sin marca de agua están disponibles en el Plan Pro. Tus clientes verán documentos completamente profesionales.',
+    description:
+      'Los reportes y contratos PDF sin marca de agua están disponibles en el Plan Pro. Tus clientes verán documentos completamente profesionales.',
     benefits: [
       'Contratos PDF sin marca de agua',
       'Comprobantes de pago profesionales',
@@ -45,24 +51,30 @@ const FEATURE_CONFIG: Record<FeatureGateVariant, {
     ],
     plan: 'Pro',
     price: '$19/mes',
+    slug: 'pro',
+    period: 'monthly',
   },
   multiusuario: {
     icon: '👥',
     title: 'Multi-usuario — Plan Business',
-    description: 'Agrega cobradores y administradores a tu equipo. El Plan Business te permite colaborar con hasta 3 usuarios.',
+    description:
+      'Agrega cobradores y administradores a tu equipo. El Plan Business te permite colaborar con hasta 5 usuarios.',
     benefits: [
-      'Hasta 3 usuarios en tu equipo',
+      'Hasta 5 usuarios en tu equipo',
       'Roles de admin y cobrador',
       '200 clientes y 200 préstamos',
       'Gestión de rutas de cobranza',
     ],
     plan: 'Business',
     price: '$49/mes',
+    slug: 'business',
+    period: 'monthly',
   },
   api: {
     icon: '⚡',
     title: 'API de integración — Plan Enterprise',
-    description: 'Conecta el gestor de créditos con tus otros sistemas mediante API. Disponible en el Plan Enterprise.',
+    description:
+      'Conecta el gestor de créditos con tus otros sistemas mediante API. Disponible en el Plan Enterprise.',
     benefits: [
       'Acceso completo a la API REST',
       'Clientes y préstamos ilimitados',
@@ -71,6 +83,8 @@ const FEATURE_CONFIG: Record<FeatureGateVariant, {
     ],
     plan: 'Enterprise',
     price: '$179/mes',
+    slug: 'enterprise',
+    period: 'monthly',
   },
   custom: {
     icon: '🔒',
@@ -79,6 +93,8 @@ const FEATURE_CONFIG: Record<FeatureGateVariant, {
     benefits: ['Más capacidad', 'Funciones avanzadas', 'Soporte prioritario'],
     plan: 'Pro',
     price: '$19/mes',
+    slug: 'pro',
+    period: 'monthly',
   },
 }
 
@@ -86,45 +102,28 @@ export function FeatureGateDialog({
   open,
   onOpenChange,
   variant,
-  trialUsed = false,
   customTitle,
   customDescription,
   requiredPlan,
 }: FeatureGateDialogProps) {
-  const router = useRouter()
   const { toast } = useToast()
-  const [activatingTrial, setActivatingTrial] = useState(false)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
 
   const config = FEATURE_CONFIG[variant]
   const title = customTitle || config.title
   const description = customDescription || config.description
   const plan = requiredPlan || config.plan
+  const hasTrial = planHasTrial(config.slug, config.period)
 
-  const showTrial = !trialUsed && (variant === 'pdf' || variant === 'custom')
-
-  const handleActivarTrial = async () => {
-    setActivatingTrial(true)
-    try {
-      const res = await fetch('/api/activate-trial', { method: 'POST' })
-      if (res.ok) {
-        toast({
-          title: '¡Trial Pro activado!',
-          description: 'Tienes 7 días gratis con todas las funciones Pro.',
-        })
-        onOpenChange(false)
-        router.refresh()
-      } else {
-        const data = await res.json()
-        toast({ title: 'No disponible', description: data.error, variant: 'destructive' })
-      }
-    } finally {
-      setActivatingTrial(false)
+  const handleCheckout = async () => {
+    setCheckoutLoading(true)
+    const result = await redirectToHotmartCheckout(config.slug, config.period, {
+      useTrial: hasTrial,
+    })
+    if (!result.ok) {
+      toast({ title: 'Error', description: result.error, variant: 'destructive' })
+      setCheckoutLoading(false)
     }
-  }
-
-  const handleVerPlanes = () => {
-    onOpenChange(false)
-    router.push('/dashboard/subscription')
   }
 
   return (
@@ -139,7 +138,6 @@ export function FeatureGateDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Beneficios */}
           <div className="bg-gray-50 rounded-lg p-4 space-y-2">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
               Plan {plan} incluye:
@@ -152,25 +150,29 @@ export function FeatureGateDialog({
             ))}
           </div>
 
-          {/* CTAs */}
+          {hasTrial && (
+            <div className="flex items-center gap-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
+              <Gift className="w-4 h-4 shrink-0" />
+              7 días de prueba gratis disponibles en Hotmart
+            </div>
+          )}
+
           <div className="space-y-2">
-            {showTrial && (
-              <Button
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 h-11"
-                onClick={handleActivarTrial}
-                disabled={activatingTrial}
-              >
-                <Zap className="w-4 h-4 mr-2" />
-                {activatingTrial ? 'Activando...' : 'Probar Pro 7 días GRATIS'}
-              </Button>
-            )}
             <Button
-              variant={showTrial ? 'outline' : 'default'}
-              className={`w-full h-10 ${!showTrial ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}`}
-              onClick={handleVerPlanes}
+              className="w-full bg-blue-600 hover:bg-blue-700 h-11"
+              onClick={handleCheckout}
+              disabled={checkoutLoading}
             >
-              <Star className="w-4 h-4 mr-2" />
-              Activar Plan {plan} — {config.price}
+              {hasTrial ? (
+                <Gift className="w-4 h-4 mr-2" />
+              ) : (
+                <Star className="w-4 h-4 mr-2" />
+              )}
+              {checkoutLoading
+                ? 'Redirigiendo a Hotmart...'
+                : hasTrial
+                ? `Probar ${plan} 7 días gratis →`
+                : `Activar Plan ${plan} — ${config.price}`}
             </Button>
             <button
               type="button"
@@ -182,7 +184,7 @@ export function FeatureGateDialog({
           </div>
 
           <p className="text-center text-xs text-gray-400">
-            Garantía de devolución de 7 días · Sin contratos forzosos
+            Pago seguro en Hotmart · Garantía de devolución 7 días
           </p>
         </div>
       </DialogContent>

@@ -3,11 +3,13 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { DollarSign, Users, TrendingUp, AlertCircle, CreditCard, Crown, Gift, Zap } from 'lucide-react'
+import { DollarSign, Users, TrendingUp, AlertCircle, CreditCard, Crown, Zap } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import dynamic from 'next/dynamic'
 import { TrialBanner } from '@/components/trial-banner'
 import { isTrialActive } from '@/lib/trial-helpers'
+import { redirectToHotmartCheckout } from '@/lib/hotmart-checkout'
+import { PLAN_PRICES } from '@/lib/plan-offers'
 
 const DashboardCharts = dynamic(
   () =>
@@ -57,8 +59,7 @@ export function DashboardClient() {
   const [cuotas, setCuotas] = useState<Cuota[]>([])
   const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null)
   const [trialPlanSlug, setTrialPlanSlug] = useState<string>('pro')
-  const [trialUsed, setTrialUsed] = useState(false)
-  const [activatingTrial, setActivatingTrial] = useState(false)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
   const { config } = useConfigStore()
   const { 
     getCurrentPlan, 
@@ -106,25 +107,16 @@ export function DashboardClient() {
         const data = await res.json()
         setTrialEndsAt(data.trialEndsAt || null)
         setTrialPlanSlug(data.planSlug || 'pro')
-        setTrialUsed(data.trialUsed || false)
       }
     } catch {
-      // silencioso
+      // silencioso — solo para trials legacy en Supabase
     }
   }
 
-  const handleActivarTrial = async () => {
-    setActivatingTrial(true)
-    try {
-      const res = await fetch('/api/activate-trial', { method: 'POST' })
-      const data = await res.json()
-      if (res.ok) {
-        setTrialEndsAt(data.trial_ends_at)
-        setTrialUsed(true)
-      }
-    } finally {
-      setActivatingTrial(false)
-    }
+  const handleUpgradePro = async () => {
+    setCheckoutLoading(true)
+    const result = await redirectToHotmartCheckout('pro', 'monthly')
+    if (!result.ok) setCheckoutLoading(false)
   }
 
   const loadData = async () => {
@@ -197,9 +189,8 @@ export function DashboardClient() {
         limites={limitesOrg}
         loading={loadingPlan}
         onRetry={loadSubscriptionData}
-        trialUsed={trialUsed}
-        onActivarTrial={handleActivarTrial}
-        activatingTrial={activatingTrial}
+        onUpgradePro={handleUpgradePro}
+        upgradingPro={checkoutLoading}
       />
 
       {/* Banner de Trial activo */}
@@ -207,38 +198,33 @@ export function DashboardClient() {
         <TrialBanner trialEndsAt={trialEndsAt} planSlug={trialPlanSlug} />
       )}
 
-      {/* Banner de upgrade para plan gratuito sin trial activo */}
+      {/* Banner de upgrade para plan gratuito */}
       {!loadingPlan && currentPlan?.slug === 'free' && !isTrialActive(trialEndsAt) && (
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg p-5 text-white">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
-                {trialUsed ? <Zap className="w-5 h-5" /> : <Gift className="w-5 h-5 text-yellow-300" />}
+                <Zap className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-bold text-base">
-                  {trialUsed ? 'Potencia tu negocio — Plan Pro' : '7 días gratis del Plan Pro'}
-                </h3>
+                <h3 className="font-bold text-base">Escala con el Plan Profesional</h3>
                 <p className="text-blue-100 text-sm mt-0.5">
-                  {trialUsed
-                    ? 'Gestiona hasta 50 clientes, exporta PDFs y escala tu negocio.'
-                    : 'Sin tarjeta de crédito. 50 clientes, PDFs sin marca de agua, soporte prioritario.'}
+                  50 clientes, PDFs sin marca de agua y soporte prioritario por solo{' '}
+                  ${PLAN_PRICES.pro.monthly}/mes.
                 </p>
               </div>
             </div>
             <div className="flex gap-2 flex-shrink-0">
-              {!trialUsed && (
-                <button
-                  onClick={handleActivarTrial}
-                  disabled={activatingTrial}
-                  className="bg-yellow-400 text-yellow-900 px-4 py-2 rounded-lg font-bold text-sm hover:bg-yellow-300 transition-colors whitespace-nowrap"
-                >
-                  {activatingTrial ? 'Activando...' : 'Prueba gratis 7 días'}
-                </button>
-              )}
+              <button
+                onClick={handleUpgradePro}
+                disabled={checkoutLoading}
+                className="bg-white text-blue-700 px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-50 transition-colors whitespace-nowrap"
+              >
+                {checkoutLoading ? 'Redirigiendo...' : `Activar Pro — $${PLAN_PRICES.pro.monthly}/mes`}
+              </button>
               <Link href="/dashboard/subscription">
                 <button className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-colors whitespace-nowrap">
-                  Ver planes
+                  Ver todos los planes
                 </button>
               </Link>
             </div>

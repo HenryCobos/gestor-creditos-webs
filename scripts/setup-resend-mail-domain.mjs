@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Configura mail.ingresosonlinehoy.com en Resend para el drip email.
+ * Configura ingresosonlinehoy.com en Resend para el drip email.
  * La app sigue en la URL de Vercel (NEXT_PUBLIC_APP_URL) — solo cambia el remitente.
  *
  * Uso:
@@ -15,10 +15,10 @@ import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
-const MAIL_DOMAIN = 'mail.ingresosonlinehoy.com'
+const MAIL_DOMAIN = 'ingresosonlinehoy.com'
 const FROM_EMAIL =
   process.env.RESEND_FROM_EMAIL ||
-  'Henry - Gestor de Créditos <hola@mail.ingresosonlinehoy.com>'
+  'Henry - Gestor de Créditos <hola@ingresosonlinehoy.com>'
 
 function loadEnvLocal() {
   try {
@@ -86,9 +86,8 @@ function printHostingerInstructions(records) {
   }
 
   console.log('Notas Hostinger:')
-  console.log('  - Para subdominio mail, el "Nombre" suele ser solo la parte antes del dominio')
-  console.log('    (ej. "send" o "resend._domainkey", según lo que muestre Resend).')
-  console.log('  - NO añadas registros A/CNAME de mail hacia Vercel.')
+  console.log('  - El "Nombre" suele ser la parte antes del dominio (ej. "send", "resend._domainkey").')
+  console.log('  - NO añadas registros A/CNAME del dominio raíz hacia Vercel si ya apuntan al sitio.')
   console.log('  - Tras guardar, espera 15–60 min y ejecuta: node scripts/setup-resend-mail-domain.mjs --verify\n')
 }
 
@@ -147,7 +146,7 @@ async function sendTestEmail(to) {
 }
 
 async function main() {
-  console.log('=== Setup email: mail.ingresosonlinehoy.com ===\n')
+  console.log('=== Setup email: ingresosonlinehoy.com ===\n')
   console.log(`Remitente configurado: ${FROM_EMAIL}`)
   console.log(
     `URL app (links en emails): ${process.env.NEXT_PUBLIC_APP_URL || '(configura NEXT_PUBLIC_APP_URL en Vercel)'}\n`
@@ -157,7 +156,7 @@ async function main() {
     console.error('ERROR: Configura RESEND_API_KEY en .env.local con tu key de Resend.')
     console.error('  https://resend.com/api-keys\n')
     console.error('Pasos manuales si prefieres la UI:')
-    console.error('  1. Resend → Domains → Add → mail.ingresosonlinehoy.com')
+    console.error('  1. Resend → Domains → Add → ingresosonlinehoy.com')
     console.error('  2. Copia DNS → Hostinger → Verify en Resend')
     console.error('  3. Vercel env: RESEND_FROM_EMAIL=' + FROM_EMAIL)
     process.exit(1)

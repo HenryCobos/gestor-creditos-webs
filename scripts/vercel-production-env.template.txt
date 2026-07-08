@@ -1,7 +1,7 @@
 # Copiar estas variables en Vercel → Project → Settings → Environment Variables (Production)
 # NO commitear valores reales con secretos.
 
-RESEND_FROM_EMAIL=Henry - Gestor de Créditos <hola@mail.ingresosonlinehoy.com>
+RESEND_FROM_EMAIL=Henry - Gestor de Créditos <hola@ingresosonlinehoy.com>
 RESEND_API_KEY=<desde https://resend.com/api-keys>
 CRON_SECRET=<generar con: openssl rand -hex 32>
 NEXT_PUBLIC_APP_URL=https://gestor-creditos-webs.vercel.app
