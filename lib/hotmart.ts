@@ -55,7 +55,10 @@ export function getHotmartCheckoutUrl(
   userId: string,
   options?: HotmartCheckoutOptions
 ): string | null {
-  const normalizedSlug = planSlug.toLowerCase() as keyof typeof HOTMART_CONFIG.LINKS
+  const rawSlug = planSlug.toLowerCase()
+  const normalizedSlug = (
+    rawSlug === 'professional' ? 'pro' : rawSlug
+  ) as keyof typeof HOTMART_CONFIG.LINKS
   const useTrial = options?.useTrial ?? false
 
   let baseUrl: string | null | undefined
@@ -73,14 +76,6 @@ export function getHotmartCheckoutUrl(
 
   if (!baseUrl) {
     console.error(`No se encontró link de Hotmart para: ${normalizedSlug} - ${period}`)
-    
-    if (normalizedSlug === 'professional') {
-      const fallback = HOTMART_CONFIG.LINKS['pro']?.[period]
-      return fallback
-        ? `${fallback}&email=${encodeURIComponent(userEmail)}&sck=${userId}&checkoutMode=10`
-        : null
-    }
-    
     return null
   }
 

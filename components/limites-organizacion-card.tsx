@@ -12,6 +12,7 @@ import {
   FileText,
   RefreshCw,
   TrendingUp,
+  Zap,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 

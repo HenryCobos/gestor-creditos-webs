@@ -32,6 +32,7 @@ import {
 } from '@/lib/subscription-helpers'
 import type { LimitesOrganizacion } from '@/lib/limites-organizacion-shared'
 import { getClientesInteligente, getPrestamosInteligente, getCuotasSegunRol } from '@/lib/queries-con-roles'
+import type { Cliente } from '@/lib/store'
 import { LimitesOrganizacionCard } from '@/components/limites-organizacion-card'
 import Link from 'next/link'
 
@@ -55,7 +56,7 @@ export function DashboardClient() {
   const [loadingPlan, setLoadingPlan] = useState(true)
   const [limitesOrg, setLimitesOrg] = useState<LimitesOrganizacion | null>(null)
   const [prestamos, setPrestamos] = useState<Prestamo[]>([])
-  const [clientes, setClientes] = useState<{ id: string; [key: string]: unknown }[]>([])
+  const [clientes, setClientes] = useState<Cliente[]>([])
   const [cuotas, setCuotas] = useState<Cuota[]>([])
   const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null)
   const [trialPlanSlug, setTrialPlanSlug] = useState<string>('pro')

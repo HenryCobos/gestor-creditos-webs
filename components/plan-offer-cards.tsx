@@ -78,9 +78,7 @@ export function PlanOfferCard({
 
       <Button
         className={`w-full font-semibold ${
-          highlighted && slug === 'business'
-            ? 'bg-purple-600 hover:bg-purple-700'
-            : slug === 'pro' || (highlighted && slug === 'pro')
+          slug === 'pro'
             ? 'bg-blue-600 hover:bg-blue-700'
             : highlighted
             ? 'bg-purple-600 hover:bg-purple-700'
