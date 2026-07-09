@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { BusinessPlanOffers, ProPlanOffers } from '@/components/plan-offer-cards'
 import { planHasTrial, type BillingPeriod } from '@/lib/plan-offers'
+import { trackTikTokViewContent } from '@/lib/tiktok-analytics'
 import {
   Users,
   TrendingUp,
@@ -44,6 +45,12 @@ export default function OnboardingPage() {
   useEffect(() => {
     loadUser()
   }, [])
+
+  useEffect(() => {
+    if (step === 3) {
+      trackTikTokViewContent('onboarding-plans', 'Onboarding — Elige tu plan')
+    }
+  }, [step])
 
   const loadUser = async () => {
     const {

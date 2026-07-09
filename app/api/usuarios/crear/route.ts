@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
+import { getLimitesOrganizacionForOrg } from '@/lib/limites-organizacion-server'
 
 // Cliente de Supabase con Service Role (admin)
 const supabaseAdmin = createClient(
@@ -106,6 +107,20 @@ export async function POST(request: Request) {
     if (!organizationId || organizationId !== inviterProfile.organization_id) {
       return NextResponse.json(
         { error: 'Organización inválida para crear el usuario' },
+        { status: 403 }
+      )
+    }
+
+    const limites = await getLimitesOrganizacionForOrg(organizationId)
+    if (!limites?.puede_crear_usuario) {
+      const limite =
+        limites?.limite_usuarios === 0 ? 'ilimitados' : String(limites?.limite_usuarios ?? 1)
+      const planNombre = limites?.plan_nombre ?? 'actual'
+      return NextResponse.json(
+        {
+          error: `Has alcanzado el límite de ${limite} usuarios de tu plan ${planNombre}. Actualiza tu plan para agregar más miembros.`,
+          code: 'USER_LIMIT_REACHED',
+        },
         { status: 403 }
       )
     }

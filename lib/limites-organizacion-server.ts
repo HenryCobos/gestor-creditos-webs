@@ -20,7 +20,7 @@ export async function getLimitesOrganizacionForOrg(
       `
       id,
       plan_id,
-      plan:planes(nombre, slug, limite_clientes, limite_prestamos)
+      plan:planes(nombre, slug, limite_clientes, limite_prestamos, limite_usuarios)
     `
     )
     .eq('id', organizationId)
@@ -36,7 +36,7 @@ export async function getLimitesOrganizacionForOrg(
   if (!planRaw?.limite_clientes && org?.plan_id) {
     const { data: planById } = await admin
       .from('planes')
-      .select('nombre, slug, limite_clientes, limite_prestamos')
+      .select('nombre, slug, limite_clientes, limite_prestamos, limite_usuarios')
       .eq('id', org.plan_id)
       .maybeSingle()
     if (planById) planRaw = planById
@@ -58,6 +58,7 @@ export async function getLimitesOrganizacionForOrg(
   }
 
   const userIds = orgUsers.map((u) => u.id)
+  const usuariosUsados = orgUsers.length
 
   const [clientesAgg, prestamosAgg] = await Promise.all([
     admin
@@ -77,8 +78,12 @@ export async function getLimitesOrganizacionForOrg(
       slug: planRaw.slug ?? 'free',
       limite_clientes: planRaw.limite_clientes ?? 0,
       limite_prestamos: planRaw.limite_prestamos ?? 0,
+      limite_usuarios: planRaw.limite_usuarios ?? 1,
     },
-    clientesAgg.count ?? 0,
-    prestamosAgg.count ?? 0
+    {
+      clientesUsados: clientesAgg.count ?? 0,
+      prestamosUsados: prestamosAgg.count ?? 0,
+      usuariosUsados,
+    }
   )
 }

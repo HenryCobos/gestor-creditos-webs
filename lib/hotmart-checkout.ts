@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { getHotmartCheckoutUrl } from '@/lib/hotmart'
 import type { BillingPeriod, PlanSlug } from '@/lib/plan-offers'
+import { trackTikTokInitiateCheckout } from '@/lib/tiktok-analytics'
 
 export async function redirectToHotmartCheckout(
   planSlug: Exclude<PlanSlug, 'free'>,
@@ -29,6 +30,8 @@ export async function redirectToHotmartCheckout(
   if (!url) {
     return { ok: false, error: 'No se pudo generar el enlace de pago. Contacta a soporte.' }
   }
+
+  trackTikTokInitiateCheckout(planSlug, period)
 
   window.location.href = url
   return { ok: true }

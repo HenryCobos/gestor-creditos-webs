@@ -32,6 +32,7 @@ export function getPlanBenefits(planSlug: string): string[] {
     free: [
       'Hasta 5 clientes activos',
       'Hasta 5 préstamos activos',
+      'Hasta 2 usuarios (admin + cobrador)',
       'Gestión básica de préstamos',
       'Cálculo automático de cuotas',
       'Registro de pagos',
@@ -39,6 +40,7 @@ export function getPlanBenefits(planSlug: string): string[] {
     pro: [
       'Hasta 50 clientes activos',
       'Hasta 50 préstamos activos',
+      'Hasta 3 usuarios en tu equipo',
       'Exportación de reportes en PDF sin marca de agua',
       'Recordatorios automáticos de pagos',
       'Soporte prioritario por email',
@@ -186,9 +188,9 @@ export function mapLimitesToUsageLimits(limites: LimitesOrganizacion): UsageLimi
       canAdd: limites.puede_crear_prestamo,
     },
     usuarios: {
-      current: 1,
-      limit: 999,
-      canAdd: true,
+      current: limites.usuarios_usados,
+      limit: limites.limite_usuarios === 0 ? 999999 : limites.limite_usuarios,
+      canAdd: limites.puede_crear_usuario,
     },
   }
 }

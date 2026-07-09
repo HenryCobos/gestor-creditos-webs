@@ -7,6 +7,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { CheckCircle2, ArrowRight, LayoutDashboard, Check, Loader2, Users, FileText, Bell, Star } from "lucide-react"
 import { loadUserSubscription } from "@/lib/subscription-helpers"
 import { getPlanBenefits } from "@/lib/subscription-helpers"
+import { trackSubscriptionConversion } from "@/lib/analytics"
+import { trackTikTokPurchase } from "@/lib/tiktok-analytics"
+import { PLAN_PRICES } from "@/lib/plan-offers"
 
 // Colores y estilos por plan
 const planStyles = {
@@ -56,9 +59,29 @@ export default function CompraExitosaPage() {
   const [loading, setLoading] = useState(true)
   const [subscription, setSubscription] = useState<any>(null)
 
+  const [purchaseTracked, setPurchaseTracked] = useState(false)
+
   useEffect(() => {
     loadPlanData()
   }, [])
+
+  useEffect(() => {
+    if (!subscription || purchaseTracked || loading) return
+    const slug = subscription?.plan?.slug
+    if (!slug || slug === 'free') return
+
+    const period = subscription.subscription_period === 'yearly' ? 'yearly' : 'monthly'
+    const prices = PLAN_PRICES[slug as keyof typeof PLAN_PRICES]
+    const value = prices
+      ? period === 'monthly'
+        ? prices.monthly
+        : prices.yearly
+      : 0
+
+    trackSubscriptionConversion(slug, value, subscription.user_id)
+    trackTikTokPurchase(slug, value)
+    setPurchaseTracked(true)
+  }, [subscription, loading, purchaseTracked])
 
   const loadPlanData = async () => {
     try {

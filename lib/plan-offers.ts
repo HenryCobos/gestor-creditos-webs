@@ -27,6 +27,7 @@ export const BUSINESS_BENEFITS = [
 
 export const PRO_BENEFITS = [
   'Hasta 50 clientes y 50 préstamos',
+  'Hasta 3 usuarios en tu equipo',
   'PDFs sin marca de agua',
   'Soporte prioritario por email',
   'Reportes avanzados e historial 90 días',

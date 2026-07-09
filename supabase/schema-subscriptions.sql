@@ -16,13 +16,13 @@ CREATE TABLE IF NOT EXISTS planes (
 
 -- Insertar planes por defecto
 INSERT INTO planes (nombre, slug, precio_mensual, precio_anual, limite_clientes, limite_prestamos, limite_usuarios, caracteristicas, orden) VALUES
-('Gratuito', 'free', 0, 0, 5, 5, 1, 
-  '{"exportar_pdf": false, "sin_marca_agua": false, "recordatorios": false, "multi_usuario": false, "api": false, "soporte": "72h", "historial_dias": 30}'::jsonb, 
+('Gratuito', 'free', 0, 0, 5, 5, 2, 
+  '{"exportar_pdf": false, "sin_marca_agua": false, "recordatorios": false, "multi_usuario": true, "api": false, "soporte": "72h", "historial_dias": 30}'::jsonb, 
   1),
-('Profesional', 'pro', 19, 190, 50, 50, 1, 
-  '{"exportar_pdf": true, "sin_marca_agua": true, "recordatorios": false, "multi_usuario": false, "api": false, "soporte": "24h", "historial_dias": 0}'::jsonb, 
+('Profesional', 'pro', 19, 190, 50, 50, 3, 
+  '{"exportar_pdf": true, "sin_marca_agua": true, "recordatorios": false, "multi_usuario": true, "api": false, "soporte": "24h", "historial_dias": 0}'::jsonb, 
   2),
-('Business', 'business', 49, 490, 200, 200, 3, 
+('Business', 'business', 49, 490, 200, 200, 5, 
   '{"exportar_pdf": true, "sin_marca_agua": true, "recordatorios": true, "multi_usuario": true, "api": "basica", "soporte": "12h", "historial_dias": 0}'::jsonb, 
   3),
 ('Enterprise', 'enterprise', 179, 1790, 0, 0, 0, 

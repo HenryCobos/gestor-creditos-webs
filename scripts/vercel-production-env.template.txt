@@ -23,6 +23,11 @@ NEXT_PUBLIC_GOOGLE_ADS_ID=<AW-XXXX>
 NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_SIGNUP=<AW-XXXX/label>
 NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_PURCHASE=<AW-XXXX/label>
 
+# --- TikTok Events API (server-side) ---
+# Obtener en TikTok Events Manager → Web Pixel → Settings → Generate Access Token
+TIKTOK_PIXEL_ID=<pixel_id_web>
+TIKTOK_ACCESS_TOKEN=<events_api_access_token>
+
 # Importante: NEXT_PUBLIC_APP_URL debe ser tu URL de Vercel actual.
 # NO uses ingresosonlinehoy.com aquí — solo sirve para el remitente del email.
 # RESEND_FROM_EMAIL usa ingresosonlinehoy.com (dominio verificado en Resend).

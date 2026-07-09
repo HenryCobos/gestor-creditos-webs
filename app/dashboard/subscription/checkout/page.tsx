@@ -12,6 +12,7 @@ import { trackBeginCheckout } from '@/lib/analytics'
 import { createClient } from '@/lib/supabase/client'
 import { getHotmartCheckoutUrl } from '@/lib/hotmart'
 import { planHasTrial } from '@/lib/plan-offers'
+import { trackTikTokInitiateCheckout } from '@/lib/tiktok-analytics'
 
 function CheckoutContent() {
   const searchParams = useSearchParams()
@@ -75,10 +76,10 @@ function CheckoutContent() {
     )
 
     if (checkoutUrl) {
-      // Tracking antes de irse
-      // trackInitiateCheckout(...) 
-
-      // Redirigir a Hotmart
+      trackTikTokInitiateCheckout(
+        selectedPlan.slug as 'pro' | 'business' | 'enterprise',
+        period
+      )
       window.location.href = checkoutUrl
     } else {
       toast({

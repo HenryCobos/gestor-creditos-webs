@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { getHotmartCheckoutUrl } from '@/lib/hotmart'
 import { planHasTrial } from '@/lib/plan-offers'
+import { trackTikTokInitiateCheckout } from '@/lib/tiktok-analytics'
 import { Gift } from 'lucide-react'
 import {
   ArrowLeft,
@@ -103,6 +104,7 @@ export default function UpgradePage() {
       useTrial: planHasTrial(planSeleccionado, periodo),
     })
     if (url) {
+      trackTikTokInitiateCheckout(planSeleccionado, periodo)
       window.location.href = url
     } else {
       router.push(`/dashboard/subscription/checkout?plan=${planSeleccionado}&period=${periodo}`)

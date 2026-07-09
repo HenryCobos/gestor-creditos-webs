@@ -107,12 +107,24 @@ export function LimitesOrganizacionCard({
 
   const pctClientes = limites.porcentaje_clientes
   const pctPrestamos = limites.porcentaje_prestamos
+  const pctUsuarios = limites.porcentaje_usuarios
   const urgenciaClientes = getUrgencyLevel(pctClientes)
   const urgenciaPrestamos = getUrgencyLevel(pctPrestamos)
-  const hayAlertaAlta = urgenciaClientes === 'high' || urgenciaClientes === 'critical' ||
-    urgenciaPrestamos === 'high' || urgenciaPrestamos === 'critical'
-  const hayAlertaMedia = urgenciaClientes === 'medium' || urgenciaPrestamos === 'medium'
+  const urgenciaUsuarios = getUrgencyLevel(pctUsuarios)
+  const hayAlertaAlta =
+    urgenciaClientes === 'high' ||
+    urgenciaClientes === 'critical' ||
+    urgenciaPrestamos === 'high' ||
+    urgenciaPrestamos === 'critical' ||
+    urgenciaUsuarios === 'high' ||
+    urgenciaUsuarios === 'critical'
+  const hayAlertaMedia =
+    urgenciaClientes === 'medium' ||
+    urgenciaPrestamos === 'medium' ||
+    urgenciaUsuarios === 'medium'
   const cuposClientesRestantes = limites.limite_clientes - limites.clientes_usados
+  const usuariosLimitLabel =
+    limites.limite_usuarios === 0 ? '∞' : String(limites.limite_usuarios)
 
   return (
     <Card className={hayAlertaAlta ? 'border-red-300' : hayAlertaMedia ? 'border-yellow-300' : ''}>
@@ -175,6 +187,36 @@ export function LimitesOrganizacionCard({
           </Alert>
         )}
 
+        {/* Usuarios del equipo */}
+        {limites.limite_usuarios > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-purple-500" />
+                <span className="font-medium">Usuarios del equipo</span>
+              </div>
+              <span className="text-sm font-bold">
+                {limites.usuarios_usados} / {usuariosLimitLabel}
+              </span>
+            </div>
+            <ProgressBar pct={pctUsuarios} />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>{limites.usuarios_disponibles} disponibles</span>
+              <span>{pctUsuarios.toFixed(0)}% usado</span>
+            </div>
+            {urgenciaUsuarios === 'low' && pctUsuarios >= 50 && limites.plan_slug === 'free' && (
+              <p className="text-xs text-purple-600 bg-purple-50 px-2 py-1 rounded">
+                Plan Pro permite hasta 3 usuarios — prueba con admin + cobrador.
+              </p>
+            )}
+            {!limites.puede_crear_usuario && (
+              <p className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">
+                Límite de usuarios alcanzado. Actualiza tu plan para agregar más miembros.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Clientes */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -223,18 +265,24 @@ export function LimitesOrganizacionCard({
         </div>
 
         {/* Estado general */}
-        {limites.puede_crear_cliente && limites.puede_crear_prestamo ? (
+        {limites.puede_crear_cliente && limites.puede_crear_prestamo && limites.puede_crear_usuario ? (
           <div className="flex items-center gap-2 text-sm text-green-600">
             <CheckCircle className="h-4 w-4" />
-            <span>Puedes crear clientes y préstamos</span>
+            <span>Puedes crear clientes, préstamos y usuarios</span>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2 text-sm text-red-600">
               <AlertTriangle className="h-4 w-4" />
               <span>
-                {!limites.puede_crear_cliente && !limites.puede_crear_prestamo
+                {!limites.puede_crear_cliente &&
+                !limites.puede_crear_prestamo &&
+                !limites.puede_crear_usuario
+                  ? 'Límite alcanzado para clientes, préstamos y usuarios'
+                  : !limites.puede_crear_cliente && !limites.puede_crear_prestamo
                   ? 'Límite alcanzado para clientes y préstamos'
+                  : !limites.puede_crear_usuario
+                  ? `Límite de usuarios alcanzado (${limites.usuarios_usados}/${usuariosLimitLabel})`
                   : !limites.puede_crear_cliente
                   ? 'Límite de clientes alcanzado'
                   : 'Límite de préstamos alcanzado'}

@@ -56,18 +56,18 @@ const FEATURE_CONFIG: Record<
   },
   multiusuario: {
     icon: '👥',
-    title: 'Multi-usuario — Plan Business',
+    title: 'Más usuarios en tu equipo',
     description:
-      'Agrega cobradores y administradores a tu equipo. El Plan Business te permite colaborar con hasta 5 usuarios.',
+      'Has alcanzado el límite de usuarios de tu plan. Actualiza para agregar más cobradores y administradores.',
     benefits: [
-      'Hasta 5 usuarios en tu equipo',
+      'Más usuarios en tu equipo',
       'Roles de admin y cobrador',
-      '200 clientes y 200 préstamos',
-      'Gestión de rutas de cobranza',
+      'Mayor capacidad de clientes y préstamos',
+      'Funciones avanzadas según plan',
     ],
-    plan: 'Business',
-    price: '$49/mes',
-    slug: 'business',
+    plan: 'Pro',
+    price: '$19/mes',
+    slug: 'pro',
     period: 'monthly',
   },
   api: {

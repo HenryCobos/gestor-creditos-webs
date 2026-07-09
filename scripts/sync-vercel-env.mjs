@@ -37,6 +37,8 @@ export const REQUIRED_ENV = {
     'NEXT_PUBLIC_GOOGLE_ADS_ID',
     'NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_SIGNUP',
     'NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_PURCHASE',
+    'TIKTOK_PIXEL_ID',
+    'TIKTOK_ACCESS_TOKEN',
   ],
 }
 
@@ -54,6 +56,9 @@ const SYNC_KEYS = [
   'HOTMART_WEBHOOK_SECRET',
   'NEXT_PUBLIC_APP_URL',
 ]
+
+/** Solo se sincronizan si existen en .env.local (evita sobrescribir con vacío) */
+const OPTIONAL_SYNC_KEYS = ['TIKTOK_PIXEL_ID', 'TIKTOK_ACCESS_TOKEN']
 
 function loadEnvLocal() {
   const env = {}
@@ -83,7 +88,8 @@ function loadEnvLocal() {
 
 function buildSyncValues(localEnv) {
   const values = {}
-  for (const key of SYNC_KEYS) {
+  const keys = [...SYNC_KEYS, ...OPTIONAL_SYNC_KEYS.filter((k) => localEnv[k])]
+  for (const key of keys) {
     values[key] = PRODUCTION_OVERRIDES[key] ?? localEnv[key]
   }
   return values
@@ -126,6 +132,9 @@ function audit() {
   console.log('\nGoogle Ads — nombres EXACTOS requeridos por lib/analytics.ts:')
   console.log('  NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_SIGNUP')
   console.log('  NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_PURCHASE')
+  console.log('\nTikTok Events API — nombres EXACTOS requeridos por lib/tiktok-events-api.ts:')
+  console.log('  TIKTOK_PIXEL_ID')
+  console.log('  TIKTOK_ACCESS_TOKEN')
   console.log('\n  (NO uses NVERSION ni mail.ingresosonlinehoy.com en RESEND_FROM_EMAIL)')
   console.log(`\nNEXT_PUBLIC_APP_URL en Production debe ser:\n  ${PRODUCTION_APP_URL}`)
 }

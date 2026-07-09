@@ -1,4 +1,4 @@
--- Campos para sistema de trial y onboarding
+  -- Campos para sistema de trial y onboarding
 -- Ejecutar en Supabase SQL Editor
 
 ALTER TABLE public.profiles

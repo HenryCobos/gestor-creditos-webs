@@ -22,6 +22,7 @@ import {
   Star
 } from 'lucide-react'
 import { trackCTAClick, trackViewPricing } from '@/lib/analytics'
+import { trackTikTokViewContent } from '@/lib/tiktok-analytics'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -49,6 +50,7 @@ export default function LandingPage() {
         const rect = pricingSection.getBoundingClientRect()
         if (rect.top < window.innerHeight && rect.bottom > 0) {
           trackViewPricing()
+          trackTikTokViewContent('pricing', 'Planes Gestor de Créditos')
           window.removeEventListener('scroll', handleScroll)
         }
       }
@@ -566,6 +568,10 @@ export default function LandingPage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm text-slate-600">Hasta 2 usuarios (admin + cobrador)</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
                     <span className="text-sm text-slate-600">Reportes básicos</span>
                   </li>
                   <li className="flex items-start gap-2">
@@ -608,6 +614,10 @@ export default function LandingPage() {
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
                     <span className="text-sm text-slate-600">Hasta 50 préstamos</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm text-slate-600">Hasta 3 usuarios</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
@@ -656,7 +666,7 @@ export default function LandingPage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm text-slate-600">Hasta 3 usuarios</span>
+                    <span className="text-sm text-slate-600">Hasta 5 usuarios</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />

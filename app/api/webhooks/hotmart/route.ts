@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { trackTikTokPurchase } from '@/lib/tiktok-events-api'
 
 // Configuración de seguridad
 // Debes configurar esta variable en Vercel con el token que te da Hotmart en: Herramientas > Webhook
@@ -268,6 +269,21 @@ export async function POST(req: Request) {
         })
       
       console.log(`💰 Pago registrado: $${amount} ${data.purchase?.price?.currency_code || 'USD'}`)
+
+      // TikTok Events API — CompletePayment (solo primera compra, no renovaciones)
+      if (event === EVENTS.APPROVED && userEmail) {
+        const transactionId =
+          data.purchase?.transaction ||
+          data.purchase?.purchase_date ||
+          `${targetUserId}_${Date.now()}`
+        await trackTikTokPurchase({
+          transactionId: String(transactionId),
+          email: userEmail,
+          planSlug: planInfo.slug,
+          amount: Number(amount),
+          currency: data.purchase?.price?.currency_code || 'USD',
+        })
+      }
       
       // Verificar que la actualización fue exitosa
       const { data: updatedProfile } = await supabase

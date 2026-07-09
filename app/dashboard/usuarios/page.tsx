@@ -10,7 +10,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -36,7 +35,8 @@ import { useStore, type Profile, type UserRole } from '@/lib/store'
 import { formatDate } from '@/lib/utils'
 import { UsuarioCardMobile } from '@/components/UsuarioCardMobile'
 import { useSubscriptionStore } from '@/lib/subscription-store'
-import { FeatureGateDialog } from '@/components/feature-gate-dialog'
+import { loadUsageLimits } from '@/lib/subscription-helpers'
+import { LimiteUsuariosDialog } from '@/components/limite-usuarios-dialog'
 
 export default function UsuariosPage() {
   const [open, setOpen] = useState(false)
@@ -44,11 +44,11 @@ export default function UsuariosPage() {
   const [editingUsuario, setEditingUsuario] = useState<Profile | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [organizationId, setOrganizationId] = useState<string | null>(null)
-  const [showMultiUserGate, setShowMultiUserGate] = useState(false)
+  const [showLimiteUsuarios, setShowLimiteUsuarios] = useState(false)
   const { toast } = useToast()
   const supabase = createClient()
   const { usuarios, setUsuarios } = useStore()
-  const { getCurrentPlan } = useSubscriptionStore()
+  const { usageLimits, setUsageLimits } = useSubscriptionStore()
 
   const [formData, setFormData] = useState({
     email: '',
@@ -60,6 +60,9 @@ export default function UsuariosPage() {
   useEffect(() => {
     checkPermissions()
     loadUsuarios()
+    loadUsageLimits().then((limits) => {
+      if (limits) setUsageLimits(limits)
+    })
   }, [])
 
   const checkPermissions = async () => {
@@ -245,6 +248,9 @@ export default function UsuariosPage() {
         const data = await response.json()
 
         if (!response.ok || data.error) {
+          if (response.status === 403 && data.code === 'USER_LIMIT_REACHED') {
+            setShowLimiteUsuarios(true)
+          }
           toast({
             title: 'Error',
             description: data.error || 'No se pudo crear el usuario',
@@ -261,6 +267,9 @@ export default function UsuariosPage() {
         setOpen(false)
         resetForm()
         loadUsuarios()
+        loadUsageLimits().then((limits) => {
+          if (limits) setUsageLimits(limits)
+        })
       } catch (error) {
         console.error('Error creating user:', error)
         toast({
@@ -460,27 +469,33 @@ export default function UsuariosPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Gestión de Usuarios</h1>
-          <p className="text-gray-500 mt-1 text-sm md:text-base">Administra cobradores y administradores</p>
+          <p className="text-gray-500 mt-1 text-sm md:text-base">
+            Administra cobradores y administradores
+            {usageLimits?.usuarios && (
+              <span className="ml-2 inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                Usuarios: {usageLimits.usuarios.current}/
+                {usageLimits.usuarios.limit >= 999999 ? '∞' : usageLimits.usuarios.limit}
+              </span>
+            )}
+          </p>
         </div>
         <Dialog open={open} onOpenChange={(isOpen) => {
           setOpen(isOpen)
           if (!isOpen) resetForm()
         }}>
-          <DialogTrigger asChild>
-            <Button
-              className="w-full sm:w-auto"
-              onClick={(e) => {
-                const plan = getCurrentPlan()
-                if (plan?.slug === 'free') {
-                  e.preventDefault()
-                  setShowMultiUserGate(true)
-                }
-              }}
-            >
-              <UserPlus className="mr-2 h-4 w-4" />
-              Nuevo Usuario
-            </Button>
-          </DialogTrigger>
+          <Button
+            className="w-full sm:w-auto"
+            onClick={() => {
+              if (usageLimits && !usageLimits.usuarios.canAdd) {
+                setShowLimiteUsuarios(true)
+                return
+              }
+              setOpen(true)
+            }}
+          >
+            <UserPlus className="mr-2 h-4 w-4" />
+            Nuevo Usuario
+          </Button>
           <DialogContent className="sm:max-w-md max-w-[95vw] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
@@ -693,10 +708,9 @@ export default function UsuariosPage() {
         </CardContent>
       </Card>
 
-      <FeatureGateDialog
-        open={showMultiUserGate}
-        onOpenChange={setShowMultiUserGate}
-        variant="multiusuario"
+      <LimiteUsuariosDialog
+        open={showLimiteUsuarios}
+        onOpenChange={setShowLimiteUsuarios}
       />
     </div>
   )

@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/components/ui/use-toast'
 import Link from 'next/link'
 import { trackSignupConversion } from '@/lib/analytics'
+import { trackTikTokCompleteRegistration } from '@/lib/tiktok-analytics'
 import { validateEmail, normalizeEmail } from '@/lib/utils/email-validation'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { CheckCircle2, AlertCircle } from 'lucide-react'
@@ -96,6 +97,7 @@ export default function RegisterPage() {
 
       // 🎯 CONVERSIÓN PRIMARIA: Usuario se registró
       trackSignupConversion(authData.user.id)
+      trackTikTokCompleteRegistration(authData.user.id, normalizedEmail)
 
       // Mostrar mensaje de éxito
       toast({

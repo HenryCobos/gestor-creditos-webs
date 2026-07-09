@@ -23,6 +23,7 @@ import type { Plan } from '@/lib/subscription-store'
 import { createClient } from '@/lib/supabase/client'
 import { getHotmartCheckoutUrl } from '@/lib/hotmart'
 import { planHasTrial } from '@/lib/plan-offers'
+import { trackTikTokInitiateCheckout } from '@/lib/tiktok-analytics'
 import { Gift } from 'lucide-react'
 
 export default function SubscriptionPage() {
@@ -84,6 +85,7 @@ export default function SubscriptionPage() {
     })
 
     if (url) {
+      trackTikTokInitiateCheckout(slug, selectedPeriod)
       window.location.href = url
     } else {
       router.push(`/dashboard/subscription/checkout?plan=${plan.id}&period=${selectedPeriod}`)
