@@ -1,23 +1,7 @@
--- ============================================
--- Límites de usuarios por plan + enforcement
--- Ejecutar en Supabase SQL Editor
--- ============================================
+-- FIX Security Advisor: vista_organizacion_limites sin SECURITY DEFINER
+-- Ejecutar todo este archivo en Supabase SQL Editor
 
--- 1. Actualizar límites en tabla planes
-UPDATE planes SET
-  limite_usuarios = 2,
-  caracteristicas = caracteristicas || '{"multi_usuario": true}'::jsonb
-WHERE slug = 'free';
-
-UPDATE planes SET
-  limite_usuarios = 3,
-  caracteristicas = caracteristicas || '{"multi_usuario": true}'::jsonb
-WHERE slug = 'pro';
-
-UPDATE planes SET limite_usuarios = 5 WHERE slug = 'business';
--- enterprise: limite_usuarios = 0 (ilimitado)
-
--- 2. Recrear vista con conteo de usuarios (sin SECURITY DEFINER)
+DROP FUNCTION IF EXISTS public.get_limites_organizacion();
 DROP VIEW IF EXISTS public.vista_organizacion_limites CASCADE;
 
 CREATE VIEW public.vista_organizacion_limites
@@ -77,48 +61,7 @@ GROUP BY
 
 GRANT SELECT ON public.vista_organizacion_limites TO authenticated;
 
--- 3. Función: validar si se puede crear usuario
-CREATE OR REPLACE FUNCTION puede_crear_usuario(p_user_id UUID)
-RETURNS BOOLEAN AS $$
-DECLARE
-  v_organization_id UUID;
-  v_limite_usuarios INTEGER;
-  v_usuarios_usados BIGINT;
-BEGIN
-  SELECT organization_id INTO v_organization_id
-  FROM profiles
-  WHERE id = p_user_id;
-
-  IF v_organization_id IS NULL THEN
-    RETURN FALSE;
-  END IF;
-
-  SELECT
-    pl.limite_usuarios,
-    COUNT(DISTINCT p.id)
-  INTO v_limite_usuarios, v_usuarios_usados
-  FROM organizations o
-  JOIN planes pl ON pl.id = o.plan_id
-  LEFT JOIN profiles p ON p.organization_id = o.id
-  WHERE o.id = v_organization_id
-  GROUP BY pl.limite_usuarios;
-
-  -- 0 = ilimitado (Enterprise)
-  IF v_limite_usuarios = 0 THEN
-    RETURN TRUE;
-  END IF;
-
-  RETURN v_usuarios_usados < v_limite_usuarios;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
-
-GRANT EXECUTE ON FUNCTION puede_crear_usuario(UUID) TO authenticated;
-
--- 4. RPC: get_limites_organizacion con usuarios
--- PostgreSQL no permite cambiar columnas de retorno con CREATE OR REPLACE → hay que DROP primero
-DROP FUNCTION IF EXISTS get_limites_organizacion();
-
-CREATE FUNCTION get_limites_organizacion()
+CREATE FUNCTION public.get_limites_organizacion()
 RETURNS TABLE (
   organization_id UUID,
   plan_nombre TEXT,
@@ -138,7 +81,11 @@ RETURNS TABLE (
   puede_crear_usuario BOOLEAN,
   puede_crear_cliente BOOLEAN,
   puede_crear_prestamo BOOLEAN
-) AS $$
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
   RETURN QUERY
   SELECT
@@ -164,11 +111,8 @@ BEGIN
   JOIN profiles p ON p.organization_id = v.organization_id
   WHERE p.id = auth.uid();
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+$$;
 
-GRANT EXECUTE ON FUNCTION get_limites_organizacion() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_limites_organizacion() TO authenticated;
 
--- 5. Verificación
-SELECT slug, limite_usuarios, caracteristicas->>'multi_usuario' AS multi_usuario
-FROM planes
-ORDER BY orden;
+SELECT slug, limite_usuarios FROM planes ORDER BY orden;
