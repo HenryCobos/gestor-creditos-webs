@@ -43,7 +43,7 @@ import { useStore, type Ruta, type Profile, type Cliente } from '@/lib/store'
 import { formatCurrency } from '@/lib/utils'
 import { useConfigStore } from '@/lib/config-store'
 import { Textarea } from '@/components/ui/textarea'
-import { getClientesInteligente } from '@/lib/queries-con-roles'
+import { getClientesInteligente, getPrestamosSegunRol } from '@/lib/queries-con-roles'
 
 export default function RutasPage() {
   const [open, setOpen] = useState(false)
@@ -158,21 +158,35 @@ export default function RutasPage() {
         console.log('[loadRutas] Cobradores obtenidos:', cobradoresData.length)
       }
 
+      // Préstamos visibles según rol (misma fuente que dashboard/caja)
+      let prestamosActivos: { ruta_id?: string | null; estado: string }[] = []
+      try {
+        const prestamosOrg = await getPrestamosSegunRol()
+        prestamosActivos = prestamosOrg.filter((p) =>
+          ['activo', 'pendiente'].includes(p.estado as string)
+        )
+      } catch (prestamosError) {
+        console.error('[loadRutas] Error cargando préstamos vía RPC:', prestamosError)
+      }
+
       // Obtener contadores y enriquecer con info de cobrador
       const rutasConContadores = await Promise.all(
         rutasData.map(async (ruta: any) => {
-          const [clientesCount, prestamosCount] = await Promise.all([
-            supabase.from('ruta_clientes').select('id', { count: 'exact', head: true }).eq('ruta_id', ruta.id).eq('activo', true),
-            supabase.from('prestamos').select('id', { count: 'exact', head: true }).eq('ruta_id', ruta.id).eq('estado', 'activo')
-          ])
+          const { count: clientesCount } = await supabase
+            .from('ruta_clientes')
+            .select('id', { count: 'exact', head: true })
+            .eq('ruta_id', ruta.id)
+            .eq('activo', true)
+
+          const prestamosEnRuta = prestamosActivos.filter((p) => p.ruta_id === ruta.id)
           
           // Buscar info del cobrador
           const cobrador = cobradoresData.find((c: any) => c.id === ruta.cobrador_id)
           
           return {
             ...ruta,
-            clientes_count: clientesCount.count || 0,
-            prestamos_count: prestamosCount.count || 0,
+            clientes_count: clientesCount || 0,
+            prestamos_count: prestamosEnRuta.length,
             cobrador: cobrador ? {
               id: cobrador.id,
               nombre_completo: cobrador.nombre_completo,
@@ -617,6 +631,23 @@ export default function RutasPage() {
               cliente_id: clienteId,
               activo: true,
             })
+        }
+      }
+
+      // 4. Sincronizar préstamos activos/pendientes con la ruta (respaldo si el trigger BD no corrió)
+      if (clientesRuta.length > 0) {
+        const { error: syncPrestamosError } = await supabase
+          .from('prestamos')
+          .update({
+            ruta_id: selectedRuta.id,
+            updated_at: new Date().toISOString(),
+          })
+          .in('cliente_id', clientesRuta)
+          .in('estado', ['activo', 'pendiente'])
+          .or(`ruta_id.is.null,ruta_id.neq.${selectedRuta.id}`)
+
+        if (syncPrestamosError) {
+          console.error('[asignar clientes] sync prestamos:', syncPrestamosError)
         }
       }
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -32,11 +33,13 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   MapPin,
+  AlertTriangle,
+  Banknote,
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useConfigStore } from '@/lib/config-store'
 import { format, startOfMonth } from 'date-fns'
-import { loadRutasCaja, type MovimientoCaja, type ResumenCajaRuta, type RutaCajaOption } from '@/lib/caja-movimientos'
+import { loadRutasCaja, type MovimientoCaja, type ResumenCajaRuta, type RutaCajaOption, type AlertaPrestamosSinRuta } from '@/lib/caja-movimientos'
 
 export default function CajaPage() {
   const hoy = format(new Date(), 'yyyy-MM-dd')
@@ -51,6 +54,7 @@ export default function CajaPage() {
   const [fechaHasta, setFechaHasta] = useState(hoy)
   const [resumenRuta, setResumenRuta] = useState<ResumenCajaRuta | null>(null)
   const [resumenTodas, setResumenTodas] = useState<ResumenCajaRuta[]>([])
+  const [alertaSinRuta, setAlertaSinRuta] = useState<AlertaPrestamosSinRuta | null>(null)
 
   const { toast } = useToast()
   const supabase = createClient()
@@ -83,6 +87,8 @@ export default function CajaPage() {
       if (json.rutas?.length) {
         setRutas(json.rutas)
       }
+
+      setAlertaSinRuta(json.alertaSinRuta ?? null)
 
       if (esVistaTodas) {
         setResumenTodas(json.resumenTodas || [])
@@ -190,10 +196,11 @@ export default function CajaPage() {
     (acc, r) => ({
       cobrado: acc.cobrado + r.total_cobrado,
       prestado: acc.prestado + r.total_prestado,
+      prestadoActivo: acc.prestadoActivo + r.total_prestado_activo,
       gastos: acc.gastos + r.total_gastos,
       capital: acc.capital + r.capital_actual,
     }),
-    { cobrado: 0, prestado: 0, gastos: 0, capital: 0 }
+    { cobrado: 0, prestado: 0, prestadoActivo: 0, gastos: 0, capital: 0 }
   )
 
   return (
@@ -278,10 +285,27 @@ export default function CajaPage() {
             </div>
           </div>
           <p className="text-xs text-muted-foreground mt-3">
-            Periodo: {formatDate(fechaDesde)} — {formatDate(fechaHasta)}. El saldo
-            actual es el capital de la ruta en el sistema (debe coincidir con cobros y
-            préstamos registrados).
+            Periodo: {formatDate(fechaDesde)} — {formatDate(fechaHasta)}. El dashboard
+            muestra totales de toda la organización; aquí ves movimientos de la ruta
+            seleccionada. El saldo actual incluye capital inicial y préstamos activos
+            en la ruta (no solo el periodo filtrado).
           </p>
+          {userRole === 'admin' &&
+            alertaSinRuta &&
+            alertaSinRuta.prestamos_sin_ruta_count > 0 && (
+              <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <p>
+                  Hay {alertaSinRuta.prestamos_sin_ruta_count} préstamo(s) activo(s) sin
+                  ruta ({formatCurrency(alertaSinRuta.monto_sin_ruta, config.currency)}).
+                  No aparecen en caja hasta asignarlos en{' '}
+                  <Link href="/dashboard/rutas" className="underline font-medium">
+                    Rutas
+                  </Link>
+                  .
+                </p>
+              </div>
+            )}
         </CardContent>
       </Card>
 
@@ -295,7 +319,7 @@ export default function CajaPage() {
         </Card>
       ) : esVistaTodas ? (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -306,18 +330,33 @@ export default function CajaPage() {
                 <p className="text-xl font-bold text-green-600">
                   {formatCurrency(totalesOrg.cobrado, config.currency)}
                 </p>
+                <p className="text-xs text-muted-foreground mt-1">En el periodo</p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Total prestado
+                  Prestado en periodo
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-xl font-bold text-red-600">
                   {formatCurrency(totalesOrg.prestado, config.currency)}
                 </p>
+                <p className="text-xs text-muted-foreground mt-1">Por fecha de registro</p>
+              </CardContent>
+            </Card>
+            <Card className="border-red-100 bg-red-50/30">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Préstamos activos
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xl font-bold text-red-700">
+                  {formatCurrency(totalesOrg.prestadoActivo, config.currency)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">Capital en circulación</p>
               </CardContent>
             </Card>
             <Card>
@@ -339,7 +378,7 @@ export default function CajaPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-xl font-bold text-blue-600">
+                <p className={`text-xl font-bold ${totalesOrg.capital < 0 ? 'text-red-700' : 'text-blue-600'}`}>
                   {formatCurrency(totalesOrg.capital, config.currency)}
                 </p>
               </CardContent>
@@ -360,7 +399,8 @@ export default function CajaPage() {
                     <TableHead>Ruta</TableHead>
                     <TableHead>Cobrador</TableHead>
                     <TableHead className="text-right">Cobrado</TableHead>
-                    <TableHead className="text-right">Prestado</TableHead>
+                    <TableHead className="text-right">Prestado (periodo)</TableHead>
+                    <TableHead className="text-right">Préstamos activos</TableHead>
                     <TableHead className="text-right">Gastos</TableHead>
                     <TableHead className="text-right">Saldo actual</TableHead>
                     <TableHead />
@@ -384,6 +424,9 @@ export default function CajaPage() {
                       </TableCell>
                       <TableCell className="text-right text-red-600">
                         {formatCurrency(r.total_prestado, config.currency)}
+                      </TableCell>
+                      <TableCell className="text-right text-red-700 font-medium">
+                        {formatCurrency(r.total_prestado_activo, config.currency)}
                       </TableCell>
                       <TableCell className="text-right text-orange-600">
                         {formatCurrency(r.total_gastos, config.currency)}
@@ -409,7 +452,23 @@ export default function CajaPage() {
         </>
       ) : resumenRuta ? (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {resumenRuta.total_prestado_activo > resumenRuta.total_prestado && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <p>
+                Hay préstamos activos fuera del periodo seleccionado (
+                {formatCurrency(
+                  resumenRuta.total_prestado_activo - resumenRuta.total_prestado,
+                  config.currency
+                )}{' '}
+                no aparecen en &quot;Prestado en el periodo&quot;). Amplía la fecha
+                &quot;Hasta&quot; o revisa &quot;Capital en préstamos activos&quot; (
+                {formatCurrency(resumenRuta.total_prestado_activo, config.currency)}).
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium">Cobrado en el periodo</CardTitle>
@@ -433,6 +492,23 @@ export default function CajaPage() {
                 <p className="text-2xl font-bold text-red-600">
                   {formatCurrency(resumenRuta.total_prestado, config.currency)}
                 </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Por fecha de registro del préstamo
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-red-100 bg-red-50/30">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Capital en préstamos activos</CardTitle>
+                <Banknote className="h-4 w-4 text-red-700" />
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold text-red-700">
+                  {formatCurrency(resumenRuta.total_prestado_activo, config.currency)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Total en circulación — comparable con el dashboard
+                </p>
               </CardContent>
             </Card>
             <Card>
@@ -452,12 +528,21 @@ export default function CajaPage() {
                 <Wallet className="h-4 w-4 text-blue-600" />
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold text-blue-700">
+                <p className={`text-2xl font-bold ${(resumenRuta.capital_actual ?? 0) < 0 ? 'text-red-700' : 'text-blue-700'}`}>
                   {formatCurrency(resumenRuta.capital_actual, config.currency)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   Capital de la ruta — debe coincidir con admin y cobrador
                 </p>
+                {resumenRuta.desglose_saldo && (
+                  <div className="mt-3 pt-3 border-t border-blue-200/60 space-y-1 text-xs text-muted-foreground">
+                    <p className="font-medium text-foreground/80">Composición del saldo:</p>
+                    <p>+ Capital inicial: {formatCurrency(resumenRuta.desglose_saldo.capital_inicial, config.currency)}</p>
+                    <p>+ Cobros acumulados: {formatCurrency(resumenRuta.desglose_saldo.cobros_acumulados, config.currency)}</p>
+                    <p>− Préstamos activos en ruta: {formatCurrency(resumenRuta.desglose_saldo.prestamos_activos, config.currency)}</p>
+                    <p>− Gastos aprobados: {formatCurrency(resumenRuta.desglose_saldo.gastos_aprobados_total, config.currency)}</p>
+                  </div>
+                )}
                 {resumenRuta.cobrador_nombre && (
                   <p className="text-xs mt-2">
                     Cobrador: <strong>{resumenRuta.cobrador_nombre}</strong>

@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import {
   fetchResumenCajaRuta,
   fetchResumenTodasRutas,
+  fetchAlertaPrestamosSinRuta,
   loadRutasCaja,
 } from '@/lib/caja-movimientos'
 
@@ -94,7 +95,11 @@ export async function GET(request: Request) {
         fechaHasta,
         { preferRpc: false }
       )
-      return NextResponse.json({ resumenTodas, rutas })
+      const alertaSinRuta = await fetchAlertaPrestamosSinRuta(
+        admin,
+        profile.organization_id
+      )
+      return NextResponse.json({ resumenTodas, rutas, alertaSinRuta })
     }
 
     if (!rutaId) {
@@ -118,7 +123,12 @@ export async function GET(request: Request) {
       { preferRpc: false }
     )
 
-    return NextResponse.json({ resumen, rutas })
+    const alertaSinRuta =
+      role === 'admin'
+        ? await fetchAlertaPrestamosSinRuta(admin, profile.organization_id)
+        : undefined
+
+    return NextResponse.json({ resumen, rutas, alertaSinRuta })
   } catch (e) {
     console.error('[api/caja/resumen]', e)
     return NextResponse.json(

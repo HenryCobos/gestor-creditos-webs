@@ -23,6 +23,18 @@ export interface MovimientoCaja {
   detalle?: string
 }
 
+export interface DesgloseSaldoCaja {
+  capital_inicial: number
+  cobros_acumulados: number
+  prestamos_activos: number
+  gastos_aprobados_total: number
+}
+
+export interface AlertaPrestamosSinRuta {
+  prestamos_sin_ruta_count: number
+  monto_sin_ruta: number
+}
+
 export interface ResumenCajaRuta {
   ruta_id: string
   nombre_ruta: string
@@ -31,7 +43,9 @@ export interface ResumenCajaRuta {
   capital_actual: number
   total_cobrado: number
   total_prestado: number
+  total_prestado_activo: number
   total_gastos: number
+  desglose_saldo?: DesgloseSaldoCaja
   movimientos: MovimientoCaja[]
 }
 
@@ -208,7 +222,7 @@ export async function fetchResumenCajaRuta(
   if (!meta) {
     const { data: ruta } = await supabase
       .from('rutas')
-      .select('id, nombre_ruta, color, capital_actual, cobrador_id')
+      .select('id, nombre_ruta, color, capital_actual, capital_inicial, cobrador_id')
       .eq('id', rutaId)
       .maybeSingle()
     if (!ruta) return null
@@ -221,6 +235,12 @@ export async function fetchResumenCajaRuta(
       cobrador_nombre: null,
     }
   }
+
+  const { data: rutaCapital } = await supabase
+    .from('rutas')
+    .select('capital_inicial, capital_actual')
+    .eq('id', rutaId)
+    .maybeSingle()
 
   const movimientos: MovimientoCaja[] = []
 
@@ -268,15 +288,14 @@ export async function fetchResumenCajaRuta(
     .from('prestamos')
     .select('id, monto_prestado, created_at, cliente:clientes(nombre)')
     .eq('ruta_id', rutaId)
-    .gte('created_at', desde)
-    .lte('created_at', hasta)
     .order('created_at', { ascending: false })
 
   ;(prestamos || []).forEach((pr) => {
-    if (!estaEnRangoCalendario(pr.created_at, fechaDesde, fechaHasta)) return
+    const fechaPrestamo = pr.created_at
+    if (!fechaPrestamo || !estaEnRangoCalendario(fechaPrestamo, fechaDesde, fechaHasta)) return
     movimientos.push({
       id: `prestamo-${pr.id}`,
-      fecha: pr.created_at,
+      fecha: fechaPrestamo,
       tipo: 'prestamo_entregado',
       monto: Number(pr.monto_prestado) || 0,
       es_entrada: false,
@@ -356,16 +375,88 @@ export async function fetchResumenCajaRuta(
     .filter((m) => m.tipo === 'gasto')
     .reduce((s, m) => s + m.monto, 0)
 
+  let cobrosAcumulados = 0
+  if (prestamoIds.length > 0) {
+    const { data: pagosAcum } = await supabase
+      .from('pagos')
+      .select('monto_pagado')
+      .in('prestamo_id', prestamoIds)
+    cobrosAcumulados = (pagosAcum || []).reduce(
+      (s, p) => s + (Number(p.monto_pagado) || 0),
+      0
+    )
+  }
+
+  const { data: prestamosActivos } = await supabase
+    .from('prestamos')
+    .select('monto_prestado')
+    .eq('ruta_id', rutaId)
+    .in('estado', ['activo', 'pendiente'])
+
+  const { data: gastosTotales } = await supabase
+    .from('gastos')
+    .select('monto')
+    .eq('ruta_id', rutaId)
+    .eq('aprobado', true)
+
+  const desglose_saldo: DesgloseSaldoCaja = {
+    capital_inicial: Number(rutaCapital?.capital_inicial) || 0,
+    cobros_acumulados: cobrosAcumulados,
+    prestamos_activos: (prestamosActivos || []).reduce(
+      (s, p) => s + (Number(p.monto_prestado) || 0),
+      0
+    ),
+    gastos_aprobados_total: (gastosTotales || []).reduce(
+      (s, g) => s + (Number(g.monto) || 0),
+      0
+    ),
+  }
+
   return {
     ruta_id: meta.id,
     nombre_ruta: meta.nombre_ruta,
     color: meta.color,
     cobrador_nombre: meta.cobrador_nombre,
-    capital_actual: meta.capital_actual,
+    capital_actual: Number(rutaCapital?.capital_actual ?? meta.capital_actual) || 0,
     total_cobrado,
     total_prestado,
+    total_prestado_activo: desglose_saldo.prestamos_activos,
     total_gastos,
+    desglose_saldo,
     movimientos,
+  }
+}
+
+/** Préstamos activos/pendientes de la org sin ruta asignada (solo diagnóstico admin) */
+export async function fetchAlertaPrestamosSinRuta(
+  supabase: SupabaseClient,
+  organizationId: string
+): Promise<AlertaPrestamosSinRuta> {
+  const { data: orgUsers } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('organization_id', organizationId)
+
+  const userIds = (orgUsers || []).map((u) => u.id)
+  if (userIds.length === 0) {
+    return { prestamos_sin_ruta_count: 0, monto_sin_ruta: 0 }
+  }
+
+  const { data: sinRuta } = await supabase
+    .from('prestamos')
+    .select('monto_prestado')
+    .in('user_id', userIds)
+    .in('estado', ['activo', 'pendiente'])
+    .is('ruta_id', null)
+
+  const monto = (sinRuta || []).reduce(
+    (s, p) => s + (Number(p.monto_prestado) || 0),
+    0
+  )
+
+  return {
+    prestamos_sin_ruta_count: sinRuta?.length ?? 0,
+    monto_sin_ruta: monto,
   }
 }
 
