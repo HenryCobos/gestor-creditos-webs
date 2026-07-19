@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { CompanyHeader } from '@/components/company-header'
 import { MobileMenu } from '@/components/mobile-menu'
+import { CobradorRutaSelector } from '@/components/cobrador-ruta-selector'
 
 async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const shell = await getDashboardShell()
@@ -101,6 +102,9 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
                 </button>
               </Link>
             </div>
+            {userRole === 'cobrador' && profile?.organization_id && (
+              <CobradorRutaSelector userId={user.id} variant="compact" />
+            )}
           </div>
 
           <nav className="flex-1 p-4 space-y-1 overflow-y-auto overflow-x-hidden">

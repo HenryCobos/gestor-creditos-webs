@@ -40,6 +40,7 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { useConfigStore } from '@/lib/config-store'
 import { format, startOfMonth } from 'date-fns'
 import { loadRutasCaja, type MovimientoCaja, type ResumenCajaRuta, type RutaCajaOption, type AlertaPrestamosSinRuta } from '@/lib/caja-movimientos'
+import { resolverRutaActivaCobrador, setRutaActivaCobrador } from '@/lib/ruta-activa-cobrador'
 
 export default function CajaPage() {
   const hoy = format(new Date(), 'yyyy-MM-dd')
@@ -163,7 +164,8 @@ export default function CajaPage() {
       if (role === 'admin') {
         setFiltroRuta('todas')
       } else if (rutasData.length > 0) {
-        setFiltroRuta(rutasData[0].id)
+        const { rutaId } = await resolverRutaActivaCobrador(supabase, user.id)
+        setFiltroRuta(rutaId || rutasData[0].id)
       }
     }
 
@@ -181,7 +183,15 @@ export default function CajaPage() {
     if (userRole === 'admin') {
       setFiltroRuta('todas')
     } else if (rutas.length > 0) {
-      setFiltroRuta(rutas[0].id)
+      const guardada = rutas.find((r) => r.id === filtroRuta)?.id
+      setFiltroRuta(guardada || rutas[0].id)
+    }
+  }
+
+  const handleFiltroRutaChange = (value: string) => {
+    setFiltroRuta(value)
+    if (userRole === 'cobrador' && value !== 'todas') {
+      setRutaActivaCobrador(value)
     }
   }
 
@@ -227,7 +237,7 @@ export default function CajaPage() {
             {userRole === 'admin' && (
               <div className="space-y-2">
                 <Label>Ruta</Label>
-                <Select value={filtroRuta} onValueChange={setFiltroRuta}>
+                <Select value={filtroRuta} onValueChange={handleFiltroRutaChange}>
                   <SelectTrigger>
                     <SelectValue placeholder="Seleccionar ruta" />
                   </SelectTrigger>
@@ -245,7 +255,7 @@ export default function CajaPage() {
             {userRole === 'cobrador' && rutas.length > 0 && (
               <div className="space-y-2">
                 <Label>Mi ruta</Label>
-                <Select value={filtroRuta} onValueChange={setFiltroRuta}>
+                <Select value={filtroRuta} onValueChange={handleFiltroRutaChange}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>

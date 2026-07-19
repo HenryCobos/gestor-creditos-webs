@@ -41,6 +41,8 @@ import { PrestamoCardMobile } from '@/components/PrestamoCardMobile'
 import { useSubscriptionStore } from '@/lib/subscription-store'
 import { loadOrganizationSubscription, loadOrganizationUsageLimits } from '@/lib/subscription-helpers'
 import { getClientesInteligente, getPrestamosInteligente } from '@/lib/queries-con-roles'
+import { asegurarClienteEnRutaActiva } from '@/lib/ruta-cobrador-sync'
+import { resolverRutaActivaCobrador } from '@/lib/ruta-activa-cobrador'
 import { 
   calculateLoanDetails, 
   calcularSiguienteFechaPago, 
@@ -400,20 +402,45 @@ export default function PrestamosPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    // Resolver ruta activa del cliente (si existe) para mantener capital por ruta consistente
-    const { data: rutaClienteAsignada } = await supabase
-      .from('ruta_clientes')
-      .select('ruta_id')
-      .eq('cliente_id', formData.cliente_id)
-      .eq('activo', true)
-      .order('fecha_asignacion', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    let rutaAsignadaId: string | null = editingPrestamo?.ruta_id || null
 
-    const rutaAsignadaId =
-      rutaClienteAsignada?.ruta_id ||
-      editingPrestamo?.ruta_id ||
-      null
+    if (userRole === 'cobrador' && formData.cliente_id) {
+      const rutaSync = await asegurarClienteEnRutaActiva(
+        supabase,
+        formData.cliente_id,
+        undefined,
+        user.id
+      )
+      if (rutaSync) {
+        rutaAsignadaId = rutaSync
+      } else {
+        const { rutaId } = await resolverRutaActivaCobrador(supabase, user.id)
+        rutaAsignadaId = rutaId
+        if (!rutaAsignadaId) {
+          toast({
+            title: 'Sin ruta activa',
+            description:
+              'No tienes una ruta activa asignada. Selecciona tu ruta en el menú lateral antes de crear préstamos.',
+            variant: 'destructive',
+          })
+          return
+        }
+      }
+    } else {
+      const { data: rutaClienteAsignada } = await supabase
+        .from('ruta_clientes')
+        .select('ruta_id')
+        .eq('cliente_id', formData.cliente_id)
+        .eq('activo', true)
+        .order('fecha_asignacion', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      rutaAsignadaId =
+        rutaClienteAsignada?.ruta_id ||
+        editingPrestamo?.ruta_id ||
+        null
+    }
 
     const monto = parseFloat(formData.monto_prestado)
     const esTotalAcordado = formData.tipo_calculo_interes === 'total_acordado'

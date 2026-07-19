@@ -28,6 +28,7 @@ import { useStore, type Cliente } from '@/lib/store'
 import { ClienteDetailDialog } from '@/components/cliente-detail-dialog'
 import { SearchFilterBar } from '@/components/search-filter-bar'
 import { LimiteAlcanzadoDialog } from '@/components/limite-alcanzado-dialog'
+import { asegurarClienteEnRutaActiva } from '@/lib/ruta-cobrador-sync'
 import { ClienteCardMobile } from '@/components/ClienteCardMobile'
 import { useSubscriptionStore } from '@/lib/subscription-store'
 import { loadOrganizationSubscription, loadOrganizationUsageLimits } from '@/lib/subscription-helpers'
@@ -178,10 +179,32 @@ export default function ClientesPage() {
         })
       } else {
         addCliente(data)
-        toast({
-          title: 'Éxito',
-          description: 'Cliente creado correctamente',
-        })
+        if (userRole === 'cobrador') {
+          const rutaId = await asegurarClienteEnRutaActiva(
+            supabase,
+            data.id,
+            undefined,
+            user.id
+          )
+          if (!rutaId) {
+            toast({
+              title: 'Cliente creado',
+              description:
+                'No se pudo vincular a tu ruta activa. Selecciona tu ruta en el menú lateral.',
+              variant: 'destructive',
+            })
+          } else {
+            toast({
+              title: 'Éxito',
+              description: 'Cliente creado y asignado a tu ruta activa',
+            })
+          }
+        } else {
+          toast({
+            title: 'Éxito',
+            description: 'Cliente creado correctamente',
+          })
+        }
         
         // Recargar límites después de agregar
         loadSubscriptionData()

@@ -27,6 +27,7 @@ import {
   Receipt,
   Calculator
 } from 'lucide-react'
+import { CobradorRutaSelector } from '@/components/cobrador-ruta-selector'
 
 interface MobileMenuProps {
   user: any
@@ -138,6 +139,9 @@ export function MobileMenu({ user, planName, onSignOut, userRole = 'admin' }: Mo
               <p className="text-sm font-bold text-primary">{planName}</p>
             </div>
           </Link>
+          {userRole === 'cobrador' && user?.id && user?.organization_id && (
+            <CobradorRutaSelector userId={user.id} variant="full" />
+          )}
         </div>
 
         {/* Navigation */}
