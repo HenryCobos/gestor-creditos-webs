@@ -237,6 +237,38 @@ export default function ClientesPage() {
 
     if (!confirm('¿Estás seguro de eliminar este cliente?')) return
 
+    const { data: rpcOk, error: rpcError } = await supabase.rpc('eliminar_cliente_admin', {
+      p_cliente_id: id,
+    })
+
+    if (!rpcError && rpcOk === true) {
+      deleteCliente(id)
+      toast({
+        title: 'Éxito',
+        description: 'Cliente eliminado correctamente',
+      })
+      await loadSubscriptionData()
+      return
+    }
+
+    if (!rpcError && rpcOk === false) {
+      toast({
+        title: 'Sin permisos',
+        description: 'No tienes permisos para eliminar este cliente.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (rpcError && !rpcError.message?.includes('Could not find the function')) {
+      toast({
+        title: 'Error',
+        description: rpcError.message || 'No se pudo eliminar el cliente',
+        variant: 'destructive',
+      })
+      return
+    }
+
     const { error, count } = await supabase
       .from('clientes')
       .delete({ count: 'exact' })

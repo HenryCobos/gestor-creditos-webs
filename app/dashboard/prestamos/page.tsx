@@ -913,6 +913,38 @@ export default function PrestamosPage() {
 
     if (!confirm('¿Estás seguro de eliminar este préstamo? Se eliminarán también sus cuotas.')) return
 
+    const { data: rpcOk, error: rpcError } = await supabase.rpc('eliminar_prestamo_admin', {
+      p_prestamo_id: id,
+    })
+
+    if (!rpcError && rpcOk === true) {
+      deletePrestamo(id)
+      toast({
+        title: 'Éxito',
+        description: 'Préstamo eliminado correctamente',
+      })
+      await loadSubscriptionData()
+      return
+    }
+
+    if (!rpcError && rpcOk === false) {
+      toast({
+        title: 'Sin permisos',
+        description: 'No tienes permisos para eliminar este préstamo.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (rpcError && !rpcError.message?.includes('Could not find the function')) {
+      toast({
+        title: 'Error',
+        description: rpcError.message || 'No se pudo eliminar el préstamo',
+        variant: 'destructive',
+      })
+      return
+    }
+
     const { error, count } = await supabase
       .from('prestamos')
       .delete({ count: 'exact' })
