@@ -35,6 +35,7 @@ import {
   MapPin,
   AlertTriangle,
   Banknote,
+  ChevronDown,
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useConfigStore } from '@/lib/config-store'
@@ -297,8 +298,9 @@ export default function CajaPage() {
           <p className="text-xs text-muted-foreground mt-3">
             Periodo: {formatDate(fechaDesde)} — {formatDate(fechaHasta)}. El dashboard
             muestra totales de toda la organización; aquí ves movimientos de la ruta
-            seleccionada. El saldo actual incluye capital inicial y préstamos activos
-            en la ruta (no solo el periodo filtrado).
+            seleccionada. El <strong>saldo actual</strong> es acumulado histórico (capital
+            inicial, cobros, ingresos manuales, préstamos activos y gastos). Al liquidar
+            un préstamo, su capital prestado vuelve a la caja además del cobro del día.
           </p>
           {userRole === 'admin' &&
             alertaSinRuta &&
@@ -466,26 +468,111 @@ export default function CajaPage() {
             <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
               <p>
-                Hay préstamos activos fuera del periodo seleccionado (
+                Hay capital pendiente en préstamos fuera del periodo seleccionado (
                 {formatCurrency(
                   resumenRuta.total_prestado_activo - resumenRuta.total_prestado,
                   config.currency
                 )}{' '}
                 no aparecen en &quot;Prestado en el periodo&quot;). Amplía la fecha
-                &quot;Hasta&quot; o revisa &quot;Capital en préstamos activos&quot; (
+                &quot;Hasta&quot; o revisa &quot;Capital pendiente en calle&quot; (
                 {formatCurrency(resumenRuta.total_prestado_activo, config.currency)}).
               </p>
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          {/* Tarjeta principal: el número que importa */}
+          <Card className="border-blue-300 bg-gradient-to-br from-blue-50 to-white shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base font-semibold flex items-center gap-2 text-blue-900">
+                <Wallet className="h-5 w-5" />
+                Capital disponible en la ruta — {resumenRuta.nombre_ruta}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p
+                className={`text-4xl md:text-5xl font-bold tracking-tight ${
+                  (resumenRuta.capital_actual ?? 0) < 0 ? 'text-red-700' : 'text-blue-700'
+                }`}
+              >
+                {formatCurrency(resumenRuta.capital_actual, config.currency)}
+              </p>
+              <p className="text-sm text-muted-foreground mt-2 max-w-xl">
+                Este es el monto real que puedes prestar o retirar. Admin y cobrador ven
+                el mismo valor. No confundir con &quot;movimientos netos del periodo&quot;
+                (solo el resumen del filtro de fechas).
+              </p>
+              {resumenRuta.cobrador_nombre && (
+                <p className="text-xs mt-3 text-muted-foreground">
+                  Cobrador: <strong>{resumenRuta.cobrador_nombre}</strong>
+                </p>
+              )}
+              {resumenRuta.desglose_saldo && (
+                <details className="mt-4 group">
+                  <summary className="cursor-pointer text-sm font-medium text-blue-800 flex items-center gap-1 list-none [&::-webkit-details-marker]:hidden">
+                    <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
+                    Ver desglose contable
+                  </summary>
+                  <div className="mt-3 pt-3 border-t border-blue-200/60 space-y-1 text-xs text-muted-foreground pl-1">
+                    <p>+ Capital inicial: {formatCurrency(resumenRuta.desglose_saldo.capital_inicial, config.currency)}</p>
+                    {resumenRuta.desglose_saldo.movimientos_manuales_netos !== 0 && (
+                      <p>
+                        {resumenRuta.desglose_saldo.movimientos_manuales_netos >= 0 ? '+' : '−'}{' '}
+                        Ajustes históricos de capital (neto):{' '}
+                        {formatCurrency(
+                          Math.abs(resumenRuta.desglose_saldo.movimientos_manuales_netos),
+                          config.currency
+                        )}
+                        <span className="block text-[11px] mt-0.5 opacity-80">
+                          Ingresos, retiros y transferencias registrados en Rutas
+                        </span>
+                      </p>
+                    )}
+                    <p>+ Cobros acumulados: {formatCurrency(resumenRuta.desglose_saldo.cobros_acumulados, config.currency)}</p>
+                    <p>− Capital prestado en ruta (histórico): {formatCurrency(resumenRuta.desglose_saldo.capital_prestado_historico, config.currency)}</p>
+                    <p>− Gastos aprobados: {formatCurrency(resumenRuta.desglose_saldo.gastos_aprobados_total, config.currency)}</p>
+                    <p className="font-medium text-foreground/80 pt-1">
+                      = {formatCurrency(resumenRuta.capital_actual, config.currency)}
+                    </p>
+                  </div>
+                </details>
+              )}
+            </CardContent>
+          </Card>
+
+          <div>
+            <h2 className="text-sm font-medium text-muted-foreground mb-3">
+              Detalle del periodo ({formatDate(fechaDesde)} — {formatDate(fechaHasta)})
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Movimientos netos del periodo</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <p
+                  className={`text-xl font-bold ${
+                    resumenRuta.variacion_periodo >= 0 ? 'text-green-700' : 'text-red-700'
+                  }`}
+                >
+                  {resumenRuta.variacion_periodo >= 0 ? '+' : '−'}
+                  {formatCurrency(
+                    Math.abs(resumenRuta.variacion_periodo),
+                    config.currency
+                  )}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Cobros, ingresos y retiros del periodo filtrado
+                </p>
+              </CardContent>
+            </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium">Cobrado en el periodo</CardTitle>
                 <TrendingUp className="h-4 w-4 text-green-600" />
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold text-green-600">
+                <p className="text-xl font-bold text-green-600">
                   {formatCurrency(resumenRuta.total_cobrado, config.currency)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -499,7 +586,7 @@ export default function CajaPage() {
                 <TrendingDown className="h-4 w-4 text-red-600" />
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold text-red-600">
+                <p className="text-xl font-bold text-red-600">
                   {formatCurrency(resumenRuta.total_prestado, config.currency)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -509,15 +596,15 @@ export default function CajaPage() {
             </Card>
             <Card className="border-red-100 bg-red-50/30">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Capital en préstamos activos</CardTitle>
+                <CardTitle className="text-sm font-medium">Capital pendiente en calle</CardTitle>
                 <Banknote className="h-4 w-4 text-red-700" />
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold text-red-700">
+                <p className="text-xl font-bold text-red-700">
                   {formatCurrency(resumenRuta.total_prestado_activo, config.currency)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Total en circulación — comparable con el dashboard
+                  Capital no recuperado en préstamos activo/pendiente
                 </p>
               </CardContent>
             </Card>
@@ -527,39 +614,13 @@ export default function CajaPage() {
                 <Receipt className="h-4 w-4 text-orange-600" />
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold text-orange-600">
+                <p className="text-xl font-bold text-orange-600">
                   {formatCurrency(resumenRuta.total_gastos, config.currency)}
                 </p>
+                <p className="text-xs text-muted-foreground mt-1">En el periodo filtrado</p>
               </CardContent>
             </Card>
-            <Card className="border-blue-200 bg-blue-50/50">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Saldo actual (sistema)</CardTitle>
-                <Wallet className="h-4 w-4 text-blue-600" />
-              </CardHeader>
-              <CardContent>
-                <p className={`text-2xl font-bold ${(resumenRuta.capital_actual ?? 0) < 0 ? 'text-red-700' : 'text-blue-700'}`}>
-                  {formatCurrency(resumenRuta.capital_actual, config.currency)}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Capital de la ruta — debe coincidir con admin y cobrador
-                </p>
-                {resumenRuta.desglose_saldo && (
-                  <div className="mt-3 pt-3 border-t border-blue-200/60 space-y-1 text-xs text-muted-foreground">
-                    <p className="font-medium text-foreground/80">Composición del saldo:</p>
-                    <p>+ Capital inicial: {formatCurrency(resumenRuta.desglose_saldo.capital_inicial, config.currency)}</p>
-                    <p>+ Cobros acumulados: {formatCurrency(resumenRuta.desglose_saldo.cobros_acumulados, config.currency)}</p>
-                    <p>− Préstamos activos en ruta: {formatCurrency(resumenRuta.desglose_saldo.prestamos_activos, config.currency)}</p>
-                    <p>− Gastos aprobados: {formatCurrency(resumenRuta.desglose_saldo.gastos_aprobados_total, config.currency)}</p>
-                  </div>
-                )}
-                {resumenRuta.cobrador_nombre && (
-                  <p className="text-xs mt-2">
-                    Cobrador: <strong>{resumenRuta.cobrador_nombre}</strong>
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+            </div>
           </div>
 
           <Card>

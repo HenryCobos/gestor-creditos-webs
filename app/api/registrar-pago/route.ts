@@ -57,7 +57,7 @@ export async function POST(request: Request) {
         .maybeSingle(),
       supabaseAdmin
         .from('prestamos')
-        .select('id, user_id, ruta_id, cliente_id')
+        .select('id, user_id, ruta_id, cliente_id, monto_prestado, estado')
         .eq('id', prestamo_id)
         .maybeSingle(),
       supabaseAdmin
@@ -328,11 +328,16 @@ export async function POST(request: Request) {
       .neq('estado', 'pagada')
       .limit(1)
 
+    const prestamoEraActivo =
+      prestamo.estado === 'activo' || prestamo.estado === 'pendiente'
+    let prestamoLiquidado = false
+
     if (!cuotaPendiente?.length) {
       await supabaseAdmin
         .from('prestamos')
         .update({ estado: 'pagado' })
         .eq('id', prestamo_id)
+      prestamoLiquidado = prestamoEraActivo
     } else {
       await supabaseAdmin
         .from('prestamos')
@@ -359,6 +364,7 @@ export async function POST(request: Request) {
       esPagoCompleto: esPagoCompletoCuotaInicio,
       aplicaciones,
       cuotasAfectadas: aplicaciones.length,
+      prestamo_liquidado: prestamoLiquidado,
       message: mensajePagoCascada(montoCobrado, aplicaciones),
     })
   } catch (error: unknown) {

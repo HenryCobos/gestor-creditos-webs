@@ -25,8 +25,12 @@ export interface MovimientoCaja {
 
 export interface DesgloseSaldoCaja {
   capital_inicial: number
+  movimientos_manuales_netos: number
   cobros_acumulados: number
-  prestamos_activos: number
+  /** SUM(monto_prestado) de todos los préstamos de la ruta (fórmula contable) */
+  capital_prestado_historico: number
+  /** Capital no recuperado en préstamos activo/pendiente (métrica operativa) */
+  capital_pendiente_en_calle: number
   gastos_aprobados_total: number
 }
 
@@ -43,8 +47,10 @@ export interface ResumenCajaRuta {
   capital_actual: number
   total_cobrado: number
   total_prestado: number
+  /** Suma de capital pendiente en préstamos activo/pendiente de la ruta */
   total_prestado_activo: number
   total_gastos: number
+  variacion_periodo: number
   desglose_saldo?: DesgloseSaldoCaja
   movimientos: MovimientoCaja[]
 }
@@ -69,6 +75,42 @@ function labelTipo(tipo: TipoMovimientoCaja): string {
     transferencia_salida: 'Transferencia enviada',
   }
   return map[tipo]
+}
+
+/** Neto histórico de ingresos/retiros/transferencias (excluye capital inicial duplicado). */
+function calcularMovimientosManualesNetos(
+  movs: { tipo_movimiento: string; monto: number; concepto?: string | null }[]
+): number {
+  return movs.reduce((s, m) => {
+    const concepto = (m.concepto || '').toLowerCase()
+    if (
+      m.tipo_movimiento === 'ingreso' &&
+      concepto.startsWith('capital inicial')
+    ) {
+      return s
+    }
+    if (
+      m.tipo_movimiento === 'ingreso' ||
+      m.tipo_movimiento === 'transferencia_entrada'
+    ) {
+      return s + (Number(m.monto) || 0)
+    }
+    if (
+      m.tipo_movimiento === 'retiro' ||
+      m.tipo_movimiento === 'transferencia_salida'
+    ) {
+      return s - (Number(m.monto) || 0)
+    }
+    return s
+  }, 0)
+}
+
+/** Suma neta de movimientos visibles en el periodo (no incluye capital liberado al liquidar). */
+export function calcularVariacionPeriodo(movimientos: MovimientoCaja[]): number {
+  return movimientos.reduce(
+    (s, m) => s + (m.es_entrada ? m.monto : -m.monto),
+    0
+  )
 }
 
 type PagoRow = {
@@ -286,7 +328,7 @@ export async function fetchResumenCajaRuta(
 
   const { data: prestamos } = await supabase
     .from('prestamos')
-    .select('id, monto_prestado, created_at, cliente:clientes(nombre)')
+    .select('id, monto_prestado, estado, created_at, cliente:clientes(nombre)')
     .eq('ruta_id', rutaId)
     .order('created_at', { ascending: false })
 
@@ -387,11 +429,29 @@ export async function fetchResumenCajaRuta(
     )
   }
 
-  const { data: prestamosActivos } = await supabase
-    .from('prestamos')
-    .select('monto_prestado')
-    .eq('ruta_id', rutaId)
-    .in('estado', ['activo', 'pendiente'])
+  const capitalPrestadoHistorico = (prestamos || []).reduce(
+    (s, p) => s + (Number(p.monto_prestado) || 0),
+    0
+  )
+
+  let capitalPendienteEnCalle = 0
+  const { data: capitalPendienteRpc, error: rpcPendienteErr } = await supabase.rpc(
+    'get_capital_pendiente_ruta',
+    { p_ruta_id: rutaId }
+  )
+  if (!rpcPendienteErr && capitalPendienteRpc != null) {
+    capitalPendienteEnCalle = Number(capitalPendienteRpc) || 0
+  } else {
+    const { data: prestamosActivos } = await supabase
+      .from('prestamos')
+      .select('monto_prestado')
+      .eq('ruta_id', rutaId)
+      .in('estado', ['activo', 'pendiente'])
+    capitalPendienteEnCalle = (prestamosActivos || []).reduce(
+      (s, p) => s + (Number(p.monto_prestado) || 0),
+      0
+    )
+  }
 
   const { data: gastosTotales } = await supabase
     .from('gastos')
@@ -399,18 +459,28 @@ export async function fetchResumenCajaRuta(
     .eq('ruta_id', rutaId)
     .eq('aprobado', true)
 
+  const { data: movsManualAll } = await supabase
+    .from('movimientos_capital_ruta')
+    .select('tipo_movimiento, monto, concepto')
+    .eq('ruta_id', rutaId)
+
+  const movimientosManualesNetos = calcularMovimientosManualesNetos(
+    movsManualAll || []
+  )
+
   const desglose_saldo: DesgloseSaldoCaja = {
     capital_inicial: Number(rutaCapital?.capital_inicial) || 0,
+    movimientos_manuales_netos: movimientosManualesNetos,
     cobros_acumulados: cobrosAcumulados,
-    prestamos_activos: (prestamosActivos || []).reduce(
-      (s, p) => s + (Number(p.monto_prestado) || 0),
-      0
-    ),
+    capital_prestado_historico: capitalPrestadoHistorico,
+    capital_pendiente_en_calle: capitalPendienteEnCalle,
     gastos_aprobados_total: (gastosTotales || []).reduce(
       (s, g) => s + (Number(g.monto) || 0),
       0
     ),
   }
+
+  const variacion_periodo = calcularVariacionPeriodo(movimientos)
 
   return {
     ruta_id: meta.id,
@@ -420,8 +490,9 @@ export async function fetchResumenCajaRuta(
     capital_actual: Number(rutaCapital?.capital_actual ?? meta.capital_actual) || 0,
     total_cobrado,
     total_prestado,
-    total_prestado_activo: desglose_saldo.prestamos_activos,
+    total_prestado_activo: desglose_saldo.capital_pendiente_en_calle,
     total_gastos,
+    variacion_periodo,
     desglose_saldo,
     movimientos,
   }

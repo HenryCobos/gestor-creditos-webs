@@ -34,6 +34,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { formatCurrency, formatDate, isDateOverdue } from '@/lib/utils'
+import { toastPagoExitoso } from '@/lib/pago-feedback'
 import { getNombreFrecuencia } from '@/lib/loan-calculations'
 import { DollarSign, CreditCard, AlertCircle, CheckCircle, FileText, Download, XCircle } from 'lucide-react'
 import type { Cliente } from '@/lib/store'
@@ -95,6 +96,7 @@ export function ClienteDetailDialog({
   const [montoPago, setMontoPago] = useState('')
   const [metodoPago, setMetodoPago] = useState('')
   const [notas, setNotas] = useState('')
+  const [isAdmin, setIsAdmin] = useState(false)
   const { toast } = useToast()
   const supabase = createClient()
   const { config } = useConfigStore()
@@ -102,8 +104,38 @@ export function ClienteDetailDialog({
   useEffect(() => {
     if (cliente && open) {
       loadClienteData()
+      loadUserRole()
     }
   }, [cliente, open])
+
+  const loadUserRole = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setIsAdmin(false)
+      return
+    }
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('organization_id, role')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    let role: 'admin' | 'cobrador' =
+      profile?.role === 'admin' ? 'admin' : 'cobrador'
+
+    if (profile?.organization_id && role !== 'admin') {
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('organization_id', profile.organization_id)
+        .maybeSingle()
+      if (roleData?.role === 'admin' || roleData?.role === 'cobrador') {
+        role = roleData.role
+      }
+    }
+    setIsAdmin(role === 'admin')
+  }
 
   const loadClienteData = async () => {
     if (!cliente) return
@@ -186,10 +218,7 @@ export function ClienteDetailDialog({
         return
       }
 
-      toast({
-        title: 'Éxito',
-        description: data.message || 'Pago registrado correctamente',
-      })
+      toastPagoExitoso(toast, data, config.currency)
 
       // Recargar datos
       loadClienteData()
@@ -215,72 +244,43 @@ export function ClienteDetailDialog({
   const handleDesmarcarCuota = async () => {
     if (!cuotaADesmarcar) return
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    try {
+      const response = await fetch('/api/desmarcar-cuota', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cuota_id: cuotaADesmarcar.id,
+          prestamo_id: cuotaADesmarcar.prestamo_id,
+        }),
+      })
 
-    // Eliminar todos los pagos asociados a esta cuota
-    const { error: deletePagosError } = await supabase
-      .from('pagos')
-      .delete()
-      .eq('cuota_id', cuotaADesmarcar.id)
+      const data = await response.json()
 
-    if (deletePagosError) {
+      if (!response.ok) {
+        toast({
+          title: 'Error',
+          description: data.error || 'No se pudo desmarcar la cuota',
+          variant: 'destructive',
+        })
+        return
+      }
+
       toast({
-        title: 'Error',
-        description: 'No se pudieron eliminar los pagos',
-        variant: 'destructive',
+        title: 'Éxito',
+        description: data.message || 'Cuota desmarcada correctamente',
       })
-      return
-    }
 
-    // Determinar nuevo estado de la cuota
-    const nuevoEstado = isDateOverdue(cuotaADesmarcar.fecha_vencimiento) ? 'retrasada' : 'pendiente'
-
-    // Actualizar la cuota a estado pendiente
-    const { error: updateError } = await supabase
-      .from('cuotas')
-      .update({
-        monto_pagado: 0,
-        estado: nuevoEstado,
-        fecha_pago: null,
-      })
-      .eq('id', cuotaADesmarcar.id)
-
-    if (updateError) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo actualizar la cuota',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    // Obtener el préstamo de la cuota y verificar si estaba pagado
-    const { data: prestamoData } = await supabase
-      .from('prestamos')
-      .select('id, estado')
-      .eq('id', cuotaADesmarcar.prestamo_id)
-      .single()
-
-    // Si el préstamo estaba marcado como pagado, cambiarlo a activo
-    if (prestamoData && prestamoData.estado === 'pagado') {
-      await supabase
-        .from('prestamos')
-        .update({ estado: 'activo' })
-        .eq('id', prestamoData.id)
-      
+      loadClienteData()
       onPaymentComplete?.()
+      setDesmarcarDialogOpen(false)
+      setCuotaADesmarcar(null)
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'No se pudo desmarcar la cuota',
+        variant: 'destructive',
+      })
     }
-
-    toast({
-      title: 'Éxito',
-      description: 'Cuota desmarcada correctamente',
-    })
-
-    // Recargar datos
-    loadClienteData()
-    setDesmarcarDialogOpen(false)
-    setCuotaADesmarcar(null)
   }
 
   const handleGenerarContrato = async (prestamo: PrestamoDetalle) => {
@@ -534,7 +534,7 @@ export function ClienteDetailDialog({
                                 <DollarSign className="mr-1 h-3 w-3" />
                                 Pagar
                               </Button>
-                            ) : (
+                            ) : isAdmin ? (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -547,7 +547,7 @@ export function ClienteDetailDialog({
                                 <XCircle className="mr-1 h-3 w-3" />
                                 Desmarcar
                               </Button>
-                            )}
+                            ) : null}
                           </TableCell>
                         </TableRow>
                       )

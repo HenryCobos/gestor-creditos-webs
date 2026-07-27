@@ -956,7 +956,7 @@ export default function RutasPage() {
                     Capital inicial: {formatCurrency(ruta.capital_inicial, config.currency)}
                   </div>
                   <div className="text-[11px] text-gray-500 leading-relaxed">
-                    Disponible = Inicial + Cobros - Capital prestado activo - Gastos aprobados
+                    Disponible = Inicial + Cobros − Capital prestado en ruta − Gastos aprobados
                   </div>
                 </div>
 

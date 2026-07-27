@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { DollarSign, CheckCircle, AlertCircle, History, Undo2, Filter } from 'lucide-react'
 import { formatCurrency, formatDate, isDateOverdue } from '@/lib/utils'
+import { toastPagoExitoso } from '@/lib/pago-feedback'
 import { format, startOfDay, endOfDay, isSameDay, parseISO } from 'date-fns'
 import { useConfigStore } from '@/lib/config-store'
 import {
@@ -306,10 +307,7 @@ export default function CuotasPage() {
 
       console.log('[handleRegistrarPago] Pago registrado exitosamente:', data)
 
-      toast({
-        title: 'Éxito',
-        description: data.message || 'Pago registrado correctamente',
-      })
+      toastPagoExitoso(toast, data, config.currency)
 
       // Recargar cuotas
       loadCuotas()
@@ -362,65 +360,40 @@ export default function CuotasPage() {
   const handleRevertirPago = async () => {
     if (!pagoARevertir || !selectedCuota) return
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    try {
+      const response = await fetch('/api/revertir-pago', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pago_id: pagoARevertir.id }),
+      })
 
-    // Eliminar el pago
-    const { error: deleteError } = await supabase
-      .from('pagos')
-      .delete()
-      .eq('id', pagoARevertir.id)
+      const data = await response.json()
 
-    if (deleteError) {
+      if (!response.ok) {
+        toast({
+          title: 'Error',
+          description: data.error || 'No se pudo revertir el pago',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      toast({
+        title: 'Éxito',
+        description: data.message || 'Pago revertido correctamente',
+      })
+
+      loadCuotas()
+      loadPagosCuota(selectedCuota.id)
+      setRevertirDialogOpen(false)
+      setPagoARevertir(null)
+    } catch {
       toast({
         title: 'Error',
         description: 'No se pudo revertir el pago',
         variant: 'destructive',
       })
-      return
     }
-
-    // Recalcular el monto_pagado de la cuota
-    const nuevoMontoPagado = selectedCuota.monto_pagado - pagoARevertir.monto_pagado
-    const esCompletaPagada = nuevoMontoPagado >= selectedCuota.monto_cuota
-
-    // Actualizar la cuota
-    const { error: updateError } = await supabase
-      .from('cuotas')
-      .update({
-        monto_pagado: Math.max(0, nuevoMontoPagado),
-        estado: esCompletaPagada ? 'pagada' : (isDateOverdue(selectedCuota.fecha_vencimiento) ? 'retrasada' : 'pendiente'),
-        fecha_pago: esCompletaPagada ? selectedCuota.fecha_pago : null,
-      })
-      .eq('id', selectedCuota.id)
-
-    if (updateError) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo actualizar la cuota',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    // Si la cuota vuelve a estar pendiente, actualizar el estado del préstamo
-    if (!esCompletaPagada && selectedCuota.estado === 'pagada') {
-      await supabase
-        .from('prestamos')
-        .update({ estado: 'activo' })
-        .eq('id', selectedCuota.prestamo.id)
-    }
-
-    toast({
-      title: 'Éxito',
-      description: 'Pago revertido correctamente',
-    })
-
-    // Recargar datos
-    loadCuotas()
-    loadPagosCuota(selectedCuota.id)
-    setRevertirDialogOpen(false)
-    setPagoARevertir(null)
   }
 
   const aplicarFiltroFecha = () => {
@@ -972,6 +945,7 @@ export default function CuotasPage() {
                             {pago.notas || '-'}
                           </TableCell>
                           <TableCell className="text-right">
+                            {userRole === 'admin' && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -984,6 +958,7 @@ export default function CuotasPage() {
                               <Undo2 className="mr-1 h-3 w-3" />
                               Revertir
                             </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}

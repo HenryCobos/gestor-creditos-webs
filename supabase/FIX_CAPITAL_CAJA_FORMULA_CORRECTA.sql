@@ -1,0 +1,13 @@
+-- =====================================================
+-- FIX: Fórmula contable correcta para capital en caja
+-- =====================================================
+-- Ver FIX_CAPITAL_CAJA_FORMULA_CORRECTA_D1.sql (función)
+--     FIX_CAPITAL_CAJA_FORMULA_CORRECTA_D2.sql (ANITA)
+--     FIX_CAPITAL_CAJA_FORMULA_CORRECTA_D3.sql (resto)
+--
+-- capital_actual = inicial + manual + pagos - SUM(monto_prestado ruta) - gastos
+--
+-- capital_pendiente_prestamo / get_capital_pendiente_ruta se mantienen
+-- solo para UI "Capital pendiente en calle" (préstamos activo/pendiente).
+
+-- Índice: ejecutar D1, luego D2, validar, luego D3 con OK explícito.
