@@ -45,7 +45,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { getCuotasSegunRol } from '@/lib/queries-con-roles'
+import {
+  getCuotasSegunRol,
+  getPrestamosInteligente,
+  getClientesInteligente,
+} from '@/lib/queries-con-roles'
 import {
   previewAplicacionCascada,
   totalPendienteDesdeCuota,
@@ -172,28 +176,31 @@ export default function CuotasPage() {
         return
       }
 
-      // Enriquecer con datos de préstamos y clientes
-      const prestamoIds = [...new Set(cuotasData.map((c: any) => c.prestamo_id))]
-      
-      const { data: prestamosData } = await supabase
-        .from('prestamos')
-        .select(`
-          id,
-          monto_prestado,
-          user_id,
-          cliente:clientes(
-            nombre,
-            dni
-          )
-        `)
-        .in('id', prestamoIds)
+      // Enriquecer vía RPC (mismo patrón que Prestamos) para evitar N/A por RLS
+      const [prestamosData, clientesData] = await Promise.all([
+        getPrestamosInteligente(),
+        getClientesInteligente(),
+      ])
 
-      console.log(`[loadCuotas] Enriqueciendo cuotas con datos de ${prestamosData?.length || 0} préstamos`)
+      const prestamosMap = new Map(
+        (prestamosData || []).map((p: any) => [p.id, p])
+      )
+      const clientesMap = new Map(
+        (clientesData || []).map((c: any) => [c.id, c])
+      )
+
+      console.log(
+        `[loadCuotas] Enriqueciendo cuotas con ${prestamosMap.size} préstamos y ${clientesMap.size} clientes`
+      )
 
       // Si es admin, obtener nombres de cobradores para mostrar en la UI
       let cobradoresMap = new Map<string, string>()
       if (role === 'admin') {
-        const cobradorIds = [...new Set(prestamosData?.map((p: any) => p.user_id).filter(Boolean) || [])]
+        const cobradorIds = [
+          ...new Set(
+            (prestamosData || []).map((p: any) => p.user_id).filter(Boolean)
+          ),
+        ]
         if (cobradorIds.length > 0) {
           const { data: cobradoresData } = await supabase.rpc('get_usuarios_organizacion')
           if (cobradoresData) {
@@ -205,8 +212,9 @@ export default function CuotasPage() {
       }
 
       const cuotasEnriquecidas = cuotasData.map((cuota: any) => {
-        const prestamo = prestamosData?.find((p: any) => p.id === cuota.prestamo_id)
-        
+        const p = prestamosMap.get(cuota.prestamo_id)
+        const cliente = p?.cliente_id ? clientesMap.get(p.cliente_id) : null
+
         // Actualizar estado de cuotas retrasadas
         let estado = cuota.estado
         if (cuota.estado === 'pendiente' && isDateOverdue(cuota.fecha_vencimiento)) {
@@ -214,13 +222,20 @@ export default function CuotasPage() {
         }
 
         // Agregar información del cobrador si es admin
-        const cobrador = prestamo?.user_id ? cobradoresMap.get(prestamo.user_id) : null
+        const cobrador = p?.user_id ? cobradoresMap.get(p.user_id) : null
 
         return {
           ...cuota,
           estado,
-          prestamo: prestamo || { id: cuota.prestamo_id, monto_prestado: 0, cliente: { nombre: 'N/A', dni: 'N/A' } },
-          cobrador_nombre: cobrador || null
+          prestamo: {
+            id: p?.id || cuota.prestamo_id,
+            monto_prestado: p?.monto_prestado || 0,
+            user_id: p?.user_id,
+            cliente: cliente
+              ? { nombre: cliente.nombre, dni: cliente.dni }
+              : { nombre: 'Sin cliente', dni: '-' },
+          },
+          cobrador_nombre: cobrador || null,
         }
       })
 
