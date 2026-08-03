@@ -408,12 +408,25 @@ export function PrestamoDetailDialog({
         return
       }
 
+      const montoRev = Number(data.monto_revertido) || 0
+      const cajaActualizada = data.capital_recalculado != null
+      const partes: string[] = []
+      if (montoRev > 0) {
+        partes.push(
+          `Cuota desmarcada. Revertido: ${formatCurrency(montoRev, config.currency)}`
+        )
+      } else {
+        partes.push(data.message || 'Cuota desmarcada correctamente')
+      }
+      if (cajaActualizada) {
+        partes.push('Caja actualizada')
+      }
       toast({
         title: 'Éxito',
-        description: data.message || 'Cuota desmarcada correctamente',
+        description: partes.join('. '),
       })
 
-      loadCuotas()
+      await loadCuotas()
       if (onUpdate) onUpdate()
       setDesmarcarDialogOpen(false)
       setCuotaADesmarcar(null)
@@ -959,7 +972,9 @@ export function PrestamoDetailDialog({
             <AlertDialogDescription>
               Esta acción desmarcará la cuota #{cuotaADesmarcar?.numero_cuota} como pagada y la volverá a estado pendiente.
               <br /><br />
-              Se eliminarán todos los pagos registrados para esta cuota y el monto pagado volverá a {formatCurrency(0, config.currency)}.
+              Se eliminarán o ajustarán los pagos registrados para esta cuota y el capital en caja se recalculará.
+              <br /><br />
+              El monto pagado de la cuota volverá a {formatCurrency(0, config.currency)}.
               <br /><br />
               <strong>¿Estás seguro de que quieres desmarcar esta cuota?</strong>
             </AlertDialogDescription>
