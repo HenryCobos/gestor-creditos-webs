@@ -294,16 +294,29 @@ export default function RutasPage() {
     }
   }
 
-  const loadClientesRuta = async (rutaId: string) => {
-    const { data } = await supabase
+  const loadClientesRuta = async (rutaId: string): Promise<boolean> => {
+    const { data, error } = await supabase
       .from('ruta_clientes')
       .select('cliente_id')
       .eq('ruta_id', rutaId)
       .eq('activo', true)
 
-    if (data) {
-      setClientesRuta(data.map(rc => rc.cliente_id))
+    if (error) {
+      // No dejar el estado previo (posiblemente de otra ruta) ni un
+      // estado a medias: se limpia explícitamente y se avisa al admin,
+      // en vez de guardar en silencio con datos incompletos/incorrectos.
+      console.error('[loadClientesRuta] Error cargando clientes de la ruta:', error)
+      setClientesRuta([])
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar los clientes actuales de la ruta. Vuelve a intentarlo antes de asignar.',
+        variant: 'destructive',
+      })
+      return false
     }
+
+    setClientesRuta((data || []).map(rc => rc.cliente_id))
+    return true
   }
 
   const loadHistorialMovimientos = async (rutaId: string) => {
@@ -571,7 +584,9 @@ export default function RutasPage() {
     if (!selectedRuta) return
 
     try {
-      // Detectar clientes que se están moviendo de otra ruta
+      // Detectar clientes que se están moviendo de otra ruta (solo para el
+      // mensaje de confirmación; el diff real lo calcula la RPC atómica
+      // contra el estado real de la BD, no contra este estado de React)
       const clientesAMover = clientesRuta
         .map(id => todosClientes.find(c => c.id === id))
         .filter(c => c && c.tiene_ruta && c.ruta_id_asignada !== selectedRuta.id)
@@ -592,64 +607,22 @@ export default function RutasPage() {
         if (!confirmar) return
       }
 
-      // 1. Desactivar asignaciones de clientes que están siendo movidos de otras rutas
-      for (const cliente of clientesAMover) {
-        await supabase
-          .from('ruta_clientes')
-          .update({ activo: false })
-          .eq('cliente_id', cliente.id)
-          .eq('activo', true)
+      // Una sola llamada RPC atómica: calcula el diff (altas/bajas/movidos)
+      // dentro de una transacción de Postgres contra el estado REAL de
+      // ruta_clientes, sincroniza prestamos.ruta_id y recalcula el capital.
+      // Reemplaza el patrón "desactivar todo + reactivar seleccionados"
+      // que podía dejar clientes desactivados para siempre si el estado
+      // de React estaba incompleto o alguna llamada intermedia fallaba.
+      const { data: resultado, error: rpcError } = await supabase.rpc('set_clientes_ruta', {
+        p_ruta_id: selectedRuta.id,
+        p_cliente_ids: clientesRuta,
+      })
+
+      if (rpcError) {
+        throw rpcError
       }
 
-      // 2. Desactivar todas las asignaciones actuales de esta ruta
-      await supabase
-        .from('ruta_clientes')
-        .update({ activo: false })
-        .eq('ruta_id', selectedRuta.id)
-
-      // 3. Crear/reactivar asignaciones seleccionadas
-      for (const clienteId of clientesRuta) {
-        const { data: existing } = await supabase
-          .from('ruta_clientes')
-          .select('id')
-          .eq('ruta_id', selectedRuta.id)
-          .eq('cliente_id', clienteId)
-          .single()
-
-        if (existing) {
-          // Reactivar
-          await supabase
-            .from('ruta_clientes')
-            .update({ activo: true })
-            .eq('id', existing.id)
-        } else {
-          // Crear nueva
-          await supabase
-            .from('ruta_clientes')
-            .insert({
-              ruta_id: selectedRuta.id,
-              cliente_id: clienteId,
-              activo: true,
-            })
-        }
-      }
-
-      // 4. Sincronizar préstamos activos/pendientes con la ruta (respaldo si el trigger BD no corrió)
-      if (clientesRuta.length > 0) {
-        const { error: syncPrestamosError } = await supabase
-          .from('prestamos')
-          .update({
-            ruta_id: selectedRuta.id,
-            updated_at: new Date().toISOString(),
-          })
-          .in('cliente_id', clientesRuta)
-          .in('estado', ['activo', 'pendiente'])
-          .or(`ruta_id.is.null,ruta_id.neq.${selectedRuta.id}`)
-
-        if (syncPrestamosError) {
-          console.error('[asignar clientes] sync prestamos:', syncPrestamosError)
-        }
-      }
+      const resumen = Array.isArray(resultado) ? resultado[0] : resultado
 
       // Mensaje de éxito personalizado
       const mensaje = clientesAMover.length > 0
@@ -658,7 +631,9 @@ export default function RutasPage() {
 
       toast({
         title: 'Éxito',
-        description: mensaje,
+        description: resumen
+          ? `${mensaje}. Total en ruta: ${resumen.total_final}.`
+          : mensaje,
       })
       
       setClientesDialogOpen(false)
@@ -668,7 +643,7 @@ export default function RutasPage() {
       console.error('Error asignando clientes:', error)
       toast({
         title: 'Error',
-        description: 'No se pudieron asignar los clientes',
+        description: error instanceof Error ? error.message : 'No se pudieron asignar los clientes',
         variant: 'destructive',
       })
     }
@@ -743,8 +718,14 @@ export default function RutasPage() {
     // Cargar todos los clientes con info de rutas
     await loadClientes()
     
-    // Cargar los clientes ya asignados a esta ruta específica
-    await loadClientesRuta(ruta.id)
+    // Cargar los clientes ya asignados a esta ruta específica. Si falla,
+    // no se abre el diálogo: evita que el admin guarde una asignación
+    // basada en una lista incompleta/incorrecta de clientes actuales.
+    const ok = await loadClientesRuta(ruta.id)
+    if (!ok) {
+      setSelectedRuta(null)
+      return
+    }
     
     setClientesDialogOpen(true)
   }
