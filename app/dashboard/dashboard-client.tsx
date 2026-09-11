@@ -3,13 +3,13 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { DollarSign, Users, TrendingUp, AlertCircle, CreditCard, Crown, Zap } from 'lucide-react'
+import { DollarSign, Users, TrendingUp, AlertCircle, CreditCard, Zap } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import dynamic from 'next/dynamic'
 import { TrialBanner } from '@/components/trial-banner'
 import { isTrialActive } from '@/lib/trial-helpers'
 import { redirectToHotmartCheckout } from '@/lib/hotmart-checkout'
-import { PLAN_PRICES } from '@/lib/plan-offers'
+import { getNextPlanSlug, getUpgradeOffer, normalizePlanSlug, PLAN_PRICES } from '@/lib/plan-offers'
 
 const DashboardCharts = dynamic(
   () =>
@@ -33,7 +33,7 @@ import {
 import type { LimitesOrganizacion } from '@/lib/limites-organizacion-shared'
 import { getClientesInteligente, getPrestamosInteligente, getCuotasSegunRol } from '@/lib/queries-con-roles'
 import type { Cliente } from '@/lib/store'
-import { LimitesOrganizacionCard } from '@/components/limites-organizacion-card'
+import { PlanUsageStrip } from '@/components/plan-usage-strip'
 import Link from 'next/link'
 
 interface Prestamo {
@@ -64,7 +64,6 @@ export function DashboardClient() {
   const { config } = useConfigStore()
   const { 
     getCurrentPlan, 
-    usageLimits, 
     setUserSubscription, 
     setUsageLimits 
   } = useSubscriptionStore()
@@ -114,9 +113,15 @@ export function DashboardClient() {
     }
   }
 
-  const handleUpgradePro = async () => {
+  const handleUpgradeNextPlan = async () => {
+    const slug = normalizePlanSlug(
+      limitesOrg?.plan_slug ?? getCurrentPlan()?.slug ?? 'free'
+    )
+    const next = getNextPlanSlug(slug)
+    if (!next) return
+
     setCheckoutLoading(true)
-    const result = await redirectToHotmartCheckout('pro', 'monthly')
+    const result = await redirectToHotmartCheckout(next, 'monthly')
     if (!result.ok) setCheckoutLoading(false)
   }
 
@@ -185,13 +190,12 @@ export function DashboardClient() {
   
   return (
     <div className="space-y-8">
-      {/* Card de Límites de Organización */}
-      <LimitesOrganizacionCard
+      <PlanUsageStrip
         limites={limitesOrg}
         loading={loadingPlan}
         onRetry={loadSubscriptionData}
-        onUpgradePro={handleUpgradePro}
-        upgradingPro={checkoutLoading}
+        onUpgrade={handleUpgradeNextPlan}
+        upgrading={checkoutLoading}
       />
 
       {/* Banner de Trial activo */}
@@ -217,11 +221,13 @@ export function DashboardClient() {
             </div>
             <div className="flex gap-2 flex-shrink-0">
               <button
-                onClick={handleUpgradePro}
+                onClick={handleUpgradeNextPlan}
                 disabled={checkoutLoading}
                 className="bg-white text-blue-700 px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-50 transition-colors whitespace-nowrap"
               >
-                {checkoutLoading ? 'Redirigiendo...' : `Activar Pro — $${PLAN_PRICES.pro.monthly}/mes`}
+                {checkoutLoading
+                  ? 'Redirigiendo...'
+                  : getUpgradeOffer('free')?.ctaText ?? `Activar Pro — $${PLAN_PRICES.pro.monthly}/mes`}
               </button>
               <Link href="/dashboard/subscription">
                 <button className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-colors whitespace-nowrap">
@@ -233,109 +239,12 @@ export function DashboardClient() {
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-500 mt-1">
-            Vista general de tu gestión de créditos
-          </p>
-        </div>
-        {loadingPlan ? (
-          <div className="flex items-center gap-3 px-5 py-3 rounded-lg bg-gray-100 border-2 border-gray-300 animate-pulse">
-            <Crown className="h-6 w-6 text-gray-400" />
-            <div>
-              <p className="text-xs font-medium text-gray-400">Cargando plan...</p>
-              <div className="h-5 w-24 bg-gray-300 rounded mt-1"></div>
-            </div>
-          </div>
-        ) : currentPlan ? (
-          <Link href="/dashboard/subscription">
-            <div className={`flex items-center gap-3 px-5 py-3 rounded-lg cursor-pointer transition-all hover:shadow-lg border-2 ${
-              currentPlan.slug === 'free' 
-                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-300' 
-                : currentPlan.slug === 'pro'
-                ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-300'
-                : currentPlan.slug === 'business'
-                ? 'bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-300'
-                : 'bg-gradient-to-r from-yellow-400 to-orange-500 text-white hover:from-yellow-500 hover:to-orange-600 border-yellow-500'
-            }`}>
-              <Crown className="h-6 w-6" />
-              <div>
-                <p className="text-xs font-medium opacity-80">Plan Actual</p>
-                <p className="font-bold text-lg">{currentPlan.nombre}</p>
-              </div>
-            </div>
-          </Link>
-        ) : null}
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-gray-500 mt-1">
+          Vista general de tu gestión de créditos
+        </p>
       </div>
-      
-      {/* Resumen compacto de uso (mismos datos que la tarjeta de plan arriba) */}
-      {!loadingPlan &&
-        usageLimits &&
-        currentPlan &&
-        currentPlan.slug !== 'enterprise' && (
-          <Card className="border-l-4 border-l-blue-500">
-            <CardContent className="pt-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-600">Clientes</span>
-                    <span className="text-sm font-bold text-gray-900">
-                      {usageLimits.clientes.current} / {usageLimits.clientes.limit}
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full transition-all ${
-                        usageLimits.clientes.current >= usageLimits.clientes.limit
-                          ? 'bg-red-500'
-                          : usageLimits.clientes.current / usageLimits.clientes.limit > 0.8
-                          ? 'bg-yellow-500'
-                          : 'bg-green-500'
-                      }`}
-                      style={{
-                        width: `${Math.min((usageLimits.clientes.current / usageLimits.clientes.limit) * 100, 100)}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-600">Préstamos (org.)</span>
-                    <span className="text-sm font-bold text-gray-900">
-                      {usageLimits.prestamos.current} / {usageLimits.prestamos.limit}
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full transition-all ${
-                        usageLimits.prestamos.current >= usageLimits.prestamos.limit
-                          ? 'bg-red-500'
-                          : usageLimits.prestamos.current / usageLimits.prestamos.limit > 0.8
-                          ? 'bg-yellow-500'
-                          : 'bg-green-500'
-                      }`}
-                      style={{
-                        width: `${Math.min((usageLimits.prestamos.current / usageLimits.prestamos.limit) * 100, 100)}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-              {(!usageLimits.clientes.canAdd || !usageLimits.prestamos.canAdd) && (
-                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                  <p className="text-sm text-yellow-800">
-                    Has alcanzado el límite de tu plan.{' '}
-                    <Link href="/dashboard/subscription" className="font-semibold underline">
-                      Actualiza tu plan
-                    </Link>{' '}
-                    para continuar.
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
 
       {/* Tarjetas de métricas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

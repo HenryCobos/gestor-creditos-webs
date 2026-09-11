@@ -1097,6 +1097,7 @@ export default function GastosPage() {
                     userRole={userRole}
                     onEdit={() => handleEdit(gasto)}
                     onDelete={() => handleDelete(gasto)}
+                    onToggleAprobado={userRole === 'admin' ? () => handleToggleAprobado(gasto) : undefined}
                   />
                 )
               })}

@@ -1,6 +1,12 @@
 'use client'
 
+/**
+ * @deprecated Preferir PlanUsageStrip en el dashboard.
+ * Se mantiene por compatibilidad; el CTA de upgrade usa el plan superior dinámico.
+ */
+
 import type { LimitesOrganizacion } from '@/lib/limites-organizacion-shared'
+import { getUpgradeOffer, normalizePlanSlug } from '@/lib/plan-offers'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -22,6 +28,8 @@ type Props = {
   onRetry?: () => void
   onUpgradePro?: () => void
   upgradingPro?: boolean
+  /** Si no se pasa, se deriva del plan actual vía getUpgradeOffer */
+  upgradeCtaText?: string
 }
 
 function getUrgencyLevel(pct: number): 'low' | 'medium' | 'high' | 'critical' {
@@ -62,6 +70,7 @@ export function LimitesOrganizacionCard({
   onRetry,
   onUpgradePro,
   upgradingPro = false,
+  upgradeCtaText,
 }: Props) {
   const router = useRouter()
 
@@ -125,6 +134,12 @@ export function LimitesOrganizacionCard({
   const cuposClientesRestantes = limites.limite_clientes - limites.clientes_usados
   const usuariosLimitLabel =
     limites.limite_usuarios === 0 ? '∞' : String(limites.limite_usuarios)
+  const planSlug = normalizePlanSlug(limites.plan_slug)
+  const upgradeOffer = getUpgradeOffer(planSlug)
+  const upgradeButtonLabel =
+    upgradeCtaText ??
+    upgradeOffer?.ctaText ??
+    'Ver planes de upgrade'
 
   return (
     <Card className={hayAlertaAlta ? 'border-red-300' : hayAlertaMedia ? 'border-yellow-300' : ''}>
@@ -204,9 +219,9 @@ export function LimitesOrganizacionCard({
               <span>{limites.usuarios_disponibles} disponibles</span>
               <span>{pctUsuarios.toFixed(0)}% usado</span>
             </div>
-            {urgenciaUsuarios === 'low' && pctUsuarios >= 50 && limites.plan_slug === 'free' && (
+            {urgenciaUsuarios === 'low' && pctUsuarios >= 50 && planSlug === 'free' && upgradeOffer && (
               <p className="text-xs text-purple-600 bg-purple-50 px-2 py-1 rounded">
-                Plan Pro permite hasta 3 usuarios — prueba con admin + cobrador.
+                {upgradeOffer.label} permite más usuarios en tu equipo.
               </p>
             )}
             {!limites.puede_crear_usuario && (
@@ -234,9 +249,9 @@ export function LimitesOrganizacionCard({
             <span>{pctClientes.toFixed(0)}% usado</span>
           </div>
           {/* Nudge suave 50-79% */}
-          {urgenciaClientes === 'low' && pctClientes >= 50 && (
+          {urgenciaClientes === 'low' && pctClientes >= 50 && upgradeOffer && planSlug !== 'enterprise' && (
             <p className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
-              Con Plan Pro tendrías 50 clientes — 10× más capacidad.
+              Con {upgradeOffer.label} ampliarías tu capacidad de clientes.
             </p>
           )}
         </div>
@@ -257,9 +272,9 @@ export function LimitesOrganizacionCard({
             <span>{limites.prestamos_disponibles} disponibles</span>
             <span>{pctPrestamos.toFixed(0)}% usado</span>
           </div>
-          {urgenciaPrestamos === 'low' && pctPrestamos >= 50 && (
+          {urgenciaPrestamos === 'low' && pctPrestamos >= 50 && upgradeOffer && planSlug !== 'enterprise' && (
             <p className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
-              Plan Pro incluye 50 préstamos activos simultáneos.
+              {upgradeOffer.label} incluye más préstamos activos simultáneos.
             </p>
           )}
         </div>
@@ -288,7 +303,7 @@ export function LimitesOrganizacionCard({
                   : 'Límite de préstamos alcanzado'}
               </span>
             </div>
-            {onUpgradePro && (
+            {onUpgradePro && upgradeOffer && (
               <Button
                 size="sm"
                 className="bg-blue-600 hover:bg-blue-700 text-white w-full"
@@ -296,7 +311,7 @@ export function LimitesOrganizacionCard({
                 disabled={upgradingPro}
               >
                 <TrendingUp className="w-4 h-4 mr-2" />
-                {upgradingPro ? 'Redirigiendo...' : 'Activar Pro — $19/mes'}
+                {upgradingPro ? 'Redirigiendo...' : upgradeButtonLabel}
               </Button>
             )}
           </div>

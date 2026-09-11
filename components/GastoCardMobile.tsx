@@ -1,7 +1,7 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { DollarSign, Calendar, User, FileText, Flag, Pencil, Trash2 } from 'lucide-react'
+import { DollarSign, Calendar, User, FileText, Flag, Pencil, Trash2, CheckCircle, XCircle } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
 
 interface GastoCardMobileProps {
@@ -26,6 +26,7 @@ interface GastoCardMobileProps {
   userRole: 'admin' | 'cobrador' | null
   onEdit: () => void
   onDelete: () => void
+  onToggleAprobado?: () => void
 }
 
 export function GastoCardMobile({
@@ -33,8 +34,10 @@ export function GastoCardMobile({
   currency,
   userRole,
   onEdit,
-  onDelete
+  onDelete,
+  onToggleAprobado
 }: GastoCardMobileProps) {
+  const isAprobado = gasto.estado === 'aprobado'
   const getEstadoBadgeColor = (estado: string) => {
     switch (estado) {
       case 'aprobado':
@@ -110,6 +113,26 @@ export function GastoCardMobile({
 
         {/* Acciones */}
         <div className="flex gap-2 pt-2 border-t">
+          {userRole === 'admin' && onToggleAprobado && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onToggleAprobado}
+              className={`flex-1 ${isAprobado ? 'text-red-600 hover:text-red-700' : 'text-green-600 hover:text-green-700'}`}
+            >
+              {isAprobado ? (
+                <>
+                  <XCircle className="mr-1 h-4 w-4" />
+                  Desaprobar
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="mr-1 h-4 w-4" />
+                  Aprobar
+                </>
+              )}
+            </Button>
+          )}
           <Button 
             variant="outline" 
             size="sm"

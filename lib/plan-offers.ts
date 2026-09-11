@@ -32,3 +32,46 @@ export const PRO_BENEFITS = [
   'Soporte prioritario por email',
   'Reportes avanzados e historial 90 días',
 ]
+
+const PLAN_ORDER: PlanSlug[] = ['free', 'pro', 'business', 'enterprise']
+
+/** Normaliza slugs de BD/UI a PlanSlug conocido. */
+export function normalizePlanSlug(slug: string | null | undefined): PlanSlug {
+  const s = (slug || 'free').toLowerCase()
+  if (s === 'pro' || s === 'profesional') return 'pro'
+  if (s === 'business') return 'business'
+  if (s === 'enterprise') return 'enterprise'
+  return 'free'
+}
+
+/** Plan inmediatamente superior al actual, o null si ya está en Enterprise. */
+export function getNextPlanSlug(
+  current: PlanSlug | string
+): Exclude<PlanSlug, 'free'> | null {
+  const normalized = typeof current === 'string' ? normalizePlanSlug(current) : current
+  const idx = PLAN_ORDER.indexOf(normalized)
+  if (idx < 0 || idx >= PLAN_ORDER.length - 1) return null
+  const next = PLAN_ORDER[idx + 1]
+  if (next === 'free') return null
+  return next as Exclude<PlanSlug, 'free'>
+}
+
+export interface UpgradeOffer {
+  slug: Exclude<PlanSlug, 'free'>
+  label: string
+  price: number
+  ctaText: string
+}
+
+/** Textos dinámicos para CTA de upgrade según plan actual. */
+export function getUpgradeOffer(current: PlanSlug | string): UpgradeOffer | null {
+  const next = getNextPlanSlug(current)
+  if (!next) return null
+  const pricing = PLAN_PRICES[next]
+  return {
+    slug: next,
+    label: pricing.label,
+    price: pricing.monthly,
+    ctaText: `Subir a ${pricing.label} — $${pricing.monthly}/mes`,
+  }
+}

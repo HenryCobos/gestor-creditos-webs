@@ -32,9 +32,17 @@ import { asegurarClienteEnRutaActiva } from '@/lib/ruta-cobrador-sync'
 import { ClienteCardMobile } from '@/components/ClienteCardMobile'
 import { useSubscriptionStore } from '@/lib/subscription-store'
 import { loadOrganizationSubscription, loadOrganizationUsageLimits } from '@/lib/subscription-helpers'
-import { getClientesInteligente } from '@/lib/queries-con-roles'
+import { getClientesInteligente, getPrestamosInteligente } from '@/lib/queries-con-roles'
 import { useConfigStore } from '@/lib/config-store'
 import { useMemo } from 'react'
+import { filterClientes } from '@/lib/list-filters'
+import {
+  loadRutaClientesMap,
+  loadRutasParaFiltro,
+  type RutaFiltroOption,
+} from '@/lib/load-rutas-filtro'
+import { getRutaActivaCobrador } from '@/lib/ruta-activa-cobrador'
+import type { Prestamo } from '@/lib/store'
 
 export default function ClientesPage() {
   const [open, setOpen] = useState(false)
@@ -44,6 +52,12 @@ export default function ClientesPage() {
   const [detailOpen, setDetailOpen] = useState(false)
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [rutaFilter, setRutaFilter] = useState('todos')
+  const [rutasFiltro, setRutasFiltro] = useState<RutaFiltroOption[]>([])
+  const [rutaClientesMap, setRutaClientesMap] = useState<Map<string, string>>(new Map())
+  const [prestamosParaFiltro, setPrestamosParaFiltro] = useState<
+    Pick<Prestamo, 'cliente_id' | 'ruta_id'>[]
+  >([])
   const [limiteDialogOpen, setLimiteDialogOpen] = useState(false)
   const { toast } = useToast()
   const supabase = createClient()
@@ -104,10 +118,40 @@ export default function ClientesPage() {
 
     setUserRole(role)
 
+    const rutas = await loadRutasParaFiltro(supabase, {
+      role,
+      userId: user.id,
+      organizationId: profile?.organization_id ?? null,
+    })
+    setRutasFiltro(rutas)
+
+    if (role === 'cobrador' && rutas.length > 0) {
+      const activa = getRutaActivaCobrador()
+      const rutaInicial =
+        activa && rutas.some((r) => r.id === activa) ? activa : rutas[0].id
+      setRutaFilter(rutaInicial)
+    } else {
+      setRutaFilter('todos')
+    }
+
     try {
       // Usar función inteligente que respeta roles
       const data = await getClientesInteligente()
       setClientes(data || [])
+
+      const prestamosData = await getPrestamosInteligente()
+      setPrestamosParaFiltro(
+        (prestamosData || []).map((p) => ({
+          cliente_id: p.cliente_id,
+          ruta_id: p.ruta_id ?? null,
+        }))
+      )
+
+      const mapaRutas = await loadRutaClientesMap(
+        supabase,
+        (data || []).map((c) => c.id)
+      )
+      setRutaClientesMap(mapaRutas)
     } catch (error) {
       console.error('Error al cargar clientes:', error)
       toast({
@@ -309,20 +353,43 @@ export default function ClientesPage() {
     setOpen(false)
   }
 
-  // Filtrar clientes por búsqueda
-  const filteredClientes = useMemo(() => {
-    if (!searchTerm) return clientes
+  const filteredClientes = useMemo(
+    () =>
+      filterClientes(
+        clientes,
+        { search: searchTerm, rutaId: rutaFilter },
+        rutaClientesMap,
+        prestamosParaFiltro
+      ),
+    [clientes, searchTerm, rutaFilter, rutaClientesMap, prestamosParaFiltro]
+  )
 
-    const searchLower = searchTerm.toLowerCase()
-    return clientes.filter(
-      (cliente) =>
-        cliente.nombre.toLowerCase().includes(searchLower) ||
-        cliente.dni.toLowerCase().includes(searchLower) ||
-        cliente.telefono?.toLowerCase().includes(searchLower) ||
-        cliente.direccion?.toLowerCase().includes(searchLower) ||
-        cliente.cuenta_bancaria?.toLowerCase().includes(searchLower)
-    )
-  }, [clientes, searchTerm])
+  const showRutaFilter =
+    userRole === 'admin'
+      ? rutasFiltro.length > 0
+      : rutasFiltro.length > 1
+
+  const clearFilters = () => {
+    setSearchTerm('')
+    if (userRole === 'cobrador' && rutasFiltro.length > 0) {
+      const activa = getRutaActivaCobrador()
+      const rutaInicial =
+        activa && rutasFiltro.some((r) => r.id === activa)
+          ? activa
+          : rutasFiltro[0].id
+      setRutaFilter(rutaInicial)
+    } else {
+      setRutaFilter('todos')
+    }
+  }
+
+  const rutaNombreMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const r of rutasFiltro) {
+      map.set(r.id, r.nombre_ruta)
+    }
+    return map
+  }, [rutasFiltro])
 
   return (
     <div className="space-y-6">
@@ -448,11 +515,18 @@ export default function ClientesPage() {
         </Dialog>
         </div>
 
-        {/* Barra de Búsqueda */}
         <SearchFilterBar
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
           filterType="clientes"
+          rutas={rutasFiltro}
+          rutaFilter={rutaFilter}
+          onRutaFilterChange={setRutaFilter}
+          showRutaFilter={showRutaFilter}
+          allowSinRuta={userRole === 'admin'}
+          allowTodasRutas={userRole === 'admin'}
+          resultCount={{ filtered: filteredClientes.length, total: clientes.length }}
+          onClearFilters={clearFilters}
         />
       </div>
 
@@ -469,7 +543,7 @@ export default function ClientesPage() {
             </p>
           ) : filteredClientes.length === 0 ? (
             <p className="text-center py-8 text-muted-foreground">
-              No se encontraron clientes con "{searchTerm}"
+              No hay clientes con los filtros seleccionados
             </p>
           ) : (
             <>
@@ -532,6 +606,7 @@ export default function ClientesPage() {
             <div className="md:hidden space-y-3">
               {filteredClientes.map((cliente) => {
                 const clienteData = cliente as any
+                const rutaIdCliente = rutaClientesMap.get(cliente.id)
                 return (
                   <ClienteCardMobile
                     key={cliente.id}
@@ -543,10 +618,20 @@ export default function ClientesPage() {
                       direccion: cliente.direccion || null,
                       prestamos_activos: clienteData.prestamos_activos,
                       total_prestado: clienteData.total_prestado,
-                      ruta: clienteData.ruta ? {
-                        nombre_ruta: clienteData.ruta.nombre_ruta,
-                        color: clienteData.ruta.color || null
-                      } : null
+                      ruta: rutaIdCliente
+                        ? {
+                            nombre_ruta:
+                              rutaNombreMap.get(rutaIdCliente) ||
+                              clienteData.ruta?.nombre_ruta ||
+                              'Ruta',
+                            color: clienteData.ruta?.color || null,
+                          }
+                        : clienteData.ruta
+                        ? {
+                            nombre_ruta: clienteData.ruta.nombre_ruta,
+                            color: clienteData.ruta.color || null,
+                          }
+                        : null,
                     }}
                     currency={config?.currency || 'PEN'}
                     onEdit={() => handleEdit(cliente)}

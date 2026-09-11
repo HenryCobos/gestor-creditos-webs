@@ -43,6 +43,7 @@ import { toastPagoExitoso } from '@/lib/pago-feedback'
 import { useConfigStore } from '@/lib/config-store'
 import type { Prestamo, Garantia } from '@/lib/store'
 import { generarContratoPrestamo, generarReciboPagoConEvolucion } from '@/lib/pdf-generator'
+import { generarReciboImagenSimple } from '@/lib/receipt-image-generator'
 import { Checkbox } from '@/components/ui/checkbox'
 import { AbonoCapitalDialog } from '@/components/abono-capital-dialog'
 import { RenovarEmpenoDialog } from '@/components/renovar-empeno-dialog'
@@ -91,6 +92,7 @@ export function PrestamoDetailDialog({
   const [metodoPago, setMetodoPago] = useState('')
   const [notas, setNotas] = useState('')
   const [emitirReciboAlPagar, setEmitirReciboAlPagar] = useState(true)
+  const [emitirReciboImagenAlPagar, setEmitirReciboImagenAlPagar] = useState(false)
   const [abonoCapitalDialogOpen, setAbonoCapitalDialogOpen] = useState(false)
   const [renovarEmpenoDialogOpen, setRenovarEmpenoDialogOpen] = useState(false)
   const [pagoAbiertoDialogOpen, setPagoAbiertoDialogOpen] = useState(false)
@@ -254,15 +256,15 @@ export function PrestamoDetailDialog({
     })
   }
 
-  const emitirReciboPdf = (
+  const buildReciboPayload = (
     cuota: Cuota,
     extras?: { metodo_pago?: string | null; notas?: string | null },
     cuotasSnapshot?: Cuota[]
   ) => {
-    if (!prestamo || !prestamo.cliente) return
+    if (!prestamo || !prestamo.cliente) return null
 
     const lista = cuotasSnapshot ?? cuotas
-    const cuotasParaPdf = lista.map((c) => ({
+    const cuotasParaRecibo = lista.map((c) => ({
       id: c.id,
       numero_cuota: c.numero_cuota,
       monto_cuota: c.monto_cuota,
@@ -272,8 +274,8 @@ export function PrestamoDetailDialog({
       estado: c.estado,
     }))
 
-    generarReciboPagoConEvolucion(
-      {
+    return {
+      cuotaPago: {
         id: cuota.id,
         numero_cuota: cuota.numero_cuota,
         monto_cuota: cuota.monto_cuota,
@@ -282,8 +284,8 @@ export function PrestamoDetailDialog({
         fecha_pago: cuota.fecha_pago ?? format(new Date(), "yyyy-MM-dd'T'12:00:00"),
         estado: cuota.estado,
       },
-      cuotasParaPdf,
-      {
+      cuotasParaRecibo,
+      prestamo: {
         id: prestamo.id,
         monto_prestado: prestamo.monto_prestado,
         monto_total: prestamo.monto_total,
@@ -292,23 +294,62 @@ export function PrestamoDetailDialog({
         fecha_inicio: prestamo.fecha_inicio,
         interes_porcentaje: prestamo.interes_porcentaje,
       },
-      {
+      cliente: {
         nombre: prestamo.cliente.nombre,
         dni: prestamo.cliente.dni,
         telefono: prestamo.cliente.telefono || undefined,
       },
-      {
+      options: {
         metodo_pago: extras?.metodo_pago,
         notas: extras?.notas,
         companyName: config.companyName,
         currency: config.currency,
         currencySymbol: config.currencySymbol,
-      }
+      },
+    }
+  }
+
+  const emitirReciboPdf = (
+    cuota: Cuota,
+    extras?: { metodo_pago?: string | null; notas?: string | null },
+    cuotasSnapshot?: Cuota[]
+  ) => {
+    const payload = buildReciboPayload(cuota, extras, cuotasSnapshot)
+    if (!payload) return
+
+    generarReciboPagoConEvolucion(
+      payload.cuotaPago,
+      payload.cuotasParaRecibo,
+      payload.prestamo,
+      payload.cliente,
+      payload.options
     )
 
     toast({
       title: 'Recibo generado',
       description: `PDF con evolución hasta la cuota N° ${cuota.numero_cuota}`,
+    })
+  }
+
+  const emitirReciboImagen = (
+    cuota: Cuota,
+    extras?: { metodo_pago?: string | null; notas?: string | null },
+    cuotasSnapshot?: Cuota[]
+  ) => {
+    const payload = buildReciboPayload(cuota, extras, cuotasSnapshot)
+    if (!payload) return
+
+    generarReciboImagenSimple(
+      payload.cuotaPago,
+      payload.cuotasParaRecibo,
+      payload.prestamo,
+      payload.cliente,
+      payload.options
+    )
+
+    toast({
+      title: 'Recibo generado',
+      description: `Imagen simple de la cuota N° ${cuota.numero_cuota}`,
     })
   }
 
@@ -359,10 +400,16 @@ export function PrestamoDetailDialog({
 
       const cuotasActualizadas = await loadCuotas()
 
-      if (emitirReciboAlPagar) {
+      if (emitirReciboAlPagar || emitirReciboImagenAlPagar) {
         const cuotaRecibo =
           cuotasActualizadas.find((c) => c.id === selectedCuota.id) ?? selectedCuota
-        emitirReciboPdf(cuotaRecibo, { metodo_pago: metodoPago, notas }, cuotasActualizadas)
+        const extras = { metodo_pago: metodoPago, notas }
+        if (emitirReciboAlPagar) {
+          emitirReciboPdf(cuotaRecibo, extras, cuotasActualizadas)
+        }
+        if (emitirReciboImagenAlPagar) {
+          emitirReciboImagen(cuotaRecibo, extras, cuotasActualizadas)
+        }
       }
 
       resetPagoForm()
@@ -824,6 +871,13 @@ export function PrestamoDetailDialog({
                                       <Receipt className="h-4 w-4 text-blue-600" />
                                       Recibo PDF (evolución)
                                     </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => emitirReciboImagen(cuota)}
+                                      className="gap-2 cursor-pointer"
+                                    >
+                                      <Receipt className="h-4 w-4 text-purple-600" />
+                                      Recibo imagen (simple)
+                                    </DropdownMenuItem>
                                     {isAdmin && (
                                     <DropdownMenuItem
                                       onClick={() => {
@@ -942,15 +996,27 @@ export function PrestamoDetailDialog({
                 />
               </div>
 
-              <div className="flex items-center space-x-2 pt-1">
-                <Checkbox
-                  id="emitir_recibo"
-                  checked={emitirReciboAlPagar}
-                  onCheckedChange={(checked) => setEmitirReciboAlPagar(checked === true)}
-                />
-                <Label htmlFor="emitir_recibo" className="text-sm font-normal cursor-pointer">
-                  Descargar recibo PDF con evolución del préstamo
-                </Label>
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="emitir_recibo"
+                    checked={emitirReciboAlPagar}
+                    onCheckedChange={(checked) => setEmitirReciboAlPagar(checked === true)}
+                  />
+                  <Label htmlFor="emitir_recibo" className="text-sm font-normal cursor-pointer">
+                    Descargar recibo PDF con evolución del préstamo
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="emitir_recibo_imagen"
+                    checked={emitirReciboImagenAlPagar}
+                    onCheckedChange={(checked) => setEmitirReciboImagenAlPagar(checked === true)}
+                  />
+                  <Label htmlFor="emitir_recibo_imagen" className="text-sm font-normal cursor-pointer">
+                    Descargar recibo imagen simple (ideal para WhatsApp)
+                  </Label>
+                </div>
               </div>
 
               <div className="flex justify-end space-x-2">

@@ -837,13 +837,13 @@ export function generarReporteCliente(
 // Recibo de pago por cuota
 // ─────────────────────────────────────────────────────────────
 
-interface ReciboCuotaCliente {
+export interface ReciboCuotaCliente {
   nombre: string
   dni: string
   telefono?: string
 }
 
-interface ReciboCuotaPrestamo {
+export interface ReciboCuotaPrestamo {
   id: string
   monto_prestado: number
   monto_total: number
@@ -851,7 +851,7 @@ interface ReciboCuotaPrestamo {
   frecuencia_pago: string
 }
 
-interface ReciboCuotaInfo {
+export interface ReciboCuotaInfo {
   id: string
   numero_cuota: number
   monto_cuota: number

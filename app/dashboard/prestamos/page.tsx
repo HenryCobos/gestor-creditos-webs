@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -42,7 +42,13 @@ import { useSubscriptionStore } from '@/lib/subscription-store'
 import { loadOrganizationSubscription, loadOrganizationUsageLimits } from '@/lib/subscription-helpers'
 import { getClientesInteligente, getPrestamosInteligente } from '@/lib/queries-con-roles'
 import { asegurarClienteEnRutaActiva } from '@/lib/ruta-cobrador-sync'
-import { resolverRutaActivaCobrador } from '@/lib/ruta-activa-cobrador'
+import { getRutaActivaCobrador, resolverRutaActivaCobrador } from '@/lib/ruta-activa-cobrador'
+import { SearchFilterBar } from '@/components/search-filter-bar'
+import { filterPrestamos } from '@/lib/list-filters'
+import {
+  loadRutasParaFiltro,
+  type RutaFiltroOption,
+} from '@/lib/load-rutas-filtro'
 import { 
   calculateLoanDetails, 
   calcularSiguienteFechaPago, 
@@ -72,6 +78,11 @@ export default function PrestamosPage() {
   const [selectedPrestamo, setSelectedPrestamo] = useState<Prestamo | null>(null)
   const [limiteDialogOpen, setLimiteDialogOpen] = useState(false)
   const [editingPrestamo, setEditingPrestamo] = useState<Prestamo | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [estadoFilter, setEstadoFilter] = useState('todos')
+  const [rutaFilter, setRutaFilter] = useState('todos')
+  const [frecuenciaFilter, setFrecuenciaFilter] = useState('todas')
+  const [rutasFiltro, setRutasFiltro] = useState<RutaFiltroOption[]>([])
   const { toast } = useToast()
   const supabase = createClient()
   const { clientes, setClientes, prestamos, setPrestamos, addPrestamo, updatePrestamo, deletePrestamo, productos, setProductos } = useStore()
@@ -255,6 +266,22 @@ export default function PrestamosPage() {
     }
 
     setUserRole(role)
+
+    const rutas = await loadRutasParaFiltro(supabase, {
+      role,
+      userId: user.id,
+      organizationId: profile?.organization_id ?? null,
+    })
+    setRutasFiltro(rutas)
+
+    if (role === 'cobrador' && rutas.length > 0) {
+      const activa = getRutaActivaCobrador()
+      const rutaInicial =
+        activa && rutas.some((r) => r.id === activa) ? activa : rutas[0].id
+      setRutaFilter(rutaInicial)
+    } else {
+      setRutaFilter('todos')
+    }
 
     try {
       // Cargar clientes usando función inteligente
@@ -1029,6 +1056,46 @@ export default function PrestamosPage() {
     const updated = [...garantias]
     updated[index] = { ...updated[index], [field]: value }
     setGarantias(updated)
+  }
+
+  const rutaNombreMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const r of rutasFiltro) {
+      map.set(r.id, r.nombre_ruta)
+    }
+    return map
+  }, [rutasFiltro])
+
+  const filteredPrestamos = useMemo(
+    () =>
+      filterPrestamos(prestamos, {
+        search: searchTerm,
+        estado: estadoFilter,
+        rutaId: rutaFilter,
+        frecuencia: frecuenciaFilter,
+      }),
+    [prestamos, searchTerm, estadoFilter, rutaFilter, frecuenciaFilter]
+  )
+
+  const showRutaFilter =
+    userRole === 'admin'
+      ? rutasFiltro.length > 0
+      : rutasFiltro.length > 1
+
+  const clearFilters = () => {
+    setSearchTerm('')
+    setEstadoFilter('todos')
+    setFrecuenciaFilter('todas')
+    if (userRole === 'cobrador' && rutasFiltro.length > 0) {
+      const activa = getRutaActivaCobrador()
+      const rutaInicial =
+        activa && rutasFiltro.some((r) => r.id === activa)
+          ? activa
+          : rutasFiltro[0].id
+      setRutaFilter(rutaInicial)
+    } else {
+      setRutaFilter('todos')
+    }
   }
 
   return (
@@ -1840,6 +1907,27 @@ export default function PrestamosPage() {
         </Card>
       )}
 
+      {prestamos.length > 0 && (
+        <SearchFilterBar
+          filterType="prestamos"
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          estadoFilter={estadoFilter}
+          onEstadoFilterChange={setEstadoFilter}
+          frecuenciaFilter={frecuenciaFilter}
+          onFrecuenciaFilterChange={setFrecuenciaFilter}
+          rutas={rutasFiltro}
+          rutaFilter={rutaFilter}
+          onRutaFilterChange={setRutaFilter}
+          showRutaFilter={showRutaFilter}
+          allowSinRuta={userRole === 'admin'}
+          allowTodasRutas={userRole === 'admin'}
+          showEstadoChips
+          resultCount={{ filtered: filteredPrestamos.length, total: prestamos.length }}
+          onClearFilters={clearFilters}
+        />
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Lista de Préstamos</CardTitle>
@@ -1850,6 +1938,10 @@ export default function PrestamosPage() {
           ) : prestamos.length === 0 ? (
             <p className="text-center py-8 text-gray-500">
               No hay préstamos registrados aún
+            </p>
+          ) : filteredPrestamos.length === 0 ? (
+            <p className="text-center py-8 text-gray-500">
+              No hay préstamos con los filtros seleccionados
             </p>
           ) : (
             <>
@@ -1865,12 +1957,13 @@ export default function PrestamosPage() {
                     <TableHead>Tipo</TableHead>
                     <TableHead>Frecuencia</TableHead>
                     <TableHead>Fecha Inicio</TableHead>
+                    {rutasFiltro.length > 0 && <TableHead>Ruta</TableHead>}
                     <TableHead>Estado</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
               <TableBody>
-                {prestamos.map((prestamo) => (
+                {filteredPrestamos.map((prestamo) => (
                   <TableRow key={prestamo.id}>
                     <TableCell className="font-medium">
                       {prestamo.cliente?.nombre || '-'}
@@ -1903,6 +1996,13 @@ export default function PrestamosPage() {
                       </span>
                     </TableCell>
                     <TableCell>{formatDate(prestamo.fecha_inicio)}</TableCell>
+                    {rutasFiltro.length > 0 && (
+                      <TableCell className="text-sm text-muted-foreground">
+                        {prestamo.ruta_id
+                          ? rutaNombreMap.get(prestamo.ruta_id) || '-'
+                          : 'Sin ruta'}
+                      </TableCell>
+                    )}
                     <TableCell>
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -1955,7 +2055,7 @@ export default function PrestamosPage() {
 
             {/* Vista Móvil */}
             <div className="md:hidden space-y-3">
-              {prestamos.map((prestamo) => (
+              {filteredPrestamos.map((prestamo) => (
                 <PrestamoCardMobile
                   key={prestamo.id}
                   prestamo={{
@@ -1970,10 +2070,15 @@ export default function PrestamosPage() {
                     numero_cuotas: prestamo.numero_cuotas,
                     fecha_inicio: prestamo.fecha_inicio,
                     estado: prestamo.estado,
-                    ruta: prestamo.ruta ? {
-                      nombre_ruta: prestamo.ruta.nombre_ruta,
-                      color: prestamo.ruta.color || null
-                    } : null
+                    ruta: prestamo.ruta_id
+                      ? {
+                          nombre_ruta:
+                            rutaNombreMap.get(prestamo.ruta_id) ||
+                            prestamo.ruta?.nombre_ruta ||
+                            'Ruta',
+                          color: prestamo.ruta?.color || null,
+                        }
+                      : null
                   }}
                   currency={config.currency}
                   onView={() => {
