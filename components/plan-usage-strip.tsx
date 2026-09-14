@@ -5,6 +5,7 @@ import { getNextPlanSlug, getUpgradeOffer, normalizePlanSlug } from '@/lib/plan-
 import { Button } from '@/components/ui/button'
 import { Crown, FileText, RefreshCw, TrendingUp, Users } from 'lucide-react'
 import Link from 'next/link'
+import { shouldBlockListLoader } from '@/lib/should-block-list-loader'
 
 type Props = {
   limites: LimitesOrganizacion | null
@@ -85,7 +86,9 @@ export function PlanUsageStrip({
   onUpgrade,
   upgrading = false,
 }: Props) {
-  if (loading) {
+  const blockLoader = shouldBlockListLoader(loading, limites ? 1 : 0)
+
+  if (blockLoader) {
     return (
       <div className="rounded-lg border bg-card px-4 py-3 animate-pulse">
         <div className="h-5 bg-muted rounded w-48" />
@@ -132,6 +135,11 @@ export function PlanUsageStrip({
 
   return (
     <div className="rounded-lg border bg-card overflow-hidden">
+      {loading && (
+        <p className="text-xs text-muted-foreground px-3 pt-2 sm:px-4">
+          Actualizando límites…
+        </p>
+      )}
       {/* Fila 1: plan + acciones (móvil y desktop) */}
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-4 border-b border-border/60">
         <div className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm font-medium ${planBadgeClass}`}>

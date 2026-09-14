@@ -38,7 +38,14 @@ export async function GET() {
       )
     }
 
-    return NextResponse.json({ limites })
+    return NextResponse.json(
+      { limites },
+      {
+        headers: {
+          'Cache-Control': 'private, max-age=30',
+        },
+      }
+    )
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Error desconocido'
     console.error('[api/limites-organizacion]', e)

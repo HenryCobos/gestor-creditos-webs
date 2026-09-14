@@ -121,92 +121,6 @@ type PagoRow = {
   metodo_pago: string | null
 }
 
-async function cargarPagosRuta(
-  supabase: SupabaseClient,
-  prestamoIds: string[],
-  fechaDesde: string,
-  fechaHasta: string,
-  preferRpc: boolean
-): Promise<PagoRow[]> {
-  if (prestamoIds.length === 0) return []
-
-  const prestamoIdSet = new Set(prestamoIds)
-  const { desde, hasta } = rangoFechasLocales(fechaDesde, fechaHasta)
-
-  if (preferRpc) {
-    const { data: pagosRpc, error: rpcError } = await supabase.rpc(
-      'get_pagos_segun_rol'
-    )
-
-    if (!rpcError && pagosRpc?.length) {
-      return (pagosRpc as PagoRow[]).filter(
-        (p) =>
-          prestamoIdSet.has(p.prestamo_id) &&
-          estaEnRangoCalendario(p.fecha_pago, fechaDesde, fechaHasta)
-      )
-    }
-  }
-
-  const { data: pagosDirect, error: directError } = await supabase
-    .from('pagos')
-    .select('id, prestamo_id, monto_pagado, fecha_pago, metodo_pago')
-    .in('prestamo_id', prestamoIds)
-    .gte('fecha_pago', desde)
-    .lte('fecha_pago', hasta)
-    .order('fecha_pago', { ascending: false })
-
-  if (directError) {
-    console.error('[caja] Error cargando pagos:', directError)
-    return []
-  }
-
-  return (pagosDirect || []).filter((p) =>
-    estaEnRangoCalendario(p.fecha_pago, fechaDesde, fechaHasta)
-  )
-}
-
-async function cargarPrestamoIdsRuta(
-  supabase: SupabaseClient,
-  rutaId: string,
-  preferRpc: boolean
-): Promise<{ ids: string[]; clientePorPrestamo: Map<string, string> }> {
-  const clientePorPrestamo = new Map<string, string>()
-
-  if (preferRpc) {
-    const { data: prestamosRpc, error: rpcError } = await supabase.rpc(
-      'get_prestamos_segun_rol'
-    )
-
-    if (!rpcError && prestamosRpc?.length) {
-      const enRuta = (
-        prestamosRpc as { id: string; ruta_id?: string | null }[]
-      ).filter((p) => p.ruta_id === rutaId)
-      return { ids: enRuta.map((p) => p.id), clientePorPrestamo }
-    }
-  }
-
-  const { data: prestamos, error } = await supabase
-    .from('prestamos')
-    .select('id, cliente:clientes(nombre)')
-    .eq('ruta_id', rutaId)
-
-  if (error) {
-    console.error('[caja] Error cargando préstamos de ruta:', error)
-    return { ids: [], clientePorPrestamo }
-  }
-
-  for (const pr of prestamos || []) {
-    const nombre =
-      (pr.cliente as { nombre?: string } | null)?.nombre || 'Cliente'
-    clientePorPrestamo.set(pr.id, nombre)
-  }
-
-  return {
-    ids: (prestamos || []).map((p) => p.id),
-    clientePorPrestamo,
-  }
-}
-
 export async function loadRutasCaja(
   supabase: SupabaseClient,
   organizationId: string,
@@ -249,22 +163,417 @@ export async function loadRutasCaja(
   }))
 }
 
+type PrestamoCajaRow = {
+  id: string
+  monto_prestado: number
+  estado: string
+  created_at: string
+  ruta_id: string | null
+  cliente: { nombre?: string } | null
+}
+
+function pushMovimientoCapital(
+  movimientos: MovimientoCaja[],
+  m: {
+    id: string
+    tipo_movimiento: string
+    monto: number
+    fecha_movimiento: string
+    concepto?: string | null
+  }
+) {
+  const tipoMap: Record<string, TipoMovimientoCaja> = {
+    ingreso: 'ingreso_capital',
+    retiro: 'retiro_capital',
+    transferencia_entrada: 'transferencia_entrada',
+    transferencia_salida: 'transferencia_salida',
+  }
+  const tipo = tipoMap[m.tipo_movimiento] || 'ingreso_capital'
+  const esEntrada =
+    m.tipo_movimiento === 'ingreso' ||
+    m.tipo_movimiento === 'transferencia_entrada'
+  movimientos.push({
+    id: `mov-${m.id}`,
+    fecha: m.fecha_movimiento,
+    tipo,
+    monto: Number(m.monto) || 0,
+    es_entrada: esEntrada,
+    concepto: labelTipo(tipo),
+    detalle: m.concepto ?? undefined,
+  })
+}
+
+/** Carga resúmenes de varias rutas con pocas queries (modo lite omite movimientos). */
+export async function fetchResumenesCajaBatch(
+  supabase: SupabaseClient,
+  rutas: RutaCajaOption[],
+  fechaDesde: string,
+  fechaHasta: string,
+  options?: { lite?: boolean }
+): Promise<ResumenCajaRuta[]> {
+  if (rutas.length === 0) return []
+
+  const lite = options?.lite === true
+  const rutaIds = rutas.map((r) => r.id)
+  const { desde, hasta } = rangoFechasLocales(fechaDesde, fechaHasta)
+
+  const [
+    prestamosRes,
+    rutasCapitalRes,
+    gastosPeriodoRes,
+    gastosTotalesRes,
+    movsPeriodoRes,
+    movsManualAllRes,
+  ] = await Promise.all([
+    supabase
+      .from('prestamos')
+      .select(
+        'id, monto_prestado, estado, created_at, ruta_id, cliente:clientes(nombre)'
+      )
+      .in('ruta_id', rutaIds),
+    supabase
+      .from('rutas')
+      .select('id, capital_inicial, capital_actual')
+      .in('id', rutaIds),
+    supabase
+      .from('gastos')
+      .select('id, monto, fecha_gasto, categoria, descripcion, ruta_id')
+      .in('ruta_id', rutaIds)
+      .eq('aprobado', true)
+      .gte('fecha_gasto', fechaDesde)
+      .lte('fecha_gasto', fechaHasta),
+    supabase
+      .from('gastos')
+      .select('monto, ruta_id')
+      .in('ruta_id', rutaIds)
+      .eq('aprobado', true),
+    supabase
+      .from('movimientos_capital_ruta')
+      .select(
+        'id, ruta_id, tipo_movimiento, monto, fecha_movimiento, concepto'
+      )
+      .in('ruta_id', rutaIds)
+      .in('tipo_movimiento', [
+        'ingreso',
+        'retiro',
+        'transferencia_entrada',
+        'transferencia_salida',
+      ])
+      .gte('fecha_movimiento', desde)
+      .lte('fecha_movimiento', hasta),
+    supabase
+      .from('movimientos_capital_ruta')
+      .select('ruta_id, tipo_movimiento, monto, concepto')
+      .in('ruta_id', rutaIds),
+  ])
+
+  const prestamos = (prestamosRes.data || []) as PrestamoCajaRow[]
+  const capitalPorRuta = new Map(
+    (rutasCapitalRes.data || []).map((r) => [
+      r.id,
+      {
+        capital_inicial: Number(r.capital_inicial) || 0,
+        capital_actual: Number(r.capital_actual) || 0,
+      },
+    ])
+  )
+
+  const prestamosPorRuta = new Map<string, PrestamoCajaRow[]>()
+  const clientePorPrestamo = new Map<string, string>()
+  const prestamoIds: string[] = []
+
+  for (const pr of prestamos) {
+    if (!pr.ruta_id) continue
+    prestamoIds.push(pr.id)
+    const nombre =
+      (pr.cliente as { nombre?: string } | null)?.nombre || 'Cliente'
+    clientePorPrestamo.set(pr.id, nombre)
+    const list = prestamosPorRuta.get(pr.ruta_id) || []
+    list.push(pr)
+    prestamosPorRuta.set(pr.ruta_id, list)
+  }
+
+  let pagosPeriodo: PagoRow[] = []
+  let pagosAcum: { prestamo_id: string; monto_pagado: number }[] = []
+
+  if (prestamoIds.length > 0) {
+    const [pagosPeriodoRes, pagosAcumRes] = await Promise.all([
+      supabase
+        .from('pagos')
+        .select('id, prestamo_id, monto_pagado, fecha_pago, metodo_pago')
+        .in('prestamo_id', prestamoIds)
+        .gte('fecha_pago', desde)
+        .lte('fecha_pago', hasta)
+        .order('fecha_pago', { ascending: false }),
+      supabase
+        .from('pagos')
+        .select('prestamo_id, monto_pagado')
+        .in('prestamo_id', prestamoIds),
+    ])
+
+    pagosPeriodo = ((pagosPeriodoRes.data || []) as PagoRow[]).filter((p) =>
+      estaEnRangoCalendario(p.fecha_pago, fechaDesde, fechaHasta)
+    )
+    pagosAcum = pagosAcumRes.data || []
+  }
+
+  const prestamoToRuta = new Map<string, string>()
+  for (const pr of prestamos) {
+    if (pr.ruta_id) prestamoToRuta.set(pr.id, pr.ruta_id)
+  }
+
+  const pagosPeriodoPorRuta = new Map<string, PagoRow[]>()
+  for (const p of pagosPeriodo) {
+    const rutaId = prestamoToRuta.get(p.prestamo_id)
+    if (!rutaId) continue
+    const list = pagosPeriodoPorRuta.get(rutaId) || []
+    list.push(p)
+    pagosPeriodoPorRuta.set(rutaId, list)
+  }
+
+  const cobrosAcumPorRuta = new Map<string, number>()
+  for (const p of pagosAcum) {
+    const rutaId = prestamoToRuta.get(p.prestamo_id)
+    if (!rutaId) continue
+    cobrosAcumPorRuta.set(
+      rutaId,
+      (cobrosAcumPorRuta.get(rutaId) || 0) +
+        (Number(p.monto_pagado) || 0)
+    )
+  }
+
+  const gastosPeriodoPorRuta = new Map<
+    string,
+    {
+      id: string
+      monto: number
+      fecha_gasto: string
+      categoria: string
+      descripcion: string
+    }[]
+  >()
+  for (const g of gastosPeriodoRes.data || []) {
+    const list = gastosPeriodoPorRuta.get(g.ruta_id) || []
+    list.push(g)
+    gastosPeriodoPorRuta.set(g.ruta_id, list)
+  }
+
+  const gastosTotalesPorRuta = new Map<string, number>()
+  for (const g of gastosTotalesRes.data || []) {
+    gastosTotalesPorRuta.set(
+      g.ruta_id,
+      (gastosTotalesPorRuta.get(g.ruta_id) || 0) + (Number(g.monto) || 0)
+    )
+  }
+
+  const movsPeriodoPorRuta = new Map<
+    string,
+    {
+      id: string
+      tipo_movimiento: string
+      monto: number
+      fecha_movimiento: string
+      concepto?: string | null
+    }[]
+  >()
+  for (const m of movsPeriodoRes.data || []) {
+    const list = movsPeriodoPorRuta.get(m.ruta_id) || []
+    list.push(m)
+    movsPeriodoPorRuta.set(m.ruta_id, list)
+  }
+
+  const movsManualPorRuta = new Map<
+    string,
+    { tipo_movimiento: string; monto: number; concepto?: string | null }[]
+  >()
+  for (const m of movsManualAllRes.data || []) {
+    const list = movsManualPorRuta.get(m.ruta_id) || []
+    list.push(m)
+    movsManualPorRuta.set(m.ruta_id, list)
+  }
+
+  return rutas.map((meta) => {
+    const rutaId = meta.id
+    const prestamosRuta = prestamosPorRuta.get(rutaId) || []
+    const capitalRow = capitalPorRuta.get(rutaId)
+
+    const movimientos: MovimientoCaja[] = []
+
+    if (!lite) {
+      for (const p of pagosPeriodoPorRuta.get(rutaId) || []) {
+        const cliente = clientePorPrestamo.get(p.prestamo_id) || 'Cliente'
+        movimientos.push({
+          id: `pago-${p.id}`,
+          fecha: p.fecha_pago,
+          tipo: 'pago_recibido',
+          monto: Number(p.monto_pagado) || 0,
+          es_entrada: true,
+          concepto: labelTipo('pago_recibido'),
+          detalle: `${cliente}${p.metodo_pago ? ` · ${p.metodo_pago}` : ''}`,
+        })
+      }
+
+      for (const pr of prestamosRuta) {
+        const fechaPrestamo = pr.created_at
+        if (
+          !fechaPrestamo ||
+          !estaEnRangoCalendario(fechaPrestamo, fechaDesde, fechaHasta)
+        ) {
+          continue
+        }
+        movimientos.push({
+          id: `prestamo-${pr.id}`,
+          fecha: fechaPrestamo,
+          tipo: 'prestamo_entregado',
+          monto: Number(pr.monto_prestado) || 0,
+          es_entrada: false,
+          concepto: labelTipo('prestamo_entregado'),
+          detalle: clientePorPrestamo.get(pr.id) || 'Cliente',
+        })
+      }
+
+      for (const g of gastosPeriodoPorRuta.get(rutaId) || []) {
+        movimientos.push({
+          id: `gasto-${g.id}`,
+          fecha: `${g.fecha_gasto}T12:00:00.000Z`,
+          tipo: 'gasto',
+          monto: Number(g.monto) || 0,
+          es_entrada: false,
+          concepto: labelTipo('gasto'),
+          detalle: `${g.categoria} — ${g.descripcion}`,
+        })
+      }
+
+      for (const m of movsPeriodoPorRuta.get(rutaId) || []) {
+        pushMovimientoCapital(movimientos, m)
+      }
+
+      movimientos.sort(
+        (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+      )
+    } else {
+      const total_cobrado_lite = (pagosPeriodoPorRuta.get(rutaId) || []).reduce(
+        (s, p) => s + (Number(p.monto_pagado) || 0),
+        0
+      )
+      const total_prestado_lite = prestamosRuta.reduce((s, pr) => {
+        if (
+          !pr.created_at ||
+          !estaEnRangoCalendario(pr.created_at, fechaDesde, fechaHasta)
+        ) {
+          return s
+        }
+        return s + (Number(pr.monto_prestado) || 0)
+      }, 0)
+      const total_gastos_lite = (gastosPeriodoPorRuta.get(rutaId) || []).reduce(
+        (s, g) => s + (Number(g.monto) || 0),
+        0
+      )
+      const variacion_lite =
+        total_cobrado_lite - total_prestado_lite - total_gastos_lite
+      const movsCap = movsPeriodoPorRuta.get(rutaId) || []
+      const variacion_capital = movsCap.reduce((s, m) => {
+        const esEntrada =
+          m.tipo_movimiento === 'ingreso' ||
+          m.tipo_movimiento === 'transferencia_entrada'
+        return s + (esEntrada ? Number(m.monto) || 0 : -(Number(m.monto) || 0))
+      }, 0)
+
+      const capitalPrestadoHistorico = prestamosRuta.reduce(
+        (s, p) => s + (Number(p.monto_prestado) || 0),
+        0
+      )
+      const capitalPendienteEnCalle = prestamosRuta
+        .filter((p) => p.estado === 'activo' || p.estado === 'pendiente')
+        .reduce((s, p) => s + (Number(p.monto_prestado) || 0), 0)
+
+      const desglose_saldo: DesgloseSaldoCaja = {
+        capital_inicial: capitalRow?.capital_inicial ?? 0,
+        movimientos_manuales_netos: calcularMovimientosManualesNetos(
+          movsManualPorRuta.get(rutaId) || []
+        ),
+        cobros_acumulados: cobrosAcumPorRuta.get(rutaId) || 0,
+        capital_prestado_historico: capitalPrestadoHistorico,
+        capital_pendiente_en_calle: capitalPendienteEnCalle,
+        gastos_aprobados_total: gastosTotalesPorRuta.get(rutaId) || 0,
+      }
+
+      return {
+        ruta_id: meta.id,
+        nombre_ruta: meta.nombre_ruta,
+        color: meta.color,
+        cobrador_nombre: meta.cobrador_nombre,
+        capital_actual:
+          capitalRow?.capital_actual ?? meta.capital_actual ?? 0,
+        total_cobrado: total_cobrado_lite,
+        total_prestado: total_prestado_lite,
+        total_prestado_activo: capitalPendienteEnCalle,
+        total_gastos: total_gastos_lite,
+        variacion_periodo: variacion_lite + variacion_capital,
+        desglose_saldo,
+        movimientos: [],
+      }
+    }
+
+    const total_cobrado = movimientos
+      .filter((m) => m.tipo === 'pago_recibido')
+      .reduce((s, m) => s + m.monto, 0)
+    const total_prestado = movimientos
+      .filter((m) => m.tipo === 'prestamo_entregado')
+      .reduce((s, m) => s + m.monto, 0)
+    const total_gastos = movimientos
+      .filter((m) => m.tipo === 'gasto')
+      .reduce((s, m) => s + m.monto, 0)
+
+    const capitalPrestadoHistorico = prestamosRuta.reduce(
+      (s, p) => s + (Number(p.monto_prestado) || 0),
+      0
+    )
+    const capitalPendienteEnCalle = prestamosRuta
+      .filter((p) => p.estado === 'activo' || p.estado === 'pendiente')
+      .reduce((s, p) => s + (Number(p.monto_prestado) || 0), 0)
+
+    const desglose_saldo: DesgloseSaldoCaja = {
+      capital_inicial: capitalRow?.capital_inicial ?? 0,
+      movimientos_manuales_netos: calcularMovimientosManualesNetos(
+        movsManualPorRuta.get(rutaId) || []
+      ),
+      cobros_acumulados: cobrosAcumPorRuta.get(rutaId) || 0,
+      capital_prestado_historico: capitalPrestadoHistorico,
+      capital_pendiente_en_calle: capitalPendienteEnCalle,
+      gastos_aprobados_total: gastosTotalesPorRuta.get(rutaId) || 0,
+    }
+
+    return {
+      ruta_id: meta.id,
+      nombre_ruta: meta.nombre_ruta,
+      color: meta.color,
+      cobrador_nombre: meta.cobrador_nombre,
+      capital_actual: capitalRow?.capital_actual ?? meta.capital_actual ?? 0,
+      total_cobrado,
+      total_prestado,
+      total_prestado_activo: capitalPendienteEnCalle,
+      total_gastos,
+      variacion_periodo: calcularVariacionPeriodo(movimientos),
+      desglose_saldo,
+      movimientos,
+    }
+  })
+}
+
 export async function fetchResumenCajaRuta(
   supabase: SupabaseClient,
   rutaId: string,
   fechaDesde: string,
   fechaHasta: string,
   rutaMeta?: RutaCajaOption,
-  options?: { preferRpc?: boolean }
+  _options?: { preferRpc?: boolean }
 ): Promise<ResumenCajaRuta | null> {
-  const preferRpc = options?.preferRpc !== false
-  const { desde, hasta } = rangoFechasLocales(fechaDesde, fechaHasta)
-
   let meta = rutaMeta
   if (!meta) {
     const { data: ruta } = await supabase
       .from('rutas')
-      .select('id, nombre_ruta, color, capital_actual, capital_inicial, cobrador_id')
+      .select('id, nombre_ruta, color, capital_actual, cobrador_id')
       .eq('id', rutaId)
       .maybeSingle()
     if (!ruta) return null
@@ -278,224 +587,14 @@ export async function fetchResumenCajaRuta(
     }
   }
 
-  const { data: rutaCapital } = await supabase
-    .from('rutas')
-    .select('capital_inicial, capital_actual')
-    .eq('id', rutaId)
-    .maybeSingle()
-
-  const movimientos: MovimientoCaja[] = []
-
-  const { ids: prestamoIds, clientePorPrestamo } =
-    await cargarPrestamoIdsRuta(supabase, rutaId, preferRpc)
-
-  if (prestamoIds.length > 0) {
-    const pagos = await cargarPagosRuta(
-      supabase,
-      prestamoIds,
-      fechaDesde,
-      fechaHasta,
-      preferRpc
-    )
-
-    if (pagos.length > 0 && clientePorPrestamo.size === 0) {
-      const { data: prestamosNombres } = await supabase
-        .from('prestamos')
-        .select('id, cliente:clientes(nombre)')
-        .in('id', [...new Set(pagos.map((p) => p.prestamo_id))])
-
-      for (const pr of prestamosNombres || []) {
-        clientePorPrestamo.set(
-          pr.id,
-          (pr.cliente as { nombre?: string } | null)?.nombre || 'Cliente'
-        )
-      }
-    }
-
-    for (const p of pagos) {
-      const cliente = clientePorPrestamo.get(p.prestamo_id) || 'Cliente'
-      movimientos.push({
-        id: `pago-${p.id}`,
-        fecha: p.fecha_pago,
-        tipo: 'pago_recibido',
-        monto: Number(p.monto_pagado) || 0,
-        es_entrada: true,
-        concepto: labelTipo('pago_recibido'),
-        detalle: `${cliente}${p.metodo_pago ? ` · ${p.metodo_pago}` : ''}`,
-      })
-    }
-  }
-
-  const { data: prestamos } = await supabase
-    .from('prestamos')
-    .select('id, monto_prestado, estado, created_at, cliente:clientes(nombre)')
-    .eq('ruta_id', rutaId)
-    .order('created_at', { ascending: false })
-
-  ;(prestamos || []).forEach((pr) => {
-    const fechaPrestamo = pr.created_at
-    if (!fechaPrestamo || !estaEnRangoCalendario(fechaPrestamo, fechaDesde, fechaHasta)) return
-    movimientos.push({
-      id: `prestamo-${pr.id}`,
-      fecha: fechaPrestamo,
-      tipo: 'prestamo_entregado',
-      monto: Number(pr.monto_prestado) || 0,
-      es_entrada: false,
-      concepto: labelTipo('prestamo_entregado'),
-      detalle: (pr.cliente as { nombre?: string } | null)?.nombre || 'Cliente',
-    })
-  })
-
-  const { data: gastos } = await supabase
-    .from('gastos')
-    .select('id, monto, fecha_gasto, categoria, descripcion')
-    .eq('ruta_id', rutaId)
-    .eq('aprobado', true)
-    .gte('fecha_gasto', fechaDesde)
-    .lte('fecha_gasto', fechaHasta)
-    .order('fecha_gasto', { ascending: false })
-
-  ;(gastos || []).forEach((g) => {
-    movimientos.push({
-      id: `gasto-${g.id}`,
-      fecha: `${g.fecha_gasto}T12:00:00.000Z`,
-      tipo: 'gasto',
-      monto: Number(g.monto) || 0,
-      es_entrada: false,
-      concepto: labelTipo('gasto'),
-      detalle: `${g.categoria} — ${g.descripcion}`,
-    })
-  })
-
-  const { data: movsCapital } = await supabase
-    .from('movimientos_capital_ruta')
-    .select('id, tipo_movimiento, monto, fecha_movimiento, concepto')
-    .eq('ruta_id', rutaId)
-    .in('tipo_movimiento', [
-      'ingreso',
-      'retiro',
-      'transferencia_entrada',
-      'transferencia_salida',
-    ])
-    .gte('fecha_movimiento', desde)
-    .lte('fecha_movimiento', hasta)
-    .order('fecha_movimiento', { ascending: false })
-
-  ;(movsCapital || []).forEach((m) => {
-    const tipoMap: Record<string, TipoMovimientoCaja> = {
-      ingreso: 'ingreso_capital',
-      retiro: 'retiro_capital',
-      transferencia_entrada: 'transferencia_entrada',
-      transferencia_salida: 'transferencia_salida',
-    }
-    const tipo = tipoMap[m.tipo_movimiento] || 'ingreso_capital'
-    const esEntrada =
-      m.tipo_movimiento === 'ingreso' ||
-      m.tipo_movimiento === 'transferencia_entrada'
-    movimientos.push({
-      id: `mov-${m.id}`,
-      fecha: m.fecha_movimiento,
-      tipo,
-      monto: Number(m.monto) || 0,
-      es_entrada: esEntrada,
-      concepto: labelTipo(tipo),
-      detalle: m.concepto,
-    })
-  })
-
-  movimientos.sort(
-    (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+  const [resumen] = await fetchResumenesCajaBatch(
+    supabase,
+    [meta],
+    fechaDesde,
+    fechaHasta,
+    { lite: false }
   )
-
-  const total_cobrado = movimientos
-    .filter((m) => m.tipo === 'pago_recibido')
-    .reduce((s, m) => s + m.monto, 0)
-  const total_prestado = movimientos
-    .filter((m) => m.tipo === 'prestamo_entregado')
-    .reduce((s, m) => s + m.monto, 0)
-  const total_gastos = movimientos
-    .filter((m) => m.tipo === 'gasto')
-    .reduce((s, m) => s + m.monto, 0)
-
-  let cobrosAcumulados = 0
-  if (prestamoIds.length > 0) {
-    const { data: pagosAcum } = await supabase
-      .from('pagos')
-      .select('monto_pagado')
-      .in('prestamo_id', prestamoIds)
-    cobrosAcumulados = (pagosAcum || []).reduce(
-      (s, p) => s + (Number(p.monto_pagado) || 0),
-      0
-    )
-  }
-
-  const capitalPrestadoHistorico = (prestamos || []).reduce(
-    (s, p) => s + (Number(p.monto_prestado) || 0),
-    0
-  )
-
-  let capitalPendienteEnCalle = 0
-  const { data: capitalPendienteRpc, error: rpcPendienteErr } = await supabase.rpc(
-    'get_capital_pendiente_ruta',
-    { p_ruta_id: rutaId }
-  )
-  if (!rpcPendienteErr && capitalPendienteRpc != null) {
-    capitalPendienteEnCalle = Number(capitalPendienteRpc) || 0
-  } else {
-    const { data: prestamosActivos } = await supabase
-      .from('prestamos')
-      .select('monto_prestado')
-      .eq('ruta_id', rutaId)
-      .in('estado', ['activo', 'pendiente'])
-    capitalPendienteEnCalle = (prestamosActivos || []).reduce(
-      (s, p) => s + (Number(p.monto_prestado) || 0),
-      0
-    )
-  }
-
-  const { data: gastosTotales } = await supabase
-    .from('gastos')
-    .select('monto')
-    .eq('ruta_id', rutaId)
-    .eq('aprobado', true)
-
-  const { data: movsManualAll } = await supabase
-    .from('movimientos_capital_ruta')
-    .select('tipo_movimiento, monto, concepto')
-    .eq('ruta_id', rutaId)
-
-  const movimientosManualesNetos = calcularMovimientosManualesNetos(
-    movsManualAll || []
-  )
-
-  const desglose_saldo: DesgloseSaldoCaja = {
-    capital_inicial: Number(rutaCapital?.capital_inicial) || 0,
-    movimientos_manuales_netos: movimientosManualesNetos,
-    cobros_acumulados: cobrosAcumulados,
-    capital_prestado_historico: capitalPrestadoHistorico,
-    capital_pendiente_en_calle: capitalPendienteEnCalle,
-    gastos_aprobados_total: (gastosTotales || []).reduce(
-      (s, g) => s + (Number(g.monto) || 0),
-      0
-    ),
-  }
-
-  const variacion_periodo = calcularVariacionPeriodo(movimientos)
-
-  return {
-    ruta_id: meta.id,
-    nombre_ruta: meta.nombre_ruta,
-    color: meta.color,
-    cobrador_nombre: meta.cobrador_nombre,
-    capital_actual: Number(rutaCapital?.capital_actual ?? meta.capital_actual) || 0,
-    total_cobrado,
-    total_prestado,
-    total_prestado_activo: desglose_saldo.capital_pendiente_en_calle,
-    total_gastos,
-    variacion_periodo,
-    desglose_saldo,
-    movimientos,
-  }
+  return resumen ?? null
 }
 
 /** Préstamos activos/pendientes de la org sin ruta asignada (solo diagnóstico admin) */
@@ -537,19 +636,9 @@ export async function fetchResumenTodasRutas(
   rutas: RutaCajaOption[],
   fechaDesde: string,
   fechaHasta: string,
-  options?: { preferRpc?: boolean }
+  _options?: { preferRpc?: boolean }
 ): Promise<ResumenCajaRuta[]> {
-  const resultados: ResumenCajaRuta[] = []
-  for (const ruta of rutas) {
-    const resumen = await fetchResumenCajaRuta(
-      supabase,
-      ruta.id,
-      fechaDesde,
-      fechaHasta,
-      ruta,
-      options
-    )
-    if (resumen) resultados.push({ ...resumen, movimientos: [] })
-  }
-  return resultados
+  return fetchResumenesCajaBatch(supabase, rutas, fechaDesde, fechaHasta, {
+    lite: true,
+  })
 }

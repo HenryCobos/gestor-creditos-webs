@@ -37,10 +37,12 @@ import { UsuarioCardMobile } from '@/components/UsuarioCardMobile'
 import { useSubscriptionStore } from '@/lib/subscription-store'
 import { loadUsageLimits } from '@/lib/subscription-helpers'
 import { LimiteUsuariosDialog } from '@/components/limite-usuarios-dialog'
+import { shouldBlockListLoader } from '@/lib/should-block-list-loader'
+import { getDashboardSession } from '@/lib/dashboard-session-cache'
 
 export default function UsuariosPage() {
   const [open, setOpen] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [editingUsuario, setEditingUsuario] = useState<Profile | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [organizationId, setOrganizationId] = useState<string | null>(null)
@@ -58,117 +60,53 @@ export default function UsuariosPage() {
   })
 
   useEffect(() => {
-    checkPermissions()
     loadUsuarios()
     loadUsageLimits().then((limits) => {
       if (limits) setUsageLimits(limits)
     })
   }, [])
 
-  const checkPermissions = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, organization_id')
-      .eq('id', user.id)
-      .single()
-
-    if (profile) {
-      let role: 'admin' | 'cobrador' = profile.role === 'admin' ? 'admin' : 'cobrador'
-      if (profile.organization_id) {
-        const { data: roleData } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .eq('organization_id', profile.organization_id)
-          .maybeSingle()
-
-        if (roleData?.role === 'admin' || roleData?.role === 'cobrador') {
-          role = roleData.role
-        }
+  const loadUsuarios = async () => {
+    setRefreshing(true)
+    try {
+      const session = await getDashboardSession(supabase)
+      if (!session?.organizationId) {
+        toast({
+          title: 'Acceso denegado',
+          description: 'Solo administradores pueden ver esta sección',
+          variant: 'destructive',
+        })
+        return
       }
 
-      setIsAdmin(role === 'admin')
-      setOrganizationId(profile.organization_id)
+      setIsAdmin(session.role === 'admin')
+      setOrganizationId(session.organizationId)
+
+      if (session.role !== 'admin') {
+        toast({
+          title: 'Acceso denegado',
+          description: 'Solo administradores pueden ver esta sección',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      const { data: usuariosData, error } = await supabase.rpc(
+        'get_usuarios_organizacion'
+      )
+
+      if (error) {
+        toast({
+          title: 'Error',
+          description: 'No se pudieron cargar los usuarios',
+          variant: 'destructive',
+        })
+      } else {
+        setUsuarios(usuariosData || [])
+      }
+    } finally {
+      setRefreshing(false)
     }
-  }
-
-  const loadUsuarios = async () => {
-    setLoading(true)
-    console.log('[loadUsuarios] Iniciando carga con función RPC...')
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      console.error('[loadUsuarios] No hay usuario autenticado')
-      return
-    }
-    console.log('[loadUsuarios] Usuario autenticado:', user.id)
-
-    // Obtener organización del usuario
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('organization_id, role')
-      .eq('id', user.id)
-      .single()
-
-    if (profileError) {
-      console.error('[loadUsuarios] Error obteniendo perfil:', profileError)
-    }
-    console.log('[loadUsuarios] Perfil:', profile)
-
-    if (!profile?.organization_id) {
-      toast({
-        title: 'Acceso denegado',
-        description: 'Solo administradores pueden ver esta sección',
-        variant: 'destructive',
-      })
-      setLoading(false)
-      return
-    }
-
-    const { data: roleData } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('organization_id', profile.organization_id)
-      .maybeSingle()
-
-    let role: 'admin' | 'cobrador' = profile.role === 'admin' ? 'admin' : 'cobrador'
-    if (roleData?.role === 'admin' || roleData?.role === 'cobrador') {
-      role = roleData.role
-    }
-
-    if (role !== 'admin') {
-      toast({
-        title: 'Acceso denegado',
-        description: 'Solo administradores pueden ver esta sección',
-        variant: 'destructive',
-      })
-      setLoading(false)
-      return
-    }
-
-    // Usar función RPC para obtener usuarios (bypassa RLS)
-    console.log('[loadUsuarios] Llamando función get_usuarios_organizacion()...')
-    const { data: usuariosData, error } = await supabase
-      .rpc('get_usuarios_organizacion')
-
-    if (error) {
-      console.error('[loadUsuarios] ❌ Error cargando usuarios:', error)
-      console.error('[loadUsuarios] Error detallado:', JSON.stringify(error, null, 2))
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar los usuarios',
-        variant: 'destructive',
-      })
-    } else {
-      console.log('[loadUsuarios] ✅ Usuarios encontrados:', usuariosData?.length || 0)
-      console.log('[loadUsuarios] Datos:', usuariosData)
-      setUsuarios(usuariosData || [])
-    }
-    setLoading(false)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -593,7 +531,10 @@ export default function UsuariosPage() {
           <CardTitle>Usuarios de la Organización</CardTitle>
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {refreshing && usuarios.length > 0 && (
+            <p className="text-sm text-muted-foreground mb-2">Actualizando…</p>
+          )}
+          {shouldBlockListLoader(refreshing, usuarios.length) ? (
             <p className="text-center py-8 text-gray-500">Cargando...</p>
           ) : usuarios.length === 0 ? (
             <div className="text-center py-8 space-y-4">

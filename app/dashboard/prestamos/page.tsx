@@ -39,8 +39,14 @@ import { PrestamoDetailDialog } from '@/components/prestamo-detail-dialog'
 import { LimiteAlcanzadoDialog } from '@/components/limite-alcanzado-dialog'
 import { PrestamoCardMobile } from '@/components/PrestamoCardMobile'
 import { useSubscriptionStore } from '@/lib/subscription-store'
-import { loadOrganizationSubscription, loadOrganizationUsageLimits } from '@/lib/subscription-helpers'
+import {
+  ensureOrganizationContext,
+  invalidateOrgDataCache,
+  mapLimitesToUsageLimits,
+} from '@/lib/subscription-helpers'
 import { getClientesInteligente, getPrestamosInteligente } from '@/lib/queries-con-roles'
+import { shouldBlockListLoader } from '@/lib/should-block-list-loader'
+import { getDashboardSession } from '@/lib/dashboard-session-cache'
 import { asegurarClienteEnRutaActiva } from '@/lib/ruta-cobrador-sync'
 import { getRutaActivaCobrador, resolverRutaActivaCobrador } from '@/lib/ruta-activa-cobrador'
 import { SearchFilterBar } from '@/components/search-filter-bar'
@@ -58,9 +64,11 @@ import {
   calcularFechaFinDesdeDuracion,
   calcularInteresPorcentajeDesdeTotal,
   getNombreFrecuencia,
+  getNombrePeriodoTasa,
   getNombreTipoDuracion,
   tieneDuracionValida,
   type FrecuenciaPago,
+  type PeriodoTasa,
   type TipoInteres,
   type TipoPrestamo,
   type TipoCalculoInteres,
@@ -69,11 +77,17 @@ import {
 } from '@/lib/loan-calculations'
 import { format, addMonths, addWeeks, addDays } from 'date-fns'
 import type { Garantia } from '@/lib/store'
+import {
+  syncPeriodosAbiertos,
+  calcularInteresAbiertoPeriodo,
+  getConfigAbierto,
+  periodoPorNumero,
+} from '@/lib/open-loan-periods'
 
 export default function PrestamosPage() {
   const [open, setOpen] = useState(false)
   const [userRole, setUserRole] = useState<'admin' | 'cobrador' | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [detailDialogOpen, setDetailDialogOpen] = useState(false)
   const [selectedPrestamo, setSelectedPrestamo] = useState<Prestamo | null>(null)
   const [limiteDialogOpen, setLimiteDialogOpen] = useState(false)
@@ -113,6 +127,9 @@ export default function PrestamosPage() {
     enganche: '',
     cargos_adicionales: '',
     descripcion_producto: '',
+    periodo_tasa: 'mensual' as PeriodoTasa,
+    periodo_tasa_dias: '30',
+    frecuencia_cobro_dias: '30',
   })
 
   const [garantias, setGarantias] = useState<Array<{
@@ -153,16 +170,19 @@ export default function PrestamosPage() {
 
   useEffect(() => {
     loadData()
-    loadSubscriptionData()
   }, [])
 
-  const loadSubscriptionData = async () => {
-    const [subscription, limits] = await Promise.all([
-      loadOrganizationSubscription(),
-      loadOrganizationUsageLimits(),
-    ])
+  const syncOrgContext = async (force = false) => {
+    const { subscription, limites } = await ensureOrganizationContext(
+      force ? { force: true } : { skipIfFresh: true }
+    )
     if (subscription) setUserSubscription(subscription)
-    if (limits) setUsageLimits(limits)
+    if (limites) setUsageLimits(mapLimitesToUsageLimits(limites))
+  }
+
+  const refreshOrgAfterMutation = () => {
+    invalidateOrgDataCache()
+    return syncOrgContext(true)
   }
 
   useEffect(() => {
@@ -236,45 +256,34 @@ export default function PrestamosPage() {
     formData.tipo_calculo_interes,
   ])
 
-  const loadData = async () => {
-    setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) return
-
-    // Resolver rol real del usuario (prioriza user_roles dentro de organización)
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('organization_id, role')
-      .eq('id', user.id)
-      .single()
-
-    let role: 'admin' | 'cobrador' = profile?.role === 'admin' ? 'admin' : 'cobrador'
-
-    if (profile?.organization_id) {
-      const { data: roleData } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .eq('organization_id', profile.organization_id)
-        .maybeSingle()
-
-      // En organizaciones, user_roles es fuente de verdad solo cuando existe.
-      if (roleData?.role === 'admin' || roleData?.role === 'cobrador') {
-        role = roleData.role
-      }
+  const handlePrestamoDetailUpdate = async () => {
+    await loadData()
+    const id = selectedPrestamo?.id
+    if (!id) return
+    const fresh = useStore.getState().prestamos.find((p) => p.id === id)
+    if (fresh) {
+      setSelectedPrestamo(fresh)
+      return
     }
+    const { data } = await supabase
+      .from('prestamos')
+      .select(`*, cliente:clientes(*)`)
+      .eq('id', id)
+      .single()
+    if (data) setSelectedPrestamo(data as Prestamo)
+  }
 
-    setUserRole(role)
-
+  const loadRutasFiltroPrestamos = async (
+    session: NonNullable<Awaited<ReturnType<typeof getDashboardSession>>>
+  ) => {
     const rutas = await loadRutasParaFiltro(supabase, {
-      role,
-      userId: user.id,
-      organizationId: profile?.organization_id ?? null,
+      role: session.role,
+      userId: session.userId,
+      organizationId: session.organizationId,
     })
     setRutasFiltro(rutas)
 
-    if (role === 'cobrador' && rutas.length > 0) {
+    if (session.role === 'cobrador' && rutas.length > 0) {
       const activa = getRutaActivaCobrador()
       const rutaInicial =
         activa && rutas.some((r) => r.id === activa) ? activa : rutas[0].id
@@ -282,39 +291,47 @@ export default function PrestamosPage() {
     } else {
       setRutaFilter('todos')
     }
+  }
 
+  const loadData = async () => {
+    setRefreshing(true)
     try {
-      // Cargar clientes usando función inteligente
-      const clientesData = await getClientesInteligente()
+      const session = await getDashboardSession(supabase)
+      if (!session) return
+
+      setUserRole(session.role)
+
+      const [clientesData, productosRes, prestamosData] = await Promise.all([
+        getClientesInteligente(),
+        supabase
+          .from('productos')
+          .select('*')
+          .eq('user_id', session.userId)
+          .eq('activo', true)
+          .order('nombre', { ascending: true }),
+        getPrestamosInteligente(),
+      ])
+
       if (clientesData) {
         setClientes(clientesData)
       }
 
-      // Cargar productos (para ventas a crédito) - query directa OK
-      const { data: productosData } = await supabase
-        .from('productos')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('activo', true)
-        .order('nombre', { ascending: true })
-
+      const productosData = productosRes.data
       if (productosData) {
         setProductos(productosData)
       }
 
-      // Cargar préstamos usando función inteligente
-      const prestamosData = await getPrestamosInteligente()
-      
-      // Enriquecer préstamos con datos del cliente
       if (prestamosData && clientesData) {
-        const prestamosEnriquecidos = prestamosData.map(prestamo => ({
+        const prestamosEnriquecidos = prestamosData.map((prestamo) => ({
           ...prestamo,
-          cliente: clientesData.find(c => c.id === prestamo.cliente_id)
+          cliente: clientesData.find((c) => c.id === prestamo.cliente_id),
         }))
         setPrestamos(prestamosEnriquecidos)
       } else {
         setPrestamos(prestamosData || [])
       }
+
+      void loadRutasFiltroPrestamos(session)
     } catch (error) {
       console.error('Error al cargar datos:', error)
       toast({
@@ -322,8 +339,9 @@ export default function PrestamosPage() {
         description: 'No se pudieron cargar los datos',
         variant: 'destructive',
       })
+    } finally {
+      setRefreshing(false)
     }
-    setLoading(false)
   }
 
   const handleOpenDialog = () => {
@@ -397,6 +415,9 @@ export default function PrestamosPage() {
       enganche: prestamo.enganche?.toString() || '',
       cargos_adicionales: prestamo.cargos_adicionales?.toString() || '',
       descripcion_producto: prestamo.descripcion_producto || '',
+      periodo_tasa: (prestamo.periodo_tasa as PeriodoTasa) || 'mensual',
+      periodo_tasa_dias: prestamo.periodo_tasa_dias?.toString() || '30',
+      frecuencia_cobro_dias: prestamo.frecuencia_cobro_dias?.toString() || '30',
     })
 
     // Cargar garantías en el formato del formulario
@@ -414,6 +435,37 @@ export default function PrestamosPage() {
 
     setEditingPrestamo(prestamo)
     setOpen(true)
+  }
+
+  const buildCamposPrestamoAbierto = (isNew: boolean) => {
+    if (formData.tipo_prestamo !== 'abierto') return {}
+    const frecuenciaCobroDias =
+      formData.frecuencia_pago === 'personalizado'
+        ? parseInt(formData.frecuencia_cobro_dias, 10) || 30
+        : null
+    const periodoTasaDias =
+      formData.periodo_tasa === 'personalizado'
+        ? parseInt(formData.periodo_tasa_dias, 10) || 30
+        : null
+
+    if (isNew) {
+      return {
+        periodo_tasa: formData.periodo_tasa,
+        periodo_tasa_dias: periodoTasaDias,
+        frecuencia_cobro_dias: frecuenciaCobroDias,
+        interes_pendiente: 0,
+      }
+    }
+
+    const campos: Record<string, unknown> = {
+      frecuencia_cobro_dias: frecuenciaCobroDias,
+    }
+    if (editingPrestamo?.periodo_tasa != null) {
+      campos.periodo_tasa = formData.periodo_tasa
+      campos.periodo_tasa_dias =
+        formData.periodo_tasa === 'personalizado' ? periodoTasaDias : null
+    }
+    return campos
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -556,6 +608,7 @@ export default function PrestamosPage() {
           enganche: formData.tipo_prestamo === 'venta_credito' && formData.enganche ? parseFloat(formData.enganche) : null,
           cargos_adicionales: formData.tipo_prestamo === 'venta_credito' && formData.cargos_adicionales ? parseFloat(formData.cargos_adicionales) : null,
           descripcion_producto: formData.tipo_prestamo === 'venta_credito' && formData.descripcion_producto ? formData.descripcion_producto : null,
+          ...buildCamposPrestamoAbierto(false),
         })
         .eq('id', editingPrestamo.id)
         .select(`
@@ -644,6 +697,7 @@ export default function PrestamosPage() {
           descripcion_producto: formData.tipo_prestamo === 'venta_credito' && formData.descripcion_producto ? formData.descripcion_producto : null,
           estado: 'activo',
           capital_saldo: formData.tipo_prestamo === 'abierto' ? monto : null,
+          ...buildCamposPrestamoAbierto(true),
         }])
         .select(`
           *,
@@ -707,20 +761,51 @@ export default function PrestamosPage() {
       }
     }
 
-    // Préstamo abierto: no genera cuotas fijas, solo guarda capital_saldo
+    // Préstamo abierto: sync de períodos (cuotas de interés), sin cronograma fijo de amortización
     if (formData.tipo_prestamo === 'abierto') {
-      await supabase
-        .from('prestamos')
-        .update({ capital_saldo: monto })
-        .eq('id', prestamo.id)
+      if (!editingPrestamo) {
+        await supabase
+          .from('prestamos')
+          .update({ capital_saldo: monto, monto_total: monto })
+          .eq('id', prestamo.id)
+      }
+
+      const prestamoAbierto = {
+        ...prestamo,
+        ...buildCamposPrestamoAbierto(!editingPrestamo),
+        capital_saldo: editingPrestamo
+          ? (editingPrestamo.capital_saldo ?? editingPrestamo.monto_prestado)
+          : monto,
+        tipo_prestamo: 'abierto' as const,
+        frecuencia_pago: formData.frecuencia_pago,
+        excluir_domingos: formData.excluir_domingos,
+        excluir_fines_semana: formData.excluir_fines_semana,
+      } as Prestamo
+
+      const modoSync =
+        !editingPrestamo && prestamoAbierto.periodo_tasa != null
+          ? 'nuevo'
+          : 'legacy_forward'
+
+      await syncPeriodosAbiertos(
+        supabase,
+        prestamo.id,
+        prestamoAbierto,
+        user.id,
+        modoSync
+      )
 
       if (editingPrestamo) {
-        updatePrestamo(prestamo.id, { ...prestamo, capital_saldo: monto })
+        updatePrestamo(prestamo.id, prestamoAbierto)
         toast({ title: 'Éxito', description: 'Préstamo abierto actualizado correctamente.' })
       } else {
-        addPrestamo({ ...prestamo, capital_saldo: monto })
-        toast({ title: 'Éxito', description: 'Préstamo abierto creado. Los pagos se registrarán manualmente desde el detalle.' })
-        loadSubscriptionData()
+        addPrestamo(prestamoAbierto)
+        toast({
+          title: 'Éxito',
+          description:
+            'Préstamo abierto creado. Revisa cuotas pendientes o registra pagos desde el detalle.',
+        })
+        refreshOrgAfterMutation()
       }
       loadData()
       resetForm()
@@ -922,7 +1007,7 @@ export default function PrestamosPage() {
     
     // Recargar límites y productos después de agregar
     if (!editingPrestamo) {
-      loadSubscriptionData()
+      refreshOrgAfterMutation()
     }
     loadData() // Recargar también los productos para actualizar stock
     resetForm()
@@ -950,7 +1035,7 @@ export default function PrestamosPage() {
         title: 'Éxito',
         description: 'Préstamo eliminado correctamente',
       })
-      await loadSubscriptionData()
+      await refreshOrgAfterMutation()
       return
     }
 
@@ -996,7 +1081,7 @@ export default function PrestamosPage() {
         description: 'Préstamo eliminado correctamente',
       })
       // Recalcular límites de la organización después de eliminar
-      await loadSubscriptionData()
+      await refreshOrgAfterMutation()
     }
   }
 
@@ -1025,6 +1110,9 @@ export default function PrestamosPage() {
       enganche: '',
       cargos_adicionales: '',
       descripcion_producto: '',
+      periodo_tasa: 'mensual',
+      periodo_tasa_dias: '30',
+      frecuencia_cobro_dias: '30',
     })
     setGarantias([])
     setCalculatedDetails({
@@ -1401,9 +1489,11 @@ export default function PrestamosPage() {
                 {formData.tipo_calculo_interes !== 'total_acordado' && (
                 <div className="space-y-2">
                   <Label htmlFor="interes_porcentaje">
-                    {formData.tipo_calculo_interes === 'global' 
-                      ? 'Interés Global (%) *'
-                      : 'Interés Mensual (%) *'}
+                    {formData.tipo_prestamo === 'abierto'
+                      ? `Interés ${getNombrePeriodoTasa(formData.periodo_tasa).toLowerCase()} (%) *`
+                      : formData.tipo_calculo_interes === 'global'
+                        ? 'Interés Global (%) *'
+                        : 'Interés Mensual (%) *'}
                   </Label>
                   <Input
                     id="interes_porcentaje"
@@ -1420,6 +1510,48 @@ export default function PrestamosPage() {
                 </div>
                 )}
 
+                {formData.tipo_prestamo === 'abierto' && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Período de la tasa de interés *</Label>
+                      <Select
+                        value={formData.periodo_tasa}
+                        onValueChange={(value: PeriodoTasa) =>
+                          setFormData({ ...formData, periodo_tasa: value })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="diario">Diario</SelectItem>
+                          <SelectItem value="semanal">Semanal</SelectItem>
+                          <SelectItem value="quincenal">Quincenal</SelectItem>
+                          <SelectItem value="mensual">Mensual</SelectItem>
+                          <SelectItem value="personalizado">Cada N días</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {formData.periodo_tasa === 'personalizado' && (
+                      <div className="space-y-2">
+                        <Label htmlFor="periodo_tasa_dias">Días del período de tasa *</Label>
+                        <Input
+                          id="periodo_tasa_dias"
+                          type="number"
+                          min={1}
+                          max={365}
+                          value={formData.periodo_tasa_dias}
+                          onChange={(e) =>
+                            setFormData({ ...formData, periodo_tasa_dias: e.target.value })
+                          }
+                          required
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {formData.tipo_prestamo !== 'abierto' && (
                 <div className="space-y-2">
                   <Label>Tipo de Duración *</Label>
                   <Select
@@ -1446,8 +1578,9 @@ export default function PrestamosPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                )}
 
-                {formData.tipo_duracion === 'meses' ? (
+                {formData.tipo_prestamo !== 'abierto' && formData.tipo_duracion === 'meses' ? (
                   <div className="space-y-2">
                     <Label htmlFor="numero_meses">Duración del Préstamo (meses) *</Label>
                     <Input
@@ -1471,7 +1604,7 @@ export default function PrestamosPage() {
                       )}
                     </p>
                   </div>
-                ) : formData.tipo_duracion === 'dias' ? (
+                ) : formData.tipo_prestamo !== 'abierto' && formData.tipo_duracion === 'dias' ? (
                   <div className="space-y-2">
                     <Label htmlFor="numero_dias">Duración del Préstamo (días) *</Label>
                     <Input
@@ -1495,7 +1628,7 @@ export default function PrestamosPage() {
                       )}
                     </p>
                   </div>
-                ) : formData.tipo_duracion === 'semanas' ? (
+                ) : formData.tipo_prestamo !== 'abierto' && formData.tipo_duracion === 'semanas' ? (
                   <div className="space-y-2">
                     <Label htmlFor="numero_semanas">Duración del Préstamo (semanas) *</Label>
                     <Input
@@ -1519,7 +1652,7 @@ export default function PrestamosPage() {
                       )}
                     </p>
                   </div>
-                ) : (
+                ) : formData.tipo_prestamo !== 'abierto' ? (
                   <div className="space-y-2">
                     <Label htmlFor="numero_quincenas">Duración del Préstamo (quincenas) *</Label>
                     <Input
@@ -1543,7 +1676,7 @@ export default function PrestamosPage() {
                       )}
                     </p>
                   </div>
-                )}
+                ) : null}
 
                 <div className="space-y-2">
                   <Label htmlFor="fecha_inicio">Fecha de Inicio *</Label>
@@ -1573,7 +1706,11 @@ export default function PrestamosPage() {
                 )}
 
                 <div className="space-y-2">
-                  <Label htmlFor="frecuencia_pago">Frecuencia de Pago *</Label>
+                  <Label htmlFor="frecuencia_pago">
+                    {formData.tipo_prestamo === 'abierto'
+                      ? 'Frecuencia de cobro *'
+                      : 'Frecuencia de Pago *'}
+                  </Label>
                   <Select
                     value={formData.frecuencia_pago}
                     onValueChange={(value) =>
@@ -1588,9 +1725,30 @@ export default function PrestamosPage() {
                       <SelectItem value="semanal">Semanal</SelectItem>
                       <SelectItem value="quincenal">Quincenal</SelectItem>
                       <SelectItem value="mensual">Mensual</SelectItem>
+                      {formData.tipo_prestamo === 'abierto' && (
+                        <SelectItem value="personalizado">Cada N días</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
+
+                {formData.tipo_prestamo === 'abierto' &&
+                  formData.frecuencia_pago === 'personalizado' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="frecuencia_cobro_dias">Cobrar cada (días) *</Label>
+                      <Input
+                        id="frecuencia_cobro_dias"
+                        type="number"
+                        min={1}
+                        max={365}
+                        value={formData.frecuencia_cobro_dias}
+                        onChange={(e) =>
+                          setFormData({ ...formData, frecuencia_cobro_dias: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
+                  )}
 
                 <div className="space-y-2 pt-2">
                   <div className="flex items-center space-x-2">
@@ -1605,7 +1763,9 @@ export default function PrestamosPage() {
                       htmlFor="excluir_domingos"
                       className="text-sm font-normal cursor-pointer"
                     >
-                      Excluir domingos del cronograma de cuotas
+                      {formData.tipo_prestamo === 'abierto'
+                        ? 'Excluir domingos en fechas de vencimiento del período'
+                        : 'Excluir domingos del cronograma de cuotas'}
                     </Label>
                   </div>
                   <div className="flex items-center space-x-2">
@@ -1620,7 +1780,9 @@ export default function PrestamosPage() {
                       htmlFor="excluir_fines_semana"
                       className="text-sm font-normal cursor-pointer"
                     >
-                      Excluir sábados y domingos del cronograma de cuotas
+                      {formData.tipo_prestamo === 'abierto'
+                        ? 'Excluir fines de semana en vencimientos del período'
+                        : 'Excluir sábados y domingos del cronograma de cuotas'}
                     </Label>
                   </div>
                 </div>
@@ -1659,17 +1821,38 @@ export default function PrestamosPage() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-gray-600">Interés mensual estimado</p>
+                      <p className="text-gray-600">
+                        Interés por período de cobro (estimado)
+                      </p>
                       <p className="font-semibold text-amber-900">
-                        {formatCurrency(
-                          parseFloat(formData.monto_prestado || '0') * parseFloat(formData.interes_porcentaje || '0') / 100,
-                          config.currency
-                        )}
+                        {(() => {
+                          const m = parseFloat(formData.monto_prestado || '0')
+                          const cfg = getConfigAbierto({
+                            frecuencia_pago: formData.frecuencia_pago,
+                            frecuencia_cobro_dias:
+                              formData.frecuencia_pago === 'personalizado'
+                                ? parseInt(formData.frecuencia_cobro_dias, 10) || 30
+                                : null,
+                            periodo_tasa: formData.periodo_tasa,
+                            periodo_tasa_dias:
+                              formData.periodo_tasa === 'personalizado'
+                                ? parseInt(formData.periodo_tasa_dias, 10) || 30
+                                : null,
+                            interes_porcentaje: parseFloat(formData.interes_porcentaje || '0'),
+                            excluir_domingos: formData.excluir_domingos,
+                            excluir_fines_semana: formData.excluir_fines_semana,
+                          })
+                          const [y, mo, d] = formData.fecha_inicio.split('-').map(Number)
+                          const inicio = new Date(y, mo - 1, d)
+                          const p1 = periodoPorNumero(inicio, 1, cfg)
+                          const est = calcularInteresAbiertoPeriodo(m, p1.desde, p1.hasta, cfg)
+                          return formatCurrency(est, config.currency)
+                        })()}
                       </p>
                     </div>
                   </div>
                   <p className="text-xs text-amber-700 mt-1">
-                    No se generarán cuotas automáticamente. Cada pago se registra manualmente desde el detalle del préstamo con el monto de interés y abono a capital que el cliente pague.
+                    Se generarán cuotas de interés según la frecuencia de cobro (incluidas atrasadas si la fecha de inicio es anterior). Los pagos se registran desde el detalle con rango de período, interés y abono a capital.
                   </p>
                 </div>
               )}
@@ -1929,11 +2112,14 @@ export default function PrestamosPage() {
       )}
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle>Lista de Préstamos</CardTitle>
+          {refreshing && prestamos.length > 0 && (
+            <span className="text-xs text-muted-foreground">Actualizando…</span>
+          )}
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {shouldBlockListLoader(refreshing, prestamos.length) ? (
             <p className="text-center py-8 text-gray-500">Cargando...</p>
           ) : prestamos.length === 0 ? (
             <p className="text-center py-8 text-gray-500">
@@ -2099,7 +2285,7 @@ export default function PrestamosPage() {
         prestamo={selectedPrestamo}
         open={detailDialogOpen}
         onOpenChange={setDetailDialogOpen}
-        onUpdate={loadData}
+        onUpdate={handlePrestamoDetailUpdate}
       />
 
       <LimiteAlcanzadoDialog

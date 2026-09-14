@@ -2,7 +2,8 @@
 
 import { addDays, addWeeks, addMonths } from 'date-fns'
 
-export type FrecuenciaPago = 'diario' | 'semanal' | 'quincenal' | 'mensual'
+export type FrecuenciaPago = 'diario' | 'semanal' | 'quincenal' | 'mensual' | 'personalizado'
+export type PeriodoTasa = 'diario' | 'semanal' | 'quincenal' | 'mensual' | 'personalizado'
 export type TipoInteres = 'simple' | 'compuesto'
 export type TipoPrestamo = 'amortizacion' | 'solo_intereses' | 'empeño' | 'venta_credito' | 'abierto'
 export type TipoCalculoInteres = 'por_periodo' | 'global' | 'frances' | 'total_acordado'
@@ -328,6 +329,38 @@ export function calcularInteresAbierto(
   return Number(interes.toFixed(2))
 }
 
+/** Días de referencia para un período de tasa o frecuencia */
+export function diasReferenciaPeriodo(
+  tipo: PeriodoTasa | FrecuenciaPago,
+  diasPersonalizados?: number | null
+): number {
+  if (tipo === 'personalizado' && diasPersonalizados && diasPersonalizados > 0) {
+    return diasPersonalizados
+  }
+  switch (tipo) {
+    case 'diario':
+      return 1
+    case 'semanal':
+      return 7
+    case 'quincenal':
+      return 14
+    case 'mensual':
+    default:
+      return 30
+  }
+}
+
+export function getNombrePeriodoTasa(periodo: PeriodoTasa): string {
+  const nombres: Record<PeriodoTasa, string> = {
+    diario: 'Diario',
+    semanal: 'Semanal',
+    quincenal: 'Quincenal',
+    mensual: 'Mensual',
+    personalizado: 'Personalizado',
+  }
+  return nombres[periodo]
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -525,6 +558,9 @@ export function calcularSiguienteFechaPago(
     case 'mensual':
       fecha = addMonths(fechaBase, numeroCuota)
       break
+    case 'personalizado':
+      fecha = addDays(fechaBase, numeroCuota)
+      break
     default:
       fecha = addMonths(fechaBase, numeroCuota)
   }
@@ -547,6 +583,7 @@ export function getNombreFrecuencia(frecuencia: FrecuenciaPago): string {
     semanal: 'Semanal',
     quincenal: 'Quincenal',
     mensual: 'Mensual',
+    personalizado: 'Cada N días',
   }
   return nombres[frecuencia]
 }
@@ -567,6 +604,8 @@ export function calcularDuracionTotal(
       return numeroCuotas * 14
     case 'mensual':
       return numeroCuotas * 30
+    case 'personalizado':
+      return numeroCuotas * 30
     default:
       return numeroCuotas * 30
   }
@@ -580,6 +619,7 @@ export function validarNumeroCuotas(
   frecuencia: FrecuenciaPago
 ): { valido: boolean; mensaje?: string } {
   const limites: Record<FrecuenciaPago, { min: number; max: number }> = {
+    personalizado: { min: 1, max: 500 },
     diario: { min: 7, max: 365 },
     semanal: { min: 4, max: 104 },
     quincenal: { min: 2, max: 52 },

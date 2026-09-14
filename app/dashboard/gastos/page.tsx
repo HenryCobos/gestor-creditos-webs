@@ -51,6 +51,8 @@ import { useStore, type Gasto, type CategoriaGasto } from '@/lib/store'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useConfigStore } from '@/lib/config-store'
 import { format, startOfMonth } from 'date-fns'
+import { shouldBlockListLoader } from '@/lib/should-block-list-loader'
+import { getDashboardSession } from '@/lib/dashboard-session-cache'
 
 const getCategoriaIcon = (categoria: CategoriaGasto) => {
   switch (categoria) {
@@ -74,7 +76,7 @@ const getCategoriaColor = (categoria: CategoriaGasto) => {
 
 export default function GastosPage() {
   const [open, setOpen] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [editingGasto, setEditingGasto] = useState<Gasto | null>(null)
   const [userRole, setUserRole] = useState<'admin' | 'cobrador' | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
@@ -84,9 +86,7 @@ export default function GastosPage() {
   const inicioMes = format(startOfMonth(new Date()), 'yyyy-MM-dd')
   const [filtroFechaDesde, setFiltroFechaDesde] = useState(inicioMes)
   const [filtroFechaHasta, setFiltroFechaHasta] = useState(hoy)
-  const [filtroCobrador, setFiltroCobrador] = useState<string>('todos')
   const [filtroRuta, setFiltroRuta] = useState<string>('todos')
-  const [cobradores, setCobradores] = useState<any[]>([])
   const { toast } = useToast()
   const supabase = createClient()
   const { gastos, setGastos, addGasto, updateGasto, deleteGasto: deleteGastoStore } = useStore()
@@ -111,7 +111,7 @@ export default function GastosPage() {
     } else if (userRole === 'cobrador') {
       loadGastosCobrador(userId)
     }
-  }, [filtroFechaDesde, filtroFechaHasta, filtroCobrador, filtroRuta, userId, userRole, organizationId])
+  }, [filtroFechaDesde, filtroFechaHasta, filtroRuta, userId, userRole, organizationId])
 
   const aplicarFiltroFechas = <T extends { gte: (col: string, val: string) => T; lte: (col: string, val: string) => T }>(
     query: T
@@ -127,40 +127,17 @@ export default function GastosPage() {
   }
 
   const checkPermissionsAndLoad = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    const session = await getDashboardSession(supabase)
+    if (!session) return
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, organization_id')
-      .eq('id', user.id)
-      .single()
+    setUserRole(session.role)
+    setUserId(session.userId)
+    setOrganizationId(session.organizationId)
 
-    if (profile) {
-      let role: 'admin' | 'cobrador' = profile.role === 'admin' ? 'admin' : 'cobrador'
-      if (profile.organization_id) {
-        const { data: roleData } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .eq('organization_id', profile.organization_id)
-          .maybeSingle()
-
-        if (roleData?.role === 'admin' || roleData?.role === 'cobrador') {
-          role = roleData.role
-        }
-      }
-
-      setUserRole(role)
-      setUserId(user.id)
-      setOrganizationId(profile.organization_id)
-      
-      if (role === 'admin') {
-        loadRutas(profile.organization_id)
-        loadCobradores(profile.organization_id)
-      } else if (role === 'cobrador') {
-        loadRutasCobrador(user.id)
-      }
+    if (session.role === 'admin' && session.organizationId) {
+      loadRutas(session.organizationId)
+    } else if (session.role === 'cobrador') {
+      loadRutasCobrador(session.userId)
     }
   }
 
@@ -185,10 +162,34 @@ export default function GastosPage() {
       return
     }
 
-    console.log('[loadRutas] Rutas cargadas:', data?.length || 0)
-    if (data) {
-      setRutas(data)
+    if (!data?.length) {
+      setRutas([])
+      return
     }
+
+    const cobradorIds = [
+      ...new Set(data.map((r) => r.cobrador_id).filter(Boolean)),
+    ] as string[]
+    const cobradoresMap = new Map<string, string>()
+    if (cobradorIds.length > 0) {
+      const { data: usuarios } = await supabase.rpc('get_usuarios_organizacion')
+      ;(usuarios || []).forEach(
+        (u: { id: string; nombre_completo?: string; email?: string }) => {
+          if (cobradorIds.includes(u.id)) {
+            cobradoresMap.set(u.id, u.nombre_completo || u.email || 'Cobrador')
+          }
+        }
+      )
+    }
+
+    setRutas(
+      data.map((r) => ({
+        ...r,
+        cobrador_nombre: r.cobrador_id
+          ? cobradoresMap.get(r.cobrador_id) ?? null
+          : null,
+      }))
+    )
   }
 
   const loadRutasCobrador = async (cobradorId: string) => {
@@ -224,29 +225,8 @@ export default function GastosPage() {
     }
   }
 
-  const loadCobradores = async (orgId: string) => {
-    console.log('[loadCobradores] Cargando cobradores para orgId:', orgId)
-    
-    const { data, error } = await supabase
-      .rpc('get_usuarios_organizacion')
-
-    if (error) {
-      console.error('[loadCobradores] Error:', error)
-      setCobradores([])
-      return
-    }
-
-    // Filtrar solo cobradores activos
-    const cobradoresActivos = (data || []).filter(
-      (u: any) => u.role === 'cobrador' && u.activo === true
-    )
-
-    console.log('[loadCobradores] Cobradores cargados:', cobradoresActivos.length)
-    setCobradores(cobradoresActivos)
-  }
-
   const loadGastos = async (orgId: string) => {
-    setLoading(true)
+    setRefreshing(true)
     console.log('[loadGastos] Iniciando carga de gastos para orgId:', orgId)
 
     try {
@@ -257,9 +237,6 @@ export default function GastosPage() {
         .eq('organization_id', orgId)
 
       query = aplicarFiltroFechas(query)
-      if (filtroCobrador !== 'todos') {
-        query = query.eq('cobrador_id', filtroCobrador)
-      }
       if (filtroRuta !== 'todos') {
         query = query.eq('ruta_id', filtroRuta)
       }
@@ -277,7 +254,7 @@ export default function GastosPage() {
 
       if (!gastosData || gastosData.length === 0) {
         setGastos([])
-        setLoading(false)
+        setRefreshing(false)
         return
       }
 
@@ -334,12 +311,12 @@ export default function GastosPage() {
       })
       setGastos([])
     } finally {
-      setLoading(false)
+      setRefreshing(false)
     }
   }
 
   const loadGastosCobrador = async (cobradorId: string) => {
-    setLoading(true)
+    setRefreshing(true)
     console.log('[loadGastosCobrador] Iniciando carga de gastos para cobrador:', cobradorId)
 
     try {
@@ -364,7 +341,7 @@ export default function GastosPage() {
 
       if (!gastosData || gastosData.length === 0) {
         setGastos([])
-        setLoading(false)
+        setRefreshing(false)
         return
       }
 
@@ -399,7 +376,7 @@ export default function GastosPage() {
       })
       setGastos([])
     } finally {
-      setLoading(false)
+      setRefreshing(false)
     }
   }
 
@@ -781,7 +758,7 @@ export default function GastosPage() {
       {userRole === 'admin' && (
         <Card>
           <CardContent className="pt-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <Label>Desde</Label>
                 <Input
@@ -802,25 +779,6 @@ export default function GastosPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Cobrador</Label>
-                <Select
-                  value={filtroCobrador}
-                  onValueChange={setFiltroCobrador}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos</SelectItem>
-                    {cobradores.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.nombre_completo || c.email}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
                 <Label>Ruta</Label>
                 <Select
                   value={filtroRuta}
@@ -833,7 +791,9 @@ export default function GastosPage() {
                     <SelectItem value="todos">Todas</SelectItem>
                     {rutas.map((r) => (
                       <SelectItem key={r.id} value={r.id}>
-                        {r.nombre_ruta}
+                        {r.cobrador_nombre
+                          ? `${r.nombre_ruta} — ${r.cobrador_nombre}`
+                          : r.nombre_ruta}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -845,7 +805,6 @@ export default function GastosPage() {
                   onClick={() => {
                     setFiltroFechaDesde(inicioMes)
                     setFiltroFechaHasta(hoy)
-                    setFiltroCobrador('todos')
                     setFiltroRuta('todos')
                   }}
                   className="w-full"
@@ -960,7 +919,10 @@ export default function GastosPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {refreshing && gastos.length > 0 && (
+            <p className="text-sm text-muted-foreground mb-2">Actualizando…</p>
+          )}
+          {shouldBlockListLoader(refreshing, gastos.length) ? (
             <p className="text-center py-8 text-gray-500">Cargando...</p>
           ) : gastos.length === 0 ? (
             <div className="text-center py-8 space-y-4">

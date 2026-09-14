@@ -455,6 +455,16 @@ function convertirNumeroALetras(numero: number): string {
 }
 
 // Exportar Reporte General
+export interface ReporteGeneralDesgloseCliente {
+  nombre: string
+  dni: string
+  total_prestado: number
+  total_pagado: number
+  total_pendiente: number
+  prestamos_activos: number
+  cuotas_pendientes: number
+}
+
 interface ReporteGeneralInfo {
   totalPrestado: number
   totalRecuperado: number
@@ -466,6 +476,8 @@ interface ReporteGeneralInfo {
   cuotasRetrasadas: number
   clientesActivos: number
   fecha: string
+  periodoLabel?: string
+  desgloseClientes?: ReporteGeneralDesgloseCliente[]
 }
 
 export function generarReporteGeneral(
@@ -494,13 +506,17 @@ export function generarReporteGeneral(
   doc.setFontSize(10)
   doc.setFont('helvetica', 'normal')
   doc.text(`Fecha: ${reporte.fecha}`, 105, 37, { align: 'center' })
-  
-  // Línea separadora
+  if (reporte.periodoLabel) {
+    doc.setFontSize(9)
+    doc.text(`Periodo: ${reporte.periodoLabel}`, 105, 43, { align: 'center' })
+  }
+
+  const headerLineY = reporte.periodoLabel ? 48 : 42
   doc.setLineWidth(0.5)
-  doc.line(20, 42, 190, 42)
-  
-  let yPos = 52
-  
+  doc.line(20, headerLineY, 190, headerLineY)
+
+  let yPos = headerLineY + 10
+
   // Resumen Financiero
   doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
@@ -591,7 +607,56 @@ export function generarReporteGeneral(
       1: { cellWidth: 70, halign: 'right', fontStyle: 'bold' },
     },
   })
-  
+
+  if (reporte.desgloseClientes !== undefined) {
+    yPos = (doc as any).lastAutoTable.finalY + 15
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Desglose por Cliente', 20, yPos)
+    yPos += 6
+
+    const clientBody =
+      reporte.desgloseClientes.length > 0
+        ? reporte.desgloseClientes.map((c) => [
+            c.nombre,
+            c.dni,
+            formatCurrency(c.total_prestado),
+            formatCurrency(c.total_pagado),
+            formatCurrency(c.total_pendiente),
+            String(c.prestamos_activos),
+            String(c.cuotas_pendientes),
+          ])
+        : [['Sin datos en el periodo seleccionado', '', '', '', '', '', '']]
+
+    autoTable(doc, {
+      startY: yPos,
+      head: [
+        [
+          'Cliente',
+          'DNI',
+          'Prestado',
+          'Pagado',
+          'Pendiente',
+          'Prést. act.',
+          'Cuotas pend.',
+        ],
+      ],
+      body: clientBody,
+      theme: 'grid',
+      headStyles: { fillColor: [59, 130, 246], fontStyle: 'bold', fontSize: 8 },
+      styles: { fontSize: 8 },
+      columnStyles: {
+        0: { cellWidth: 38 },
+        1: { cellWidth: 22 },
+        2: { cellWidth: 24, halign: 'right' },
+        3: { cellWidth: 24, halign: 'right' },
+        4: { cellWidth: 24, halign: 'right' },
+        5: { cellWidth: 18, halign: 'center' },
+        6: { cellWidth: 22, halign: 'center' },
+      },
+    })
+  }
+
   // Pie de página
   const pageCount = doc.getNumberOfPages()
   for (let i = 1; i <= pageCount; i++) {

@@ -88,18 +88,14 @@ export async function GET(request: Request) {
       if (role !== 'admin') {
         return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
       }
-      const resumenTodas = await fetchResumenTodasRutas(
-        admin,
-        rutas,
-        fechaDesde,
-        fechaHasta,
-        { preferRpc: false }
+      const [resumenTodas, alertaSinRuta] = await Promise.all([
+        fetchResumenTodasRutas(admin, rutas, fechaDesde, fechaHasta),
+        fetchAlertaPrestamosSinRuta(admin, profile.organization_id),
+      ])
+      return NextResponse.json(
+        { resumenTodas, rutas, alertaSinRuta },
+        { headers: { 'Cache-Control': 'private, max-age=30' } }
       )
-      const alertaSinRuta = await fetchAlertaPrestamosSinRuta(
-        admin,
-        profile.organization_id
-      )
-      return NextResponse.json({ resumenTodas, rutas, alertaSinRuta })
     }
 
     if (!rutaId) {
@@ -114,21 +110,26 @@ export async function GET(request: Request) {
       )
     }
 
-    const resumen = await fetchResumenCajaRuta(
-      admin,
-      rutaId,
-      fechaDesde,
-      fechaHasta,
-      rutaPermitida,
-      { preferRpc: false }
-    )
-
-    const alertaSinRuta =
+    const alertaPromise =
       role === 'admin'
-        ? await fetchAlertaPrestamosSinRuta(admin, profile.organization_id)
-        : undefined
+        ? fetchAlertaPrestamosSinRuta(admin, profile.organization_id)
+        : Promise.resolve(undefined)
 
-    return NextResponse.json({ resumen, rutas, alertaSinRuta })
+    const [resumen, alertaSinRuta] = await Promise.all([
+      fetchResumenCajaRuta(
+        admin,
+        rutaId,
+        fechaDesde,
+        fechaHasta,
+        rutaPermitida
+      ),
+      alertaPromise,
+    ])
+
+    return NextResponse.json(
+      { resumen, rutas, alertaSinRuta },
+      { headers: { 'Cache-Control': 'private, max-age=30' } }
+    )
   } catch (e) {
     console.error('[api/caja/resumen]', e)
     return NextResponse.json(

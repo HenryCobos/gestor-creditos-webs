@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -42,12 +42,33 @@ import { useConfigStore } from '@/lib/config-store'
 import { format, startOfMonth } from 'date-fns'
 import { loadRutasCaja, type MovimientoCaja, type ResumenCajaRuta, type RutaCajaOption, type AlertaPrestamosSinRuta } from '@/lib/caja-movimientos'
 import { resolverRutaActivaCobrador, setRutaActivaCobrador } from '@/lib/ruta-activa-cobrador'
+import { shouldBlockListLoader } from '@/lib/should-block-list-loader'
+import { getDashboardSession } from '@/lib/dashboard-session-cache'
+import { getPageSessionCache, setPageSessionCache } from '@/lib/page-session-cache'
+
+type CajaCachePayload = {
+  rutas?: RutaCajaOption[]
+  resumenRuta: ResumenCajaRuta | null
+  resumenTodas: ResumenCajaRuta[]
+  alertaSinRuta: AlertaPrestamosSinRuta | null
+}
+
+function cajaCacheKey(
+  orgId: string,
+  filtroRuta: string,
+  desde: string,
+  hasta: string,
+  esVistaTodas: boolean
+) {
+  return `caja:${orgId}:${filtroRuta}:${desde}:${hasta}:${esVistaTodas ? '1' : '0'}`
+}
 
 export default function CajaPage() {
   const hoy = format(new Date(), 'yyyy-MM-dd')
   const inicioMes = format(startOfMonth(new Date()), 'yyyy-MM-dd')
 
-  const [loading, setLoading] = useState(true)
+  const [bootstrapping, setBootstrapping] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [userRole, setUserRole] = useState<'admin' | 'cobrador' | null>(null)
   const [organizationId, setOrganizationId] = useState<string | null>(null)
   const [rutas, setRutas] = useState<RutaCajaOption[]>([])
@@ -63,11 +84,36 @@ export default function CajaPage() {
   const { config } = useConfigStore()
 
   const esVistaTodas = userRole === 'admin' && filtroRuta === 'todas'
+  const fetchAbortRef = useRef<AbortController | null>(null)
 
   const cargarDatos = useCallback(async () => {
     if (!organizationId || !userRole || !filtroRuta) return
 
-    setLoading(true)
+    const cacheKey = cajaCacheKey(
+      organizationId,
+      filtroRuta,
+      fechaDesde,
+      fechaHasta,
+      esVistaTodas
+    )
+    const cached = getPageSessionCache<CajaCachePayload>(cacheKey)
+    if (cached) {
+      if (cached.rutas?.length) setRutas(cached.rutas)
+      setAlertaSinRuta(cached.alertaSinRuta ?? null)
+      if (esVistaTodas) {
+        setResumenTodas(cached.resumenTodas || [])
+        setResumenRuta(null)
+      } else {
+        setResumenRuta(cached.resumenRuta ?? null)
+        setResumenTodas([])
+      }
+    }
+
+    fetchAbortRef.current?.abort()
+    const abortController = new AbortController()
+    fetchAbortRef.current = abortController
+
+    setRefreshing(true)
     try {
       const params = new URLSearchParams({
         desde: fechaDesde,
@@ -79,27 +125,44 @@ export default function CajaPage() {
         params.set('rutaId', filtroRuta)
       }
 
-      const res = await fetch(`/api/caja/resumen?${params.toString()}`)
+      const res = await fetch(`/api/caja/resumen?${params.toString()}`, {
+        signal: abortController.signal,
+      })
       const json = await res.json()
 
       if (!res.ok) {
         throw new Error(json.error || 'Error al cargar caja')
       }
 
-      if (json.rutas?.length) {
-        setRutas(json.rutas)
+      const rutasResp = json.rutas?.length ? json.rutas : undefined
+      if (rutasResp) {
+        setRutas(rutasResp)
       }
 
-      setAlertaSinRuta(json.alertaSinRuta ?? null)
+      const alerta = json.alertaSinRuta ?? null
+      setAlertaSinRuta(alerta)
+
+      let resumenRutaNext: ResumenCajaRuta | null = null
+      let resumenTodasNext: ResumenCajaRuta[] = []
 
       if (esVistaTodas) {
-        setResumenTodas(json.resumenTodas || [])
+        resumenTodasNext = json.resumenTodas || []
+        setResumenTodas(resumenTodasNext)
         setResumenRuta(null)
       } else {
-        setResumenRuta(json.resumen || null)
+        resumenRutaNext = json.resumen || null
+        setResumenRuta(resumenRutaNext)
         setResumenTodas([])
       }
+
+      setPageSessionCache(cacheKey, {
+        rutas: rutasResp ?? cached?.rutas,
+        resumenRuta: resumenRutaNext,
+        resumenTodas: resumenTodasNext,
+        alertaSinRuta: alerta,
+      })
     } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return
       console.error('[Caja] Error cargando datos:', e)
       toast({
         title: 'Error',
@@ -108,7 +171,7 @@ export default function CajaPage() {
         variant: 'destructive',
       })
     } finally {
-      setLoading(false)
+      setRefreshing(false)
     }
   }, [
     organizationId,
@@ -122,51 +185,32 @@ export default function CajaPage() {
 
   useEffect(() => {
     const init = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) return
+      try {
+        const session = await getDashboardSession(supabase)
+        if (!session?.organizationId) return
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role, organization_id')
-        .eq('id', user.id)
-        .single()
+        setUserRole(session.role)
+        setOrganizationId(session.organizationId)
 
-      if (!profile?.organization_id) {
-        setLoading(false)
-        return
-      }
+        const rutasData = await loadRutasCaja(
+          supabase,
+          session.organizationId,
+          session.role,
+          session.userId
+        )
+        setRutas(rutasData)
 
-      let role: 'admin' | 'cobrador' =
-        profile.role === 'cobrador' ? 'cobrador' : 'admin'
-      const { data: roleData } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .eq('organization_id', profile.organization_id)
-        .maybeSingle()
-
-      if (roleData?.role === 'admin' || roleData?.role === 'cobrador') {
-        role = roleData.role
-      }
-
-      setUserRole(role)
-      setOrganizationId(profile.organization_id)
-
-      const rutasData = await loadRutasCaja(
-        supabase,
-        profile.organization_id,
-        role,
-        user.id
-      )
-      setRutas(rutasData)
-
-      if (role === 'admin') {
-        setFiltroRuta('todas')
-      } else if (rutasData.length > 0) {
-        const { rutaId } = await resolverRutaActivaCobrador(supabase, user.id)
-        setFiltroRuta(rutaId || rutasData[0].id)
+        if (session.role === 'admin') {
+          setFiltroRuta('todas')
+        } else if (rutasData.length > 0) {
+          const { rutaId } = await resolverRutaActivaCobrador(
+            supabase,
+            session.userId
+          )
+          setFiltroRuta(rutaId || rutasData[0].id)
+        }
+      } finally {
+        setBootstrapping(false)
       }
     }
 
@@ -202,6 +246,12 @@ export default function CajaPage() {
     ) : (
       <ArrowUpRight className="h-4 w-4 text-red-600" />
     )
+
+  const hasResumen =
+    resumenRuta != null || resumenTodas.length > 0
+  const blockCajaLoader =
+    bootstrapping ||
+    shouldBlockListLoader(refreshing, hasResumen ? 1 : 0)
 
   const totalesOrg = resumenTodas.reduce(
     (acc, r) => ({
@@ -321,7 +371,10 @@ export default function CajaPage() {
         </CardContent>
       </Card>
 
-      {loading ? (
+      {refreshing && hasResumen && (
+        <p className="text-sm text-muted-foreground">Actualizando movimientos…</p>
+      )}
+      {blockCajaLoader ? (
         <p className="text-center py-12 text-muted-foreground">Cargando movimientos...</p>
       ) : rutas.length === 0 ? (
         <Card>

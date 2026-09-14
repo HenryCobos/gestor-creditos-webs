@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,12 +12,26 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useToast } from '@/components/ui/use-toast'
 import { formatCurrency } from '@/lib/utils'
 import { useConfigStore } from '@/lib/config-store'
-import { calcularInteresAbierto } from '@/lib/loan-calculations'
-import type { Prestamo } from '@/lib/store'
-import { format } from 'date-fns'
+import {
+  calcularInteresAbiertoPeriodo,
+  formatRangoPeriodo,
+  getConfigAbierto,
+  sugerirRangoProximoPeriodo,
+  syncPeriodosAbiertos,
+} from '@/lib/open-loan-periods'
+import { getNombrePeriodoTasa } from '@/lib/loan-calculations'
+import type { Cuota, Prestamo } from '@/lib/store'
+import { format, parseISO } from 'date-fns'
 
 interface PagoAbiertoDialogProps {
   prestamo: Prestamo
@@ -32,31 +46,122 @@ export function PagoAbiertoDialog({
   onOpenChange,
   onSuccess,
 }: PagoAbiertoDialogProps) {
-  const [diasPeriodo, setDiasPeriodo] = useState('30')
+  const [cuotaSeleccionadaId, setCuotaSeleccionadaId] = useState<string>('manual')
+  const [periodoDesde, setPeriodoDesde] = useState('')
+  const [periodoHasta, setPeriodoHasta] = useState('')
+  const [montoInteresPagado, setMontoInteresPagado] = useState('')
   const [abonoCapital, setAbonoCapital] = useState('0')
   const [metodoPago, setMetodoPago] = useState('')
   const [notas, setNotas] = useState('')
   const [loading, setLoading] = useState(false)
+  const [cuotasPendientes, setCuotasPendientes] = useState<Cuota[]>([])
 
   const { toast } = useToast()
   const supabase = createClient()
   const { config } = useConfigStore()
 
   const capitalSaldo = prestamo.capital_saldo ?? prestamo.monto_prestado
-  const dias = parseFloat(diasPeriodo) || 30
-  const abono = parseFloat(abonoCapital) || 0
+  const interesArrastre = prestamo.interes_pendiente ?? 0
+  const configAbierto = getConfigAbierto(prestamo)
 
-  const interesCalculado = calcularInteresAbierto(
-    capitalSaldo,
-    prestamo.interes_porcentaje,
-    dias
+  const labelTasa =
+    prestamo.periodo_tasa == null
+      ? 'Tasa mensual (legacy)'
+      : `Tasa ${getNombrePeriodoTasa(prestamo.periodo_tasa).toLowerCase()}`
+
+  useEffect(() => {
+    if (!open) return
+    const load = async () => {
+      const { data } = await supabase
+        .from('cuotas')
+        .select('*')
+        .eq('prestamo_id', prestamo.id)
+        .in('estado', ['pendiente', 'retrasada'])
+        .order('numero_cuota', { ascending: true })
+
+      const pendientes = (data ?? []) as Cuota[]
+      setCuotasPendientes(pendientes)
+
+      const { data: todas } = await supabase
+        .from('cuotas')
+        .select('numero_cuota, estado, periodo_desde, periodo_hasta, fecha_pago')
+        .eq('prestamo_id', prestamo.id)
+
+      const rango = sugerirRangoProximoPeriodo(prestamo, todas ?? [])
+      setPeriodoDesde(rango.desde)
+      setPeriodoHasta(rango.hasta)
+
+      if (pendientes[0]) {
+        setCuotaSeleccionadaId(pendientes[0].id)
+        if (pendientes[0].periodo_desde && pendientes[0].periodo_hasta) {
+          setPeriodoDesde(pendientes[0].periodo_desde.split('T')[0])
+          setPeriodoHasta(pendientes[0].periodo_hasta.split('T')[0])
+        }
+      } else {
+        setCuotaSeleccionadaId('manual')
+      }
+    }
+    void load()
+  }, [open, prestamo.id, prestamo, supabase])
+
+  const interesCalculado = useMemo(() => {
+    if (!periodoDesde || !periodoHasta) return 0
+    const desde = parseISO(periodoDesde)
+    const hasta = parseISO(periodoHasta)
+    return calcularInteresAbiertoPeriodo(
+      capitalSaldo,
+      desde,
+      hasta,
+      configAbierto
+    )
+  }, [capitalSaldo, periodoDesde, periodoHasta, configAbierto])
+
+  const interesDebido = useMemo(
+    () => Number((interesCalculado + interesArrastre).toFixed(2)),
+    [interesCalculado, interesArrastre]
   )
-  const totalPago = interesCalculado + abono
+
+  useEffect(() => {
+    if (!open) return
+    setMontoInteresPagado(interesDebido.toFixed(2))
+  }, [open, interesDebido, periodoDesde, periodoHasta, cuotaSeleccionadaId])
+
+  const abono = parseFloat(abonoCapital) || 0
+  const pagadoInteres = parseFloat(montoInteresPagado) || 0
+  const totalPago = Number((pagadoInteres + abono).toFixed(2))
+  const nuevoArrastre = Number(Math.max(0, interesDebido - pagadoInteres).toFixed(2))
   const nuevoSaldo = capitalSaldo - abono
+
+  const handleCuotaChange = (id: string) => {
+    setCuotaSeleccionadaId(id)
+    if (id === 'manual') return
+    const c = cuotasPendientes.find((x) => x.id === id)
+    if (c?.periodo_desde && c?.periodo_hasta) {
+      setPeriodoDesde(c.periodo_desde.split('T')[0])
+      setPeriodoHasta(c.periodo_hasta.split('T')[0])
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (loading) return
+    if (!periodoDesde || !periodoHasta) {
+      toast({
+        title: 'Error',
+        description: 'Indica el rango del período',
+        variant: 'destructive',
+      })
+      return
+    }
+    if (pagadoInteres < 0 || abono < 0 || abono > capitalSaldo) {
+      toast({
+        title: 'Error',
+        description: 'Montos inválidos',
+        variant: 'destructive',
+      })
+      return
+    }
+
     setLoading(true)
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -65,92 +170,170 @@ export function PagoAbiertoDialog({
       return
     }
 
-    // Determinar próximo número de cuota
-    const { data: cuotasExistentes } = await supabase
-      .from('cuotas')
-      .select('numero_cuota')
-      .eq('prestamo_id', prestamo.id)
-      .order('numero_cuota', { ascending: false })
-      .limit(1)
+    const fechaPago = format(new Date(), 'yyyy-MM-dd')
+    const cuotaExistente =
+      cuotaSeleccionadaId !== 'manual'
+        ? cuotasPendientes.find((c) => c.id === cuotaSeleccionadaId)
+        : null
 
-    const siguienteNumero = cuotasExistentes && cuotasExistentes.length > 0
-      ? cuotasExistentes[0].numero_cuota + 1
-      : 1
+    let cuotaId = cuotaExistente?.id
 
-    const hoy = format(new Date(), 'yyyy-MM-dd')
-    const fechaVencimiento = `${hoy}T12:00:00`
+    if (cuotaExistente) {
+      const { error: upErr } = await supabase
+        .from('cuotas')
+        .update({
+          monto_cuota: Number((interesDebido + abono).toFixed(2)),
+          monto_interes: pagadoInteres,
+          monto_capital: abono,
+          monto_pagado: totalPago,
+          fecha_pago: fechaPago,
+          estado: pagadoInteres >= interesDebido - 0.001 ? 'pagada' : 'pendiente',
+          periodo_desde: periodoDesde,
+          periodo_hasta: periodoHasta,
+          fecha_vencimiento: `${periodoHasta}T12:00:00`,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', cuotaExistente.id)
 
-    // Crear la cuota del período
-    const { data: nuevaCuota, error: cuotaError } = await supabase
-      .from('cuotas')
-      .insert([{
-        user_id: user.id,
-        prestamo_id: prestamo.id,
-        numero_cuota: siguienteNumero,
-        monto_cuota: totalPago,
-        monto_interes: interesCalculado,
-        monto_capital: abono,
-        monto_pagado: totalPago,
-        fecha_vencimiento: fechaVencimiento,
-        fecha_pago: hoy,
-        estado: 'pagada',
-      }])
-      .select()
-      .single()
+      if (upErr) {
+        toast({ title: 'Error', description: upErr.message, variant: 'destructive' })
+        setLoading(false)
+        return
+      }
+    } else {
+      const { data: cuotasExistentes } = await supabase
+        .from('cuotas')
+        .select('numero_cuota')
+        .eq('prestamo_id', prestamo.id)
+        .order('numero_cuota', { ascending: false })
+        .limit(1)
 
-    if (cuotaError || !nuevaCuota) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo registrar el pago',
-        variant: 'destructive',
-      })
-      setLoading(false)
-      return
+      const siguienteNumero =
+        cuotasExistentes && cuotasExistentes.length > 0
+          ? cuotasExistentes[0].numero_cuota + 1
+          : 1
+
+      const { data: nuevaCuota, error: cuotaError } = await supabase
+        .from('cuotas')
+        .insert([
+          {
+            user_id: user.id,
+            prestamo_id: prestamo.id,
+            numero_cuota: siguienteNumero,
+            monto_cuota: totalPago,
+            monto_interes: pagadoInteres,
+            monto_capital: abono,
+            monto_pagado: totalPago,
+            fecha_vencimiento: `${periodoHasta}T12:00:00`,
+            periodo_desde: periodoDesde,
+            periodo_hasta: periodoHasta,
+            fecha_pago: fechaPago,
+            estado: pagadoInteres >= interesDebido - 0.001 ? 'pagada' : 'pendiente',
+          },
+        ])
+        .select()
+        .single()
+
+      if (cuotaError || !nuevaCuota) {
+        toast({
+          title: 'Error',
+          description: 'No se pudo registrar el pago',
+          variant: 'destructive',
+        })
+        setLoading(false)
+        return
+      }
+      cuotaId = nuevaCuota.id
     }
 
-    // Registrar en tabla pagos
-    await supabase.from('pagos').insert([{
-      user_id: user.id,
-      cuota_id: nuevaCuota.id,
-      prestamo_id: prestamo.id,
-      monto_pagado: totalPago,
-      fecha_pago: hoy,
-      metodo_pago: metodoPago || null,
-      notas: notas
-        ? `[${dias} días] Interés: ${formatCurrency(interesCalculado, config.currency)}, Capital: ${formatCurrency(abono, config.currency)}. ${notas}`
-        : `[${dias} días] Interés: ${formatCurrency(interesCalculado, config.currency)}, Capital: ${formatCurrency(abono, config.currency)}`,
-      registrado_por: user.id,
-      fecha_registro: new Date().toISOString(),
-    }])
+    const rangoLabel = formatRangoPeriodo(periodoDesde, periodoHasta)
+    await supabase.from('pagos').insert([
+      {
+        user_id: user.id,
+        cuota_id: cuotaId,
+        prestamo_id: prestamo.id,
+        monto_pagado: totalPago,
+        fecha_pago: fechaPago,
+        metodo_pago: metodoPago || null,
+        notas: notas
+          ? `[${rangoLabel}] Interés: ${formatCurrency(pagadoInteres, config.currency)}, Capital: ${formatCurrency(abono, config.currency)}. ${notas}`
+          : `[${rangoLabel}] Interés: ${formatCurrency(pagadoInteres, config.currency)}, Capital: ${formatCurrency(abono, config.currency)}`,
+        registrado_por: user.id,
+        fecha_registro: new Date().toISOString(),
+      },
+    ])
 
-    // Actualizar saldo de capital y número de cuotas
+    const prestamoActualizado = {
+      ...prestamo,
+      capital_saldo: Math.max(0, nuevoSaldo),
+      interes_pendiente: nuevoArrastre,
+      numero_cuotas: Math.max(prestamo.numero_cuotas, cuotaExistente?.numero_cuota ?? 0),
+      estado: nuevoSaldo <= 0.01 ? ('pagado' as const) : ('activo' as const),
+    }
+
+    let prestamoDbOk = false
     const { error: updateError } = await supabase
       .from('prestamos')
       .update({
         capital_saldo: Math.max(0, nuevoSaldo),
-        numero_cuotas: siguienteNumero,
+        interes_pendiente: nuevoArrastre,
         estado: nuevoSaldo <= 0.01 ? 'pagado' : 'activo',
         updated_at: new Date().toISOString(),
       })
       .eq('id', prestamo.id)
 
     if (updateError) {
-      toast({
-        title: 'Advertencia',
-        description: 'Pago registrado pero no se pudo actualizar el saldo del préstamo',
-        variant: 'destructive',
-      })
+      const { error: fallbackError } = await supabase
+        .from('prestamos')
+        .update({
+          capital_saldo: Math.max(0, nuevoSaldo),
+          estado: nuevoSaldo <= 0.01 ? 'pagado' : 'activo',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', prestamo.id)
+
+      if (fallbackError) {
+        toast({
+          title: 'Advertencia',
+          description: 'Pago registrado pero no se pudo actualizar el saldo del préstamo',
+          variant: 'destructive',
+        })
+      } else {
+        prestamoDbOk = true
+        if (nuevoArrastre > 0) {
+          toast({
+            title: 'Nota',
+            description:
+              'Saldo de capital actualizado. Ejecuta la migración de préstamo abierto en Supabase para registrar interés pendiente.',
+          })
+        }
+      }
     } else {
+      prestamoDbOk = true
+    }
+
+    if (prestamoDbOk) {
+      const modo =
+        prestamo.periodo_tasa != null ? 'nuevo' : 'legacy_forward'
+      await syncPeriodosAbiertos(
+        supabase,
+        prestamo.id,
+        prestamoActualizado,
+        user.id,
+        modo
+      )
+
       toast({
         title: 'Pago registrado',
-        description: nuevoSaldo <= 0.01
-          ? 'Préstamo pagado completamente'
-          : `Nuevo saldo de capital: ${formatCurrency(Math.max(0, nuevoSaldo), config.currency)}`,
+        description:
+          nuevoArrastre > 0
+            ? `Interés pendiente arrastrado: ${formatCurrency(nuevoArrastre, config.currency)}`
+            : nuevoSaldo <= 0.01
+              ? 'Préstamo pagado completamente'
+              : `Nuevo saldo de capital: ${formatCurrency(Math.max(0, nuevoSaldo), config.currency)}`,
       })
     }
 
-    // Resetear formulario
-    setDiasPeriodo('30')
     setAbonoCapital('0')
     setMetodoPago('')
     setNotas('')
@@ -161,7 +344,7 @@ export function PagoAbiertoDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Registrar Pago del Período</DialogTitle>
           <DialogDescription>
@@ -170,53 +353,118 @@ export function PagoAbiertoDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Resumen del saldo actual */}
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-2">
+          <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg p-4 space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Saldo de capital actual</span>
-              <span className="font-bold text-amber-900">
+              <span className="text-muted-foreground">Saldo de capital actual</span>
+              <span className="font-bold text-amber-900 dark:text-amber-100">
                 {formatCurrency(capitalSaldo, config.currency)}
               </span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Tasa mensual</span>
+              <span className="text-muted-foreground">{labelTasa}</span>
               <span className="font-medium">{prestamo.interes_porcentaje}%</span>
             </div>
+            {interesArrastre > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Interés arrastrado</span>
+                <span className="font-medium text-orange-700 dark:text-orange-300">
+                  {formatCurrency(interesArrastre, config.currency)}
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* Días del período */}
-          <div className="space-y-1">
-            <Label htmlFor="dias_periodo">Días del período *</Label>
-            <Input
-              id="dias_periodo"
-              type="number"
-              min="1"
-              max="365"
-              value={diasPeriodo}
-              onChange={(e) => setDiasPeriodo(e.target.value)}
-              required
-            />
-            <p className="text-xs text-gray-500">
-              Días transcurridos desde el último pago (30 = 1 mes)
+          {cuotasPendientes.length > 0 && (
+            <div className="space-y-1">
+              <Label>Período a pagar</Label>
+              <Select value={cuotaSeleccionadaId} onValueChange={handleCuotaChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar período" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cuotasPendientes.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      Cuota #{c.numero_cuota}
+                      {c.periodo_desde && c.periodo_hasta
+                        ? ` — ${formatRangoPeriodo(c.periodo_desde, c.periodo_hasta)}`
+                        : ''}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="manual">Otro rango (manual)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="periodo_desde">Desde *</Label>
+              <Input
+                id="periodo_desde"
+                type="date"
+                value={periodoDesde}
+                onChange={(e) => {
+                  setCuotaSeleccionadaId('manual')
+                  setPeriodoDesde(e.target.value)
+                }}
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="periodo_hasta">Hasta *</Label>
+              <Input
+                id="periodo_hasta"
+                type="date"
+                value={periodoHasta}
+                onChange={(e) => {
+                  setCuotaSeleccionadaId('manual')
+                  setPeriodoHasta(e.target.value)
+                }}
+                required
+              />
+            </div>
+          </div>
+          {periodoDesde && periodoHasta && (
+            <p className="text-xs text-muted-foreground">
+              Período: {formatRangoPeriodo(periodoDesde, periodoHasta)}
             </p>
-          </div>
+          )}
 
-          {/* Interés calculado automáticamente */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-lg p-3 space-y-1">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600">
-                Interés del período ({dias} días)
-              </span>
-              <span className="font-bold text-blue-900">
+              <span className="text-muted-foreground">Interés del período</span>
+              <span className="font-bold text-blue-900 dark:text-blue-100">
                 {formatCurrency(interesCalculado, config.currency)}
               </span>
             </div>
-            <p className="text-xs text-gray-500 mt-1">
-              {formatCurrency(capitalSaldo, config.currency)} × {prestamo.interes_porcentaje}% × ({dias}/30 meses)
+            {interesArrastre > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">+ Arrastre</span>
+                <span>{formatCurrency(interesArrastre, config.currency)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-sm font-semibold border-t border-blue-200 dark:border-blue-800 pt-1">
+              <span>Total interés debido</span>
+              <span>{formatCurrency(interesDebido, config.currency)}</span>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="monto_interes">Monto pagado a intereses *</Label>
+            <Input
+              id="monto_interes"
+              type="number"
+              step="0.01"
+              min="0"
+              value={montoInteresPagado}
+              onChange={(e) => setMontoInteresPagado(e.target.value)}
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              Si pagas menos del total debido, la diferencia se arrastra al siguiente período
             </p>
           </div>
 
-          {/* Abono a capital */}
           <div className="space-y-1">
             <Label htmlFor="abono_capital">Abono a capital (opcional)</Label>
             <Input
@@ -228,36 +476,22 @@ export function PagoAbiertoDialog({
               value={abonoCapital}
               onChange={(e) => setAbonoCapital(e.target.value)}
             />
-            <p className="text-xs text-gray-500">
-              Si el cliente abona capital el saldo disminuye y el próximo interés será menor
-            </p>
           </div>
 
-          {/* Resumen del pago */}
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-1">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Interés del período</span>
-              <span>{formatCurrency(interesCalculado, config.currency)}</span>
+          <div className="bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-lg p-3 space-y-1">
+            <div className="flex justify-between text-sm font-bold">
+              <span>Total del recibo</span>
+              <span className="text-green-800 dark:text-green-200">
+                {formatCurrency(totalPago, config.currency)}
+              </span>
             </div>
-            {abono > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Abono a capital</span>
-                <span>{formatCurrency(abono, config.currency)}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-sm font-bold border-t border-green-300 pt-1 mt-1">
-              <span>Total a pagar</span>
-              <span className="text-green-800">{formatCurrency(totalPago, config.currency)}</span>
-            </div>
-            {abono > 0 && (
-              <div className="flex justify-between text-xs text-gray-500 pt-1">
-                <span>Nuevo saldo de capital</span>
-                <span>{formatCurrency(Math.max(0, nuevoSaldo), config.currency)}</span>
-              </div>
+            {nuevoArrastre > 0 && pagadoInteres < interesDebido && (
+              <p className="text-xs text-orange-700 dark:text-orange-300">
+                Quedará pendiente de interés: {formatCurrency(nuevoArrastre, config.currency)}
+              </p>
             )}
           </div>
 
-          {/* Método de pago y notas */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label htmlFor="metodo_pago">Método de pago</Label>

@@ -44,13 +44,15 @@ import { formatCurrency } from '@/lib/utils'
 import { useConfigStore } from '@/lib/config-store'
 import { Textarea } from '@/components/ui/textarea'
 import { getClientesInteligente, getPrestamosSegunRol } from '@/lib/queries-con-roles'
+import { shouldBlockListLoader } from '@/lib/should-block-list-loader'
+import { getDashboardSession } from '@/lib/dashboard-session-cache'
 
 export default function RutasPage() {
   const [open, setOpen] = useState(false)
   const [capitalDialogOpen, setCapitalDialogOpen] = useState(false)
   const [clientesDialogOpen, setClientesDialogOpen] = useState(false)
   const [historialDialogOpen, setHistorialDialogOpen] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [editingRuta, setEditingRuta] = useState<Ruta | null>(null)
   const [selectedRuta, setSelectedRuta] = useState<Ruta | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -85,42 +87,20 @@ export default function RutasPage() {
   }, [])
 
   const checkPermissions = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    const session = await getDashboardSession(supabase)
+    if (!session?.organizationId) return
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, organization_id')
-      .eq('id', user.id)
-      .single()
-
-    if (profile) {
-      let role: 'admin' | 'cobrador' = profile.role === 'admin' ? 'admin' : 'cobrador'
-      if (profile.organization_id) {
-        const { data: roleData } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .eq('organization_id', profile.organization_id)
-          .maybeSingle()
-
-        if (roleData?.role === 'admin' || roleData?.role === 'cobrador') {
-          role = roleData.role
-        }
-      }
-
-      setIsAdmin(role === 'admin')
-      setOrganizationId(profile.organization_id)
-      if (role === 'admin') {
-        loadRutas(profile.organization_id)
-        loadCobradores(profile.organization_id)
-        loadClientes()
-      }
+    setIsAdmin(session.role === 'admin')
+    setOrganizationId(session.organizationId)
+    if (session.role === 'admin') {
+      loadRutas(session.organizationId)
+      loadCobradores(session.organizationId)
+      loadClientes()
     }
   }
 
   const loadRutas = async (orgId: string) => {
-    setLoading(true)
+    setRefreshing(true)
     console.log('[loadRutas] Cargando rutas para orgId:', orgId)
 
     try {
@@ -137,7 +117,7 @@ export default function RutasPage() {
 
       if (!rutasData || rutasData.length === 0) {
         setRutas([])
-        setLoading(false)
+        setRefreshing(false)
         return
       }
 
@@ -208,7 +188,7 @@ export default function RutasPage() {
       })
       setRutas([])
     } finally {
-      setLoading(false)
+      setRefreshing(false)
     }
   }
 
@@ -880,7 +860,10 @@ export default function RutasPage() {
         </Dialog>
       </div>
 
-      {loading ? (
+      {refreshing && rutas.length > 0 && (
+        <p className="text-sm text-muted-foreground">Actualizando…</p>
+      )}
+      {shouldBlockListLoader(refreshing, rutas.length) ? (
         <div className="text-center py-12">
           <p className="text-gray-500">Cargando rutas...</p>
         </div>

@@ -1,6 +1,7 @@
 "use client"
 
 import { create } from 'zustand'
+import type { LimitesOrganizacion } from '@/lib/limites-organizacion-shared'
 
 export interface Plan {
   id: string
@@ -58,11 +59,15 @@ interface SubscriptionStore {
   userSubscription: UserSubscription | null
   plans: Plan[]
   usageLimits: UsageLimits | null
+  limitesOrganizacion: LimitesOrganizacion | null
+  orgBootstrapLoading: boolean
   loading: boolean
   
   setUserSubscription: (subscription: UserSubscription) => void
   setPlans: (plans: Plan[]) => void
   setUsageLimits: (limits: UsageLimits) => void
+  setLimitesOrganizacion: (limites: LimitesOrganizacion | null) => void
+  setOrgBootstrapLoading: (loading: boolean) => void
   setLoading: (loading: boolean) => void
   
   // Helper methods
@@ -78,11 +83,15 @@ export const useSubscriptionStore = create<SubscriptionStore>((set, get) => ({
   userSubscription: null,
   plans: [],
   usageLimits: null,
+  limitesOrganizacion: null,
+  orgBootstrapLoading: false,
   loading: true,
   
   setUserSubscription: (subscription) => set({ userSubscription: subscription }),
   setPlans: (plans) => set({ plans }),
   setUsageLimits: (limits) => set({ usageLimits: limits }),
+  setLimitesOrganizacion: (limitesOrganizacion) => set({ limitesOrganizacion }),
+  setOrgBootstrapLoading: (orgBootstrapLoading) => set({ orgBootstrapLoading }),
   setLoading: (loading) => set({ loading }),
   
   getCurrentPlan: () => {

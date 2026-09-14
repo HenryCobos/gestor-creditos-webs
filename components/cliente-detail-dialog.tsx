@@ -662,22 +662,22 @@ export function ClienteDetailDialog({
           </DialogHeader>
           {selectedCuota && (
             <form onSubmit={handlePagarCuota} className="space-y-4">
-              <div className="bg-gray-50 p-4 rounded-lg space-y-1">
+              <div className="bg-muted/50 dark:bg-muted/80 p-4 rounded-lg space-y-1 border border-border">
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Monto de la cuota:</span>
-                  <span className="font-semibold">
+                  <span className="text-muted-foreground">Monto de la cuota:</span>
+                  <span className="font-semibold text-foreground">
                     {formatCurrency(selectedCuota.monto_cuota, config.currency)}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Ya pagado:</span>
-                  <span className="font-semibold text-green-600">
+                  <span className="text-muted-foreground">Ya pagado:</span>
+                  <span className="font-semibold text-green-600 dark:text-green-400">
                     {formatCurrency(selectedCuota.monto_pagado, config.currency)}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Pendiente esta cuota:</span>
-                  <span className="font-semibold text-red-600">
+                  <span className="text-muted-foreground">Pendiente esta cuota:</span>
+                  <span className="font-semibold text-red-600 dark:text-red-400">
                     {formatCurrency(selectedCuota.monto_cuota - selectedCuota.monto_pagado, config.currency)}
                   </span>
                 </div>
@@ -686,9 +686,9 @@ export function ClienteDetailDialog({
                     (c) => c.prestamo_id === selectedCuota.prestamo_id
                   )
                   return (
-                    <div className="flex justify-between text-sm border-t pt-1 mt-1">
-                      <span className="text-gray-600">Pendiente desde aquí:</span>
-                      <span className="font-semibold text-red-600">
+                    <div className="flex justify-between text-sm border-t border-border pt-1 mt-1">
+                      <span className="text-muted-foreground">Pendiente desde aquí:</span>
+                      <span className="font-semibold text-red-600 dark:text-red-400">
                         {formatCurrency(
                           totalPendienteDesdeCuota(delPrestamo, selectedCuota.numero_cuota),
                           config.currency
@@ -720,7 +720,7 @@ export function ClienteDetailDialog({
                       (c) => c.prestamo_id === selectedCuota.prestamo_id
                     )
                     return (
-                      <p className="text-xs text-blue-700 bg-blue-50 p-2 rounded">
+                      <p className="text-xs text-blue-700 dark:text-blue-200 bg-blue-50 dark:bg-blue-950/40 p-2 rounded border border-blue-100 dark:border-blue-900/50">
                         {previewAplicacionCascada(
                           delPrestamo,
                           selectedCuota.numero_cuota,

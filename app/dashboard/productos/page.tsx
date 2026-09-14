@@ -36,10 +36,11 @@ import { formatCurrency } from '@/lib/utils'
 import { useConfigStore } from '@/lib/config-store'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { shouldBlockListLoader } from '@/lib/should-block-list-loader'
 
 export default function ProductosPage() {
   const [open, setOpen] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [editingProducto, setEditingProducto] = useState<Producto | null>(null)
   const { toast } = useToast()
   const supabase = createClient()
@@ -64,27 +65,29 @@ export default function ProductosPage() {
   }, [])
 
   const loadData = async () => {
-    setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) return
+    setRefreshing(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
 
-    const { data: productosData, error } = await supabase
-      .from('productos')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('nombre', { ascending: true })
+      const { data: productosData, error } = await supabase
+        .from('productos')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('nombre', { ascending: true })
 
-    if (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar los productos',
-        variant: 'destructive',
-      })
-    } else {
-      setProductos(productosData || [])
+      if (error) {
+        toast({
+          title: 'Error',
+          description: 'No se pudieron cargar los productos',
+          variant: 'destructive',
+        })
+      } else {
+        setProductos(productosData || [])
+      }
+    } finally {
+      setRefreshing(false)
     }
-    setLoading(false)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -446,7 +449,10 @@ export default function ProductosPage() {
           <CardTitle>Inventario de Productos</CardTitle>
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {refreshing && productos.length > 0 && (
+            <p className="text-sm text-muted-foreground mb-2">Actualizando…</p>
+          )}
+          {shouldBlockListLoader(refreshing, productos.length) ? (
             <p className="text-center py-8 text-gray-500">Cargando...</p>
           ) : productos.length === 0 ? (
             <div className="text-center py-8">

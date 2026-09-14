@@ -71,3 +71,24 @@ export function isDateOverdue(date: string | Date): boolean {
   return today > due
 }
 
+export type CuotaEstadoEfectivo = 'pendiente' | 'pagada' | 'retrasada'
+
+/** Estado de cuota para UI y métricas (misma regla que detalle y página Cuotas). */
+export function effectiveCuotaEstado(cuota: {
+  estado: string
+  fecha_vencimiento: string
+}): CuotaEstadoEfectivo {
+  if (cuota.estado === 'pagada') return 'pagada'
+  if (isDateOverdue(cuota.fecha_vencimiento)) return 'retrasada'
+  return 'pendiente'
+}
+
+export function mapCuotasEffectiveEstado<T extends { estado: string; fecha_vencimiento: string }>(
+  cuotas: T[]
+): (T & { estado: CuotaEstadoEfectivo })[] {
+  return cuotas.map((c) => ({
+    ...c,
+    estado: effectiveCuotaEstado(c),
+  }))
+}
+

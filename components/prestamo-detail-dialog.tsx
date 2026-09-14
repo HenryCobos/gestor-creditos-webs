@@ -38,7 +38,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { CheckCircle, DollarSign, Eye, X, FileText, Package, XCircle, Repeat, TrendingDown, Receipt, MoreHorizontal, Unlock } from 'lucide-react'
-import { formatCurrency, formatDate, isDateOverdue } from '@/lib/utils'
+import { effectiveCuotaEstado, formatCurrency, formatDate, isDateOverdue } from '@/lib/utils'
 import { toastPagoExitoso } from '@/lib/pago-feedback'
 import { useConfigStore } from '@/lib/config-store'
 import type { Prestamo, Garantia } from '@/lib/store'
@@ -54,6 +54,8 @@ import {
   previewAplicacionCascada,
   totalPendienteDesdeCuota,
 } from '@/lib/aplicar-pago-cuotas'
+import { syncPeriodosAbiertos, formatRangoPeriodo } from '@/lib/open-loan-periods'
+import { getNombreFrecuencia, getNombrePeriodoTasa } from '@/lib/loan-calculations'
 
 interface Cuota {
   id: string
@@ -65,6 +67,8 @@ interface Cuota {
   monto_pagado: number
   monto_interes?: number | null
   monto_capital?: number | null
+  periodo_desde?: string | null
+  periodo_hasta?: string | null
 }
 
 interface PrestamoDetailDialogProps {
@@ -96,14 +100,58 @@ export function PrestamoDetailDialog({
   const [abonoCapitalDialogOpen, setAbonoCapitalDialogOpen] = useState(false)
   const [renovarEmpenoDialogOpen, setRenovarEmpenoDialogOpen] = useState(false)
   const [pagoAbiertoDialogOpen, setPagoAbiertoDialogOpen] = useState(false)
+  const [prestamoVigente, setPrestamoVigente] = useState<Prestamo | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const { toast } = useToast()
   const supabase = createClient()
   const { config } = useConfigStore()
 
   useEffect(() => {
+    if (prestamo) setPrestamoVigente(prestamo)
+  }, [prestamo])
+
+  const reloadPrestamoFromDb = async (): Promise<Prestamo | null> => {
+    if (!prestamo) return null
+    const { data, error } = await supabase
+      .from('prestamos')
+      .select(`*, cliente:clientes(*)`)
+      .eq('id', prestamo.id)
+      .single()
+
+    if (error || !data) {
+      console.error('[reloadPrestamoFromDb]', error)
+      return prestamoVigente ?? prestamo
+    }
+
+    const merged: Prestamo = {
+      ...(prestamoVigente ?? prestamo),
+      ...data,
+      cliente: (data as Prestamo).cliente ?? prestamo.cliente,
+    }
+    setPrestamoVigente(merged)
+    return merged
+  }
+
+  useEffect(() => {
     if (prestamo && open) {
-      loadCuotas()
+      void (async () => {
+        const fresh = await reloadPrestamoFromDb()
+        const p = fresh ?? prestamoVigente ?? prestamo
+        if (p.tipo_prestamo === 'abierto' && p.estado === 'activo') {
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user) {
+            const modo = p.periodo_tasa != null ? 'nuevo' : 'legacy_forward'
+            await syncPeriodosAbiertos(
+              supabase,
+              p.id,
+              p,
+              user.id,
+              modo
+            )
+          }
+        }
+        await loadCuotas()
+      })()
       loadUserRole()
       if (prestamo.tipo_prestamo === 'empeño' || prestamo.tipo_prestamo === 'solo_intereses') {
         loadGarantias()
@@ -151,18 +199,10 @@ export function PrestamoDetailDialog({
         .filter(cuota => cuota.prestamo_id === prestamo.id)
         .sort((a, b) => a.numero_cuota - b.numero_cuota)
 
-      // Sincronizar estado según fecha de vencimiento (mismo día no es retrasada)
-      const cuotasActualizadas = data.map((cuota) => {
-        if (cuota.estado === 'pagada') return cuota
-        const vencida = isDateOverdue(cuota.fecha_vencimiento)
-        if (vencida && cuota.estado !== 'retrasada') {
-          return { ...cuota, estado: 'retrasada' as const }
-        }
-        if (!vencida && cuota.estado === 'retrasada') {
-          return { ...cuota, estado: 'pendiente' as const }
-        }
-        return cuota
-      }) as Cuota[]
+      const cuotasActualizadas = data.map((cuota) => ({
+        ...cuota,
+        estado: effectiveCuotaEstado(cuota),
+      })) as Cuota[]
       setCuotas(cuotasActualizadas)
       return cuotasActualizadas
     } catch (error) {
@@ -503,6 +543,8 @@ export function PrestamoDetailDialog({
 
   if (!prestamo) return null
 
+  const prestamoActivo = prestamoVigente ?? prestamo
+
   const cuotasPagadas = cuotas.filter(c => c.estado === 'pagada').length
   const cuotasPendientes = cuotas.filter(c => c.estado === 'pendiente' || c.estado === 'retrasada').length
   const totalPagado = cuotas.reduce((sum, c) => sum + c.monto_pagado, 0)
@@ -525,7 +567,7 @@ export function PrestamoDetailDialog({
               <Button
                 variant="outline"
                 onClick={() => setAbonoCapitalDialogOpen(true)}
-                className="gap-2 text-green-700 border-green-300 hover:bg-green-50"
+                className="gap-2 text-green-700 border-green-300 hover:bg-green-50 dark:text-green-200 dark:border-green-700 dark:hover:bg-green-950/40"
               >
                 <TrendingDown className="h-4 w-4" />
                 <span className="hidden sm:inline">Abonar a Capital</span>
@@ -537,7 +579,7 @@ export function PrestamoDetailDialog({
               <Button
                 variant="outline"
                 onClick={() => setRenovarEmpenoDialogOpen(true)}
-                className="gap-2 text-purple-700 border-purple-300 hover:bg-purple-50"
+                className="gap-2 text-purple-700 border-purple-300 hover:bg-purple-50 dark:text-purple-200 dark:border-purple-700 dark:hover:bg-purple-950/40"
               >
                 <Repeat className="h-4 w-4" />
                 <span className="hidden sm:inline">Renovar Empeño</span>
@@ -549,7 +591,7 @@ export function PrestamoDetailDialog({
               <Button
                 variant="outline"
                 onClick={() => setPagoAbiertoDialogOpen(true)}
-                className="gap-2 text-amber-700 border-amber-300 hover:bg-amber-50"
+                className="gap-2 text-amber-700 border-amber-300 hover:bg-amber-50 dark:text-amber-200 dark:border-amber-700 dark:hover:bg-amber-950/40"
               >
                 <Unlock className="h-4 w-4" />
                 <span className="hidden sm:inline">Registrar Pago del Período</span>
@@ -570,70 +612,70 @@ export function PrestamoDetailDialog({
 
           <div className="space-y-6">
             {/* Resumen del Préstamo */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg space-y-4">
-              <h3 className="font-semibold text-lg text-gray-900">Resumen del Préstamo</h3>
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-100 dark:border-blue-900/50 p-6 rounded-lg space-y-4">
+              <h3 className="font-semibold text-lg text-foreground">Resumen del Préstamo</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                  <p className="text-sm text-gray-600">Monto Prestado</p>
-                  <p className="text-lg font-bold text-blue-900">
+                  <p className="text-sm text-muted-foreground">Monto Prestado</p>
+                  <p className="text-lg font-bold text-blue-900 dark:text-blue-200">
                     {formatCurrency(prestamo.monto_prestado, config.currency)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Interés</p>
-                  <p className="text-lg font-bold text-blue-900">
+                  <p className="text-sm text-muted-foreground">Interés</p>
+                  <p className="text-lg font-bold text-blue-900 dark:text-blue-200">
                     {prestamo.interes_porcentaje}%
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Monto Total</p>
-                  <p className="text-lg font-bold text-blue-900">
+                  <p className="text-sm text-muted-foreground">Monto Total</p>
+                  <p className="text-lg font-bold text-blue-900 dark:text-blue-200">
                     {formatCurrency(prestamo.monto_total, config.currency)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Total Pagado</p>
-                  <p className="text-lg font-bold text-green-600">
+                  <p className="text-sm text-muted-foreground">Total Pagado</p>
+                  <p className="text-lg font-bold text-green-600 dark:text-green-400">
                     {formatCurrency(totalPagado, config.currency)}
                   </p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-4 border-t border-blue-200">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-4 border-t border-blue-200 dark:border-blue-800">
                 <div>
-                  <p className="text-sm text-gray-600">Fecha de Inicio</p>
-                  <p className="font-semibold">{formatDate(prestamo.fecha_inicio)}</p>
+                  <p className="text-sm text-muted-foreground">Fecha de Inicio</p>
+                  <p className="font-semibold text-foreground">{formatDate(prestamo.fecha_inicio)}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Estado</p>
+                  <p className="text-sm text-muted-foreground">Estado</p>
                   <span
                     className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       prestamo.estado === 'activo'
-                        ? 'bg-blue-100 text-blue-800'
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-100'
                         : prestamo.estado === 'pagado'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-100'
+                        : 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-100'
                     }`}
                   >
                     {prestamo.estado}
                   </span>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Progreso</p>
-                  <p className="font-semibold">
+                  <p className="text-sm text-muted-foreground">Progreso</p>
+                  <p className="font-semibold text-foreground">
                     {cuotasPagadas} / {cuotas.length} cuotas pagadas
                   </p>
                 </div>
                 {prestamo.tipo_prestamo && (
                   <div>
-                    <p className="text-sm text-gray-600">Tipo</p>
+                    <p className="text-sm text-muted-foreground">Tipo</p>
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       prestamo.tipo_prestamo === 'empeño'
-                        ? 'bg-purple-100 text-purple-800'
+                        ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-100'
                         : prestamo.tipo_prestamo === 'solo_intereses'
-                        ? 'bg-orange-100 text-orange-800'
+                        ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-100'
                         : prestamo.tipo_prestamo === 'abierto'
-                        ? 'bg-amber-100 text-amber-800'
-                        : 'bg-gray-100 text-gray-800'
+                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-100'
+                        : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100'
                     }`}>
                       {prestamo.tipo_prestamo === 'empeño' ? 'Empeño' :
                        prestamo.tipo_prestamo === 'solo_intereses' ? 'Solo Intereses' :
@@ -646,42 +688,59 @@ export function PrestamoDetailDialog({
                 )}
                 {prestamo.fecha_fin && (
                   <div>
-                    <p className="text-sm text-gray-600">Vencimiento Capital</p>
-                    <p className="font-semibold">{formatDate(prestamo.fecha_fin)}</p>
+                    <p className="text-sm text-muted-foreground">Vencimiento Capital</p>
+                    <p className="font-semibold text-foreground">{formatDate(prestamo.fecha_fin)}</p>
                   </div>
                 )}
               </div>
             </div>
 
             {/* Saldo de capital vigente (solo para préstamos abiertos) */}
-            {prestamo.tipo_prestamo === 'abierto' && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
-                <h3 className="font-semibold text-base text-amber-900 flex items-center gap-2">
+            {prestamoActivo.tipo_prestamo === 'abierto' && (
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-lg p-4 space-y-3">
+                <h3 className="font-semibold text-base text-amber-900 dark:text-amber-100 flex items-center gap-2">
                   <Unlock className="h-4 w-4" />
                   Estado del Préstamo Abierto
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                   <div>
-                    <p className="text-gray-600">Capital inicial</p>
-                    <p className="font-bold text-amber-900">
-                      {formatCurrency(prestamo.monto_prestado, config.currency)}
+                    <p className="text-muted-foreground">Capital inicial</p>
+                    <p className="font-bold text-amber-900 dark:text-amber-200">
+                      {formatCurrency(prestamoActivo.monto_prestado, config.currency)}
                     </p>
                   </div>
                   <div>
-                    <p className="text-gray-600">Saldo de capital actual</p>
-                    <p className="font-bold text-amber-700 text-lg">
-                      {formatCurrency(prestamo.capital_saldo ?? prestamo.monto_prestado, config.currency)}
+                    <p className="text-muted-foreground">Saldo de capital actual</p>
+                    <p className="font-bold text-amber-700 dark:text-amber-300 text-lg">
+                      {formatCurrency(prestamoActivo.capital_saldo ?? prestamoActivo.monto_prestado, config.currency)}
                     </p>
                   </div>
                   <div>
-                    <p className="text-gray-600">Interés mensual estimado</p>
-                    <p className="font-bold text-amber-900">
-                      {formatCurrency(
-                        (prestamo.capital_saldo ?? prestamo.monto_prestado) * prestamo.interes_porcentaje / 100,
-                        config.currency
-                      )}
+                    <p className="text-muted-foreground">
+                      {prestamoActivo.periodo_tasa == null
+                        ? 'Tasa mensual (legacy)'
+                        : `Tasa ${getNombrePeriodoTasa(prestamoActivo.periodo_tasa).toLowerCase()}`}
+                    </p>
+                    <p className="font-bold text-amber-900 dark:text-amber-200">
+                      {prestamoActivo.interes_porcentaje}%
                     </p>
                   </div>
+                  <div>
+                    <p className="text-muted-foreground">Frecuencia de cobro</p>
+                    <p className="font-semibold text-amber-900 dark:text-amber-200">
+                      {prestamoActivo.frecuencia_pago === 'personalizado'
+                        ? `Cada ${prestamoActivo.frecuencia_cobro_dias ?? '?'} días`
+                        : getNombreFrecuencia(prestamoActivo.frecuencia_pago)}
+                    </p>
+                  </div>
+                  {(prestamoActivo.interes_pendiente ?? 0) > 0 && (
+                    <div>
+                      <p className="text-muted-foreground">Interés pendiente (arrastre)</p>
+                      <p className="font-bold text-orange-700 dark:text-orange-300">
+                        {formatCurrency(prestamoActivo.interes_pendiente ?? 0, config.currency)}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -689,56 +748,56 @@ export function PrestamoDetailDialog({
             {/* Sección de Garantías (Solo para Empeños) */}
             {prestamo.tipo_prestamo === 'empeño' && garantias.length > 0 && (
               <div className="space-y-3">
-                <h3 className="font-semibold text-lg text-gray-900 flex items-center gap-2">
+                <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
                   <Package className="h-5 w-5" />
                   Garantías/Colaterales
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {garantias.map((garantia) => (
-                    <div key={garantia.id} className="border rounded-lg p-4 bg-purple-50 space-y-2">
+                    <div key={garantia.id} className="border border-border rounded-lg p-4 bg-purple-50 dark:bg-purple-950/30 space-y-2">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <h4 className="font-medium text-sm text-purple-900">{garantia.descripcion}</h4>
+                          <h4 className="font-medium text-sm text-purple-900 dark:text-purple-100">{garantia.descripcion}</h4>
                           {garantia.categoria && (
-                            <p className="text-xs text-purple-700 mt-1">
+                            <p className="text-xs text-purple-700 dark:text-purple-300 mt-1">
                               Categoría: {garantia.categoria}
                             </p>
                           )}
                         </div>
                         <span className={`text-xs px-2 py-1 rounded-full ${
                           garantia.estado === 'activo'
-                            ? 'bg-green-100 text-green-800'
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-100'
                             : garantia.estado === 'liquidado'
-                            ? 'bg-red-100 text-red-800'
+                            ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-100'
                             : garantia.estado === 'renovado'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-gray-100 text-gray-800'
+                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-100'
+                            : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100'
                         }`}>
                           {garantia.estado}
                         </span>
                       </div>
                       {garantia.valor_estimado && (
-                        <p className="text-sm text-gray-700">
+                        <p className="text-sm text-foreground">
                           <span className="font-medium">Valor estimado:</span>{' '}
                           {formatCurrency(garantia.valor_estimado, config.currency)}
                         </p>
                       )}
                       {garantia.fecha_vencimiento && (
-                        <p className="text-xs text-gray-600">
+                        <p className="text-xs text-muted-foreground">
                           <span className="font-medium">Vencimiento:</span>{' '}
                           {formatDate(garantia.fecha_vencimiento)}
                           {isDateOverdue(garantia.fecha_vencimiento) && garantia.estado === 'activo' && (
-                            <span className="ml-2 text-red-600 font-medium">⚠ Vencido</span>
+                            <span className="ml-2 text-red-600 dark:text-red-400 font-medium">⚠ Vencido</span>
                           )}
                         </p>
                       )}
                       {garantia.numero_renovaciones > 0 && (
-                        <p className="text-xs text-blue-700">
+                        <p className="text-xs text-blue-700 dark:text-blue-300">
                           Renovaciones: {garantia.numero_renovaciones}
                         </p>
                       )}
                       {garantia.observaciones && (
-                        <p className="text-xs text-gray-600 mt-2 italic">
+                        <p className="text-xs text-muted-foreground mt-2 italic">
                           {garantia.observaciones}
                         </p>
                       )}
@@ -750,22 +809,22 @@ export function PrestamoDetailDialog({
 
             {/* Lista de Cuotas */}
             <div>
-              <h3 className="font-semibold text-lg text-gray-900 mb-4">
+              <h3 className="font-semibold text-lg text-foreground mb-4">
                 {prestamo.tipo_prestamo === 'abierto' ? 'Historial de Pagos' : 'Cuotas del Préstamo'}
               </h3>
               {loading ? (
-                <p className="text-center py-8 text-gray-500">Cargando cuotas...</p>
+                <p className="text-center py-8 text-muted-foreground">Cargando cuotas...</p>
               ) : cuotas.length === 0 ? (
-                <p className="text-center py-8 text-gray-500">
+                <p className="text-center py-8 text-muted-foreground">
                   {prestamo.tipo_prestamo === 'abierto'
-                    ? 'Aún no hay pagos registrados. Usa "Registrar Pago del Período" para agregar el primer pago.'
+                    ? 'No hay períodos registrados aún. Si hay cuotas pendientes generadas, regístralas con "Registrar Pago del Período".'
                     : 'No hay cuotas registradas'}
                 </p>
               ) : (
                 <div className="border rounded-lg overflow-x-auto">
                   {/* Nota informativa para sistema francés */}
                   {prestamo.tipo_calculo_interes === 'frances' && (
-                    <div className="px-4 py-2 bg-blue-50 border-b text-xs text-blue-700">
+                    <div className="px-4 py-2 bg-blue-50 dark:bg-blue-950/40 border-b border-border text-xs text-blue-700 dark:text-blue-200">
                       Sistema Francés: la cuota es constante pero el interés decrece cada período porque se calcula sobre el saldo restante.
                     </div>
                   )}
@@ -777,12 +836,15 @@ export function PrestamoDetailDialog({
                         {/* Columnas de desglose para Sistema Francés y Préstamo Abierto */}
                         {(prestamo.tipo_calculo_interes === 'frances' || prestamo.tipo_prestamo === 'abierto') && (
                           <>
-                            <TableHead className="text-blue-700">Interés</TableHead>
-                            <TableHead className="text-green-700">Capital</TableHead>
+                            <TableHead className="text-blue-700 dark:text-blue-300">Interés</TableHead>
+                            <TableHead className="text-green-700 dark:text-green-300">Capital</TableHead>
                           </>
                         )}
                         <TableHead>Pagado</TableHead>
                         <TableHead>Pendiente</TableHead>
+                        {prestamo.tipo_prestamo === 'abierto' && (
+                          <TableHead>Período</TableHead>
+                        )}
                         <TableHead>Vencimiento</TableHead>
                         <TableHead>Estado</TableHead>
                         <TableHead className="text-right">Acciones</TableHead>
@@ -800,33 +862,40 @@ export function PrestamoDetailDialog({
                             {/* Desglose interés/capital para Sistema Francés y Préstamo Abierto */}
                             {(prestamo.tipo_calculo_interes === 'frances' || prestamo.tipo_prestamo === 'abierto') && (
                               <>
-                                <TableCell className="text-blue-700 text-sm">
+                                <TableCell className="text-blue-700 dark:text-blue-300 text-sm">
                                   {cuota.monto_interes != null
                                     ? formatCurrency(cuota.monto_interes, config.currency)
                                     : '—'}
                                 </TableCell>
-                                <TableCell className="text-green-700 text-sm">
+                                <TableCell className="text-green-700 dark:text-green-300 text-sm">
                                   {cuota.monto_capital != null
                                     ? formatCurrency(cuota.monto_capital, config.currency)
                                     : '—'}
                                 </TableCell>
                               </>
                             )}
-                            <TableCell className="text-green-600">
+                            <TableCell className="text-green-600 dark:text-green-400">
                               {formatCurrency(cuota.monto_pagado, config.currency)}
                             </TableCell>
                             <TableCell className="font-semibold">
                               {formatCurrency(montoPendiente, config.currency)}
                             </TableCell>
+                            {prestamo.tipo_prestamo === 'abierto' && (
+                              <TableCell className="text-xs whitespace-nowrap">
+                                {cuota.periodo_desde && cuota.periodo_hasta
+                                  ? formatRangoPeriodo(cuota.periodo_desde, cuota.periodo_hasta)
+                                  : '—'}
+                              </TableCell>
+                            )}
                             <TableCell>{formatDate(cuota.fecha_vencimiento)}</TableCell>
                             <TableCell>
                               <span
                                 className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                   cuota.estado === 'pagada'
-                                    ? 'bg-green-100 text-green-800'
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-100'
                                     : cuota.estado === 'retrasada'
-                                    ? 'bg-red-100 text-red-800'
-                                    : 'bg-blue-100 text-blue-800'
+                                    ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-100'
+                                    : 'bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-100'
                                 }`}
                               >
                                 {cuota.estado}
@@ -837,6 +906,10 @@ export function PrestamoDetailDialog({
                                 <Button
                                   size="sm"
                                   onClick={() => {
+                                    if (prestamo.tipo_prestamo === 'abierto') {
+                                      setPagoAbiertoDialogOpen(true)
+                                      return
+                                    }
                                     setSelectedCuota(cuota)
                                     setMontoPago(montoPendiente.toFixed(2))
                                     setPagoDialogOpen(true)
@@ -921,28 +994,28 @@ export function PrestamoDetailDialog({
           </DialogHeader>
           {selectedCuota && (
             <form onSubmit={handleRegistrarPago} className="space-y-4">
-              <div className="bg-gray-50 p-4 rounded-lg space-y-1">
+              <div className="bg-muted/50 dark:bg-muted/80 p-4 rounded-lg space-y-1 border border-border">
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Monto de la cuota:</span>
-                  <span className="font-semibold">
+                  <span className="text-muted-foreground">Monto de la cuota:</span>
+                  <span className="font-semibold text-foreground">
                     {formatCurrency(selectedCuota.monto_cuota, config.currency)}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Ya pagado:</span>
-                  <span className="font-semibold text-green-600">
+                  <span className="text-muted-foreground">Ya pagado:</span>
+                  <span className="font-semibold text-green-600 dark:text-green-400">
                     {formatCurrency(selectedCuota.monto_pagado, config.currency)}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Pendiente esta cuota:</span>
-                  <span className="font-semibold text-red-600">
+                  <span className="text-muted-foreground">Pendiente esta cuota:</span>
+                  <span className="font-semibold text-red-600 dark:text-red-400">
                     {formatCurrency(selectedCuota.monto_cuota - selectedCuota.monto_pagado, config.currency)}
                   </span>
                 </div>
-                <div className="flex justify-between text-sm border-t pt-1 mt-1">
-                  <span className="text-gray-600">Pendiente desde aquí (siguientes):</span>
-                  <span className="font-semibold text-red-600">
+                <div className="flex justify-between text-sm border-t border-border pt-1 mt-1">
+                  <span className="text-muted-foreground">Pendiente desde aquí (siguientes):</span>
+                  <span className="font-semibold text-red-600 dark:text-red-400">
                     {formatCurrency(
                       totalPendienteDesdeCuota(cuotas, selectedCuota.numero_cuota),
                       config.currency
@@ -966,7 +1039,7 @@ export function PrestamoDetailDialog({
                   Puede ser mayor que una cuota: el excedente se aplica a las siguientes en orden.
                 </p>
                 {montoPago && parseFloat(montoPago) > 0 && (
-                  <p className="text-xs text-blue-700 bg-blue-50 p-2 rounded">
+                  <p className="text-xs text-blue-700 dark:text-blue-200 bg-blue-50 dark:bg-blue-950/40 p-2 rounded border border-blue-100 dark:border-blue-900/50">
                     {previewAplicacionCascada(
                       cuotas,
                       selectedCuota.numero_cuota,
@@ -1078,11 +1151,12 @@ export function PrestamoDetailDialog({
       {/* Dialog para pagos de período en préstamos abiertos */}
       {prestamo.tipo_prestamo === 'abierto' && (
         <PagoAbiertoDialog
-          prestamo={prestamo}
+          prestamo={prestamoActivo}
           open={pagoAbiertoDialogOpen}
           onOpenChange={setPagoAbiertoDialogOpen}
-          onSuccess={() => {
-            loadCuotas()
+          onSuccess={async () => {
+            await reloadPrestamoFromDb()
+            await loadCuotas()
             if (onUpdate) onUpdate()
           }}
         />

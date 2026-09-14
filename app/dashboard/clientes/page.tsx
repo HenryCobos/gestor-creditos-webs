@@ -31,7 +31,11 @@ import { LimiteAlcanzadoDialog } from '@/components/limite-alcanzado-dialog'
 import { asegurarClienteEnRutaActiva } from '@/lib/ruta-cobrador-sync'
 import { ClienteCardMobile } from '@/components/ClienteCardMobile'
 import { useSubscriptionStore } from '@/lib/subscription-store'
-import { loadOrganizationSubscription, loadOrganizationUsageLimits } from '@/lib/subscription-helpers'
+import {
+  ensureOrganizationContext,
+  invalidateOrgDataCache,
+  mapLimitesToUsageLimits,
+} from '@/lib/subscription-helpers'
 import { getClientesInteligente, getPrestamosInteligente } from '@/lib/queries-con-roles'
 import { useConfigStore } from '@/lib/config-store'
 import { useMemo } from 'react'
@@ -43,12 +47,14 @@ import {
 } from '@/lib/load-rutas-filtro'
 import { getRutaActivaCobrador } from '@/lib/ruta-activa-cobrador'
 import type { Prestamo } from '@/lib/store'
+import { shouldBlockListLoader } from '@/lib/should-block-list-loader'
+import { getDashboardSession } from '@/lib/dashboard-session-cache'
 
 export default function ClientesPage() {
   const [open, setOpen] = useState(false)
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null)
   const [userRole, setUserRole] = useState<'admin' | 'cobrador' | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
@@ -75,69 +81,41 @@ export default function ClientesPage() {
 
   useEffect(() => {
     loadClientes()
-    loadSubscriptionData()
   }, [])
 
-  const loadSubscriptionData = async () => {
-    const [subscription, limits] = await Promise.all([
-      loadOrganizationSubscription(),
-      loadOrganizationUsageLimits(),
-    ])
+  const syncOrgContext = async (force = false) => {
+    const { subscription, limites } = await ensureOrganizationContext(
+      force ? { force: true } : { skipIfFresh: true }
+    )
     if (subscription) setUserSubscription(subscription)
-    if (limits) setUsageLimits(limits)
+    if (limites) setUsageLimits(mapLimitesToUsageLimits(limites))
   }
 
-  const loadClientes = async () => {
-    setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) return
+  const refreshOrgAfterMutation = () => {
+    invalidateOrgDataCache()
+    return syncOrgContext(true)
+  }
 
-    // Resolver rol real del usuario (prioriza user_roles dentro de organización)
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('organization_id, role')
-      .eq('id', user.id)
-      .single()
-
-    let role: 'admin' | 'cobrador' = profile?.role === 'admin' ? 'admin' : 'cobrador'
-
-    if (profile?.organization_id) {
-      const { data: roleData } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .eq('organization_id', profile.organization_id)
-        .maybeSingle()
-
-      // En organizaciones, user_roles es fuente de verdad solo cuando existe.
-      if (roleData?.role === 'admin' || roleData?.role === 'cobrador') {
-        role = roleData.role
-      }
-    }
-
-    setUserRole(role)
-
-    const rutas = await loadRutasParaFiltro(supabase, {
-      role,
-      userId: user.id,
-      organizationId: profile?.organization_id ?? null,
-    })
-    setRutasFiltro(rutas)
-
-    if (role === 'cobrador' && rutas.length > 0) {
-      const activa = getRutaActivaCobrador()
-      const rutaInicial =
-        activa && rutas.some((r) => r.id === activa) ? activa : rutas[0].id
-      setRutaFilter(rutaInicial)
-    } else {
-      setRutaFilter('todos')
-    }
-
+  const loadClientesFiltrosSecundarios = async (
+    session: NonNullable<Awaited<ReturnType<typeof getDashboardSession>>>,
+    clienteIds: string[]
+  ) => {
     try {
-      // Usar función inteligente que respeta roles
-      const data = await getClientesInteligente()
-      setClientes(data || [])
+      const rutas = await loadRutasParaFiltro(supabase, {
+        role: session.role,
+        userId: session.userId,
+        organizationId: session.organizationId,
+      })
+      setRutasFiltro(rutas)
+
+      if (session.role === 'cobrador' && rutas.length > 0) {
+        const activa = getRutaActivaCobrador()
+        const rutaInicial =
+          activa && rutas.some((r) => r.id === activa) ? activa : rutas[0].id
+        setRutaFilter(rutaInicial)
+      } else {
+        setRutaFilter('todos')
+      }
 
       const prestamosData = await getPrestamosInteligente()
       setPrestamosParaFiltro(
@@ -147,11 +125,28 @@ export default function ClientesPage() {
         }))
       )
 
-      const mapaRutas = await loadRutaClientesMap(
-        supabase,
-        (data || []).map((c) => c.id)
-      )
+      const mapaRutas = await loadRutaClientesMap(supabase, clienteIds)
       setRutaClientesMap(mapaRutas)
+    } catch (error) {
+      console.error('[loadClientes] Filtros secundarios:', error)
+    }
+  }
+
+  const loadClientes = async () => {
+    setRefreshing(true)
+    try {
+      const [session, data] = await Promise.all([
+        getDashboardSession(supabase),
+        getClientesInteligente(),
+      ])
+
+      if (!session) return
+
+      setUserRole(session.role)
+      setClientes(data || [])
+
+      const ids = (data || []).map((c) => c.id)
+      void loadClientesFiltrosSecundarios(session, ids)
     } catch (error) {
       console.error('Error al cargar clientes:', error)
       toast({
@@ -159,8 +154,9 @@ export default function ClientesPage() {
         description: 'No se pudieron cargar los clientes',
         variant: 'destructive',
       })
+    } finally {
+      setRefreshing(false)
     }
-    setLoading(false)
   }
 
   const handleOpenDialog = () => {
@@ -251,7 +247,7 @@ export default function ClientesPage() {
         }
         
         // Recargar límites después de agregar
-        loadSubscriptionData()
+        refreshOrgAfterMutation()
         resetForm()
       }
     }
@@ -291,7 +287,7 @@ export default function ClientesPage() {
         title: 'Éxito',
         description: 'Cliente eliminado correctamente',
       })
-      await loadSubscriptionData()
+      await refreshOrgAfterMutation()
       return
     }
 
@@ -337,7 +333,7 @@ export default function ClientesPage() {
         description: 'Cliente eliminado correctamente',
       })
       // Recalcular límites de la organización después de eliminar
-      await loadSubscriptionData()
+      await refreshOrgAfterMutation()
     }
   }
 
@@ -531,11 +527,14 @@ export default function ClientesPage() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle>Lista de Clientes</CardTitle>
+          {refreshing && clientes.length > 0 && (
+            <span className="text-xs text-muted-foreground">Actualizando…</span>
+          )}
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {shouldBlockListLoader(refreshing, clientes.length) ? (
             <p className="text-center py-8 text-muted-foreground">Cargando...</p>
           ) : clientes.length === 0 ? (
             <p className="text-center py-8 text-muted-foreground">
@@ -650,7 +649,7 @@ export default function ClientesPage() {
         cliente={selectedCliente}
         open={detailOpen}
         onOpenChange={setDetailOpen}
-        onPaymentComplete={loadClientes}
+        onPaymentComplete={() => void loadClientes()}
       />
 
       {/* Dialog de Límite Alcanzado */}

@@ -30,6 +30,8 @@ import { useToast } from '@/components/ui/use-toast'
 import { getPrestamosInteligente, getClientesInteligente, getCuotasSegunRol } from '@/lib/queries-con-roles'
 import { useSubscriptionStore } from '@/lib/subscription-store'
 import { FeatureGateDialog } from '@/components/feature-gate-dialog'
+import { shouldBlockListLoader } from '@/lib/should-block-list-loader'
+import { getPageSessionCache, setPageSessionCache } from '@/lib/page-session-cache'
 
 interface ReporteGeneral {
   totalPrestado: number
@@ -60,12 +62,22 @@ interface ClienteDetalle {
   dni: string
 }
 
+type ReportesCachePayload = {
+  reporteGeneral: ReporteGeneral
+  reportesClientes: ReporteCliente[]
+  clientes: ClienteDetalle[]
+}
+
+function reportesCacheKey(rango: string, desde: string, hasta: string) {
+  return `reportes:${rango}:${desde}:${hasta}`
+}
+
 export default function ReportesPage() {
   const [reporteGeneral, setReporteGeneral] = useState<ReporteGeneral | null>(null)
   const [reportesClientes, setReportesClientes] = useState<ReporteCliente[]>([])
   const [clientes, setClientes] = useState<ClienteDetalle[]>([])
   const [clienteSeleccionado, setClienteSeleccionado] = useState<string>('')
-  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [activeTab, setActiveTab] = useState('general')
   const [rangoFecha, setRangoFecha] = useState<string>('todo')
   const [fechaDesde, setFechaDesde] = useState<string>('')
@@ -116,13 +128,43 @@ export default function ReportesPage() {
     return { desde, hasta }
   }
 
-  const loadReportes = async () => {
-    setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) return
+  const getPeriodoLabel = (): string => {
+    switch (rangoFecha) {
+      case 'hoy':
+        return 'Hoy'
+      case '7dias':
+        return 'Últimos 7 días'
+      case '30dias':
+        return 'Últimos 30 días'
+      case '3meses':
+        return 'Últimos 3 meses'
+      case 'personalizado':
+        if (fechaDesde && fechaHasta) {
+          return `Desde ${formatDate(fechaDesde)} hasta ${formatDate(fechaHasta)}`
+        }
+        if (fechaDesde) return `Desde ${formatDate(fechaDesde)}`
+        if (fechaHasta) return `Hasta ${formatDate(fechaHasta)}`
+        return 'Personalizado'
+      case 'todo':
+      default:
+        return 'Todo el tiempo'
+    }
+  }
 
-    const { desde, hasta } = getFechasFiltro()
+  const loadReportes = async () => {
+    const cacheKey = reportesCacheKey(rangoFecha, fechaDesde, fechaHasta)
+    const cached = getPageSessionCache<ReportesCachePayload>(cacheKey)
+    if (cached) {
+      setReporteGeneral(cached.reporteGeneral)
+      setReportesClientes(cached.reportesClientes)
+      setClientes(cached.clientes)
+    }
+    setRefreshing(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { desde, hasta } = getFechasFiltro()
 
     const [prestamosData, cuotasData, clientesData] = await Promise.all([
       getPrestamosInteligente(),
@@ -277,9 +319,27 @@ export default function ReportesPage() {
       })
 
       setReportesClientes(reportesArray)
-    }
 
-    setLoading(false)
+      const generalSnapshot: ReporteGeneral = {
+        totalPrestado,
+        totalRecuperado,
+        totalPendiente,
+        gananciaIntereses,
+        prestamosActivos,
+        prestamosPagados,
+        cuotasPendientes,
+        cuotasRetrasadas,
+        clientesActivos: clientesData?.length || 0,
+      }
+      setPageSessionCache(cacheKey, {
+        reporteGeneral: generalSnapshot,
+        reportesClientes: reportesArray,
+        clientes: clientesData || [],
+      })
+    }
+    } finally {
+      setRefreshing(false)
+    }
   }
 
   const handleExportarReporte = async () => {
@@ -291,10 +351,24 @@ export default function ReportesPage() {
     try {
       if (activeTab === 'general' && reporteGeneral) {
         // Exportar Reporte General
+        const desgloseClientes = [...reportesClientes]
+          .sort((a, b) => b.total_pendiente - a.total_pendiente)
+          .map((r) => ({
+            nombre: r.cliente_nombre,
+            dni: r.cliente_dni,
+            total_prestado: r.total_prestado,
+            total_pagado: r.total_pagado,
+            total_pendiente: r.total_pendiente,
+            prestamos_activos: r.prestamos_activos,
+            cuotas_pendientes: r.cuotas_pendientes,
+          }))
+
         generarReporteGeneral(
           {
             ...reporteGeneral,
             fecha: format(new Date(), 'dd/MM/yyyy'),
+            periodoLabel: getPeriodoLabel(),
+            desgloseClientes,
           },
           config.companyName,
           config.currency
@@ -459,7 +533,10 @@ export default function ReportesPage() {
         </TabsList>
 
         <TabsContent value="general" className="space-y-6">
-          {loading ? (
+          {refreshing && reporteGeneral && (
+            <p className="text-sm text-muted-foreground">Actualizando…</p>
+          )}
+          {shouldBlockListLoader(refreshing, reporteGeneral ? 1 : 0) ? (
             <p className="text-center py-8 text-gray-500">Cargando...</p>
           ) : reporteGeneral ? (
             <>
@@ -607,7 +684,10 @@ export default function ReportesPage() {
         </TabsContent>
 
         <TabsContent value="clientes" className="space-y-6">
-          {loading ? (
+          {refreshing && reporteGeneral && (
+            <p className="text-sm text-muted-foreground">Actualizando…</p>
+          )}
+          {shouldBlockListLoader(refreshing, reporteGeneral ? 1 : 0) ? (
             <p className="text-center py-8 text-gray-500">Cargando...</p>
           ) : (
             <>

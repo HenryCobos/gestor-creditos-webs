@@ -28,7 +28,11 @@ export interface Prestamo {
   fecha_fin?: string | null
   estado: 'activo' | 'pagado' | 'retrasado'
   monto_total: number
-  frecuencia_pago: 'diario' | 'semanal' | 'quincenal' | 'mensual'
+  frecuencia_pago: 'diario' | 'semanal' | 'quincenal' | 'mensual' | 'personalizado'
+  periodo_tasa?: 'diario' | 'semanal' | 'quincenal' | 'mensual' | 'personalizado' | null
+  periodo_tasa_dias?: number | null
+  frecuencia_cobro_dias?: number | null
+  interes_pendiente?: number | null
   tipo_interes: 'simple' | 'compuesto'
   tipo_prestamo: TipoPrestamo
   tipo_calculo_interes?: 'por_periodo' | 'global' | 'frances' | 'total_acordado'
@@ -81,6 +85,8 @@ export interface Cuota {
   monto_pagado: number
   monto_interes?: number | null  // Sistema francés y préstamo abierto
   monto_capital?: number | null  // Sistema francés y préstamo abierto
+  periodo_desde?: string | null
+  periodo_hasta?: string | null
   created_at: string
   updated_at: string
 }

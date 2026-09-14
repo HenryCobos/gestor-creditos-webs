@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DollarSign, Users, TrendingUp, AlertCircle, CreditCard, Zap } from 'lucide-react'
-import { formatCurrency } from '@/lib/utils'
+import { effectiveCuotaEstado, formatCurrency } from '@/lib/utils'
+import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { TrialBanner } from '@/components/trial-banner'
 import { isTrialActive } from '@/lib/trial-helpers'
@@ -26,15 +27,18 @@ const DashboardCharts = dynamic(
 import { useConfigStore } from '@/lib/config-store'
 import { useSubscriptionStore } from '@/lib/subscription-store'
 import {
-  fetchLimitesOrganizacion,
-  loadOrganizationSubscription,
+  ensureOrganizationContext,
   mapLimitesToUsageLimits,
 } from '@/lib/subscription-helpers'
-import type { LimitesOrganizacion } from '@/lib/limites-organizacion-shared'
 import { getClientesInteligente, getPrestamosInteligente, getCuotasSegunRol } from '@/lib/queries-con-roles'
-import type { Cliente } from '@/lib/store'
+import type { Cliente, Cuota as CuotaStore, Prestamo as PrestamoStore } from '@/lib/store'
+import { useStore } from '@/lib/store'
 import { PlanUsageStrip } from '@/components/plan-usage-strip'
-import Link from 'next/link'
+import {
+  hasDashboardListCache,
+  hydrateDashboardMetricsFromStore,
+} from '@/lib/dashboard-data-cache'
+import { shouldBlockListLoader } from '@/lib/should-block-list-loader'
 
 interface Prestamo {
   id: string
@@ -49,73 +53,67 @@ interface Cuota {
   id: string
   estado: string
   monto_pagado: number
+  fecha_vencimiento: string
 }
 
 export function DashboardClient() {
-  const [loadingMetrics, setLoadingMetrics] = useState(true)
-  const [loadingPlan, setLoadingPlan] = useState(true)
-  const [limitesOrg, setLimitesOrg] = useState<LimitesOrganizacion | null>(null)
-  const [prestamos, setPrestamos] = useState<Prestamo[]>([])
-  const [clientes, setClientes] = useState<Cliente[]>([])
-  const [cuotas, setCuotas] = useState<Cuota[]>([])
+  const initialMetrics = hydrateDashboardMetricsFromStore()
+  const [refreshingMetrics, setRefreshingMetrics] = useState(
+    () => !hasDashboardListCache()
+  )
+  const [prestamos, setPrestamos] = useState<Prestamo[]>(
+    () => initialMetrics.prestamos as Prestamo[]
+  )
+  const [clientes, setClientes] = useState<Cliente[]>(() => initialMetrics.clientes)
+  const [cuotas, setCuotas] = useState<Cuota[]>(() => initialMetrics.cuotas as Cuota[])
   const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null)
   const [trialPlanSlug, setTrialPlanSlug] = useState<string>('pro')
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const { config } = useConfigStore()
-  const { 
-    getCurrentPlan, 
-    setUserSubscription, 
-    setUsageLimits 
+  const {
+    getCurrentPlan,
+    setUserSubscription,
+    setUsageLimits,
+    setLimitesOrganizacion,
+    limitesOrganizacion,
+    orgBootstrapLoading,
   } = useSubscriptionStore()
   const supabase = createClient()
 
   useEffect(() => {
-    loadSubscriptionData()
     loadData()
     loadTrialInfo()
   }, [])
-  
-  const loadSubscriptionData = async () => {
-    setLoadingPlan(true)
+
+  const refreshOrgContext = async (force = false) => {
     try {
-      const [subscription, limites] = await Promise.all([
-        loadOrganizationSubscription(),
-        fetchLimitesOrganizacion(),
-      ])
-
-      if (subscription) {
-        setUserSubscription(subscription)
-      }
-
+      const { subscription, limites } = await ensureOrganizationContext(
+        force ? { force: true } : { skipIfFresh: true }
+      )
+      if (subscription) setUserSubscription(subscription)
       if (limites) {
-        setLimitesOrg(limites)
+        setLimitesOrganizacion(limites)
         setUsageLimits(mapLimitesToUsageLimits(limites))
-      } else {
-        setLimitesOrg(null)
       }
     } catch (error) {
       console.error('[Dashboard] Error al cargar suscripción:', error)
-    } finally {
-      setLoadingPlan(false)
     }
   }
 
   const loadTrialInfo = async () => {
     try {
-      const res = await fetch('/api/activate-trial')
-      if (res.ok) {
-        const data = await res.json()
-        setTrialEndsAt(data.trialEndsAt || null)
-        setTrialPlanSlug(data.planSlug || 'pro')
-      }
+      const { loadTrialInfoCached } = await import('@/lib/trial-info-client')
+      const data = await loadTrialInfoCached()
+      setTrialEndsAt(data.trialEndsAt || null)
+      setTrialPlanSlug(data.planSlug || 'pro')
     } catch {
-      // silencioso — solo para trials legacy en Supabase
+      // silencioso
     }
   }
 
   const handleUpgradeNextPlan = async () => {
     const slug = normalizePlanSlug(
-      limitesOrg?.plan_slug ?? getCurrentPlan()?.slug ?? 'free'
+      limitesOrganizacion?.plan_slug ?? getCurrentPlan()?.slug ?? 'free'
     )
     const next = getNextPlanSlug(slug)
     if (!next) return
@@ -126,6 +124,10 @@ export function DashboardClient() {
   }
 
   const loadData = async () => {
+    const s = useStore.getState()
+    const hadCache =
+      s.clientes.length > 0 || s.prestamos.length > 0 || s.cuotas.length > 0
+    if (!hadCache) setRefreshingMetrics(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
@@ -150,12 +152,32 @@ export function DashboardClient() {
       
       setClientes(clientesData || [])
       setCuotas(cuotasData || [])
+
+      const { setClientes: setStoreClientes, setPrestamos: setStorePrestamos, setCuotas: setStoreCuotas } =
+        useStore.getState()
+      setStoreClientes(clientesData || [])
+      setStoreCuotas((cuotasData || []) as CuotaStore[])
+      if (prestamosData && clientesData) {
+        setStorePrestamos(
+          prestamosData.map((p) => ({
+            ...p,
+            cliente: clientesData.find((c) => c.id === p.cliente_id),
+          })) as PrestamoStore[]
+        )
+      } else {
+        setStorePrestamos((prestamosData || []) as PrestamoStore[])
+      }
     } catch (error) {
       console.error('Error al cargar datos:', error)
     } finally {
-      setLoadingMetrics(false)
+      setRefreshingMetrics(false)
     }
   }
+
+  const blockMetricsLoader = shouldBlockListLoader(
+    refreshingMetrics,
+    clientes.length + prestamos.length + cuotas.length
+  )
 
   // Calcular métricas
   const prestamosActivos = prestamos?.filter(p => p.estado === 'activo').length || 0
@@ -166,7 +188,8 @@ export function DashboardClient() {
     return sum + interes
   }, 0) || 0
   const clientesActivos = clientes?.length || 0
-  const cuotasRetrasadas = cuotas?.filter(c => c.estado === 'retrasada').length || 0
+  const cuotasRetrasadas =
+    cuotas?.filter((c) => effectiveCuotaEstado(c) === 'retrasada').length || 0
 
   // Préstamos recientes
   const prestamosRecientes = prestamos?.slice(0, 5) || []
@@ -191,9 +214,9 @@ export function DashboardClient() {
   return (
     <div className="space-y-8">
       <PlanUsageStrip
-        limites={limitesOrg}
-        loading={loadingPlan}
-        onRetry={loadSubscriptionData}
+        limites={limitesOrganizacion}
+        loading={orgBootstrapLoading}
+        onRetry={() => refreshOrgContext(true)}
         onUpgrade={handleUpgradeNextPlan}
         upgrading={checkoutLoading}
       />
@@ -204,7 +227,7 @@ export function DashboardClient() {
       )}
 
       {/* Banner de upgrade para plan gratuito */}
-      {!loadingPlan && currentPlan?.slug === 'free' && !isTrialActive(trialEndsAt) && (
+      {!orgBootstrapLoading && currentPlan?.slug === 'free' && !isTrialActive(trialEndsAt) && (
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg p-5 text-white">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-start gap-3">
@@ -246,6 +269,10 @@ export function DashboardClient() {
         </p>
       </div>
 
+      {refreshingMetrics && !blockMetricsLoader && (
+        <p className="text-sm text-muted-foreground">Actualizando métricas…</p>
+      )}
+
       {/* Tarjetas de métricas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <Card>
@@ -256,7 +283,7 @@ export function DashboardClient() {
             <CreditCard className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {loadingMetrics ? (
+            {blockMetricsLoader ? (
               <div className="animate-pulse">
                 <div className="h-8 bg-gray-200 rounded w-16 mb-2"></div>
                 <div className="h-4 bg-gray-200 rounded w-32"></div>
@@ -280,7 +307,7 @@ export function DashboardClient() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {loadingMetrics ? (
+            {blockMetricsLoader ? (
               <div className="animate-pulse">
                 <div className="h-8 bg-gray-200 rounded w-24 mb-2"></div>
                 <div className="h-4 bg-gray-200 rounded w-32"></div>
@@ -304,7 +331,7 @@ export function DashboardClient() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {loadingMetrics ? (
+            {blockMetricsLoader ? (
               <div className="animate-pulse">
                 <div className="h-8 bg-gray-200 rounded w-24 mb-2"></div>
                 <div className="h-4 bg-gray-200 rounded w-32"></div>
@@ -328,7 +355,7 @@ export function DashboardClient() {
             <TrendingUp className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            {loadingMetrics ? (
+            {blockMetricsLoader ? (
               <div className="animate-pulse">
                 <div className="h-8 bg-gray-200 rounded w-24 mb-2"></div>
                 <div className="h-4 bg-gray-200 rounded w-32"></div>
@@ -354,7 +381,7 @@ export function DashboardClient() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {loadingMetrics ? (
+            {blockMetricsLoader ? (
               <div className="animate-pulse">
                 <div className="h-8 bg-gray-200 rounded w-16 mb-2"></div>
                 <div className="h-4 bg-gray-200 rounded w-32"></div>
@@ -370,29 +397,35 @@ export function DashboardClient() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Cuotas Retrasadas
-            </CardTitle>
-            <AlertCircle className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            {loadingMetrics ? (
-              <div className="animate-pulse">
-                <div className="h-8 bg-gray-200 rounded w-16 mb-2"></div>
-                <div className="h-4 bg-gray-200 rounded w-32"></div>
-              </div>
-            ) : (
-              <>
-                <div className="text-2xl font-bold text-red-600">{cuotasRetrasadas}</div>
-                <p className="text-xs text-muted-foreground">
-                  requieren atención
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
+        <Link
+          href="/dashboard/cuotas?vista=retrasadas"
+          className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Ver cuotas retrasadas en la sección Cuotas"
+        >
+          <Card className="transition-colors hover:bg-muted/50 cursor-pointer h-full">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Cuotas Retrasadas
+              </CardTitle>
+              <AlertCircle className="h-4 w-4 text-red-600" />
+            </CardHeader>
+            <CardContent>
+              {blockMetricsLoader ? (
+                <div className="animate-pulse">
+                  <div className="h-8 bg-gray-200 rounded w-16 mb-2"></div>
+                  <div className="h-4 bg-gray-200 rounded w-32"></div>
+                </div>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold text-red-600">{cuotasRetrasadas}</div>
+                  <p className="text-xs text-muted-foreground">
+                    requieren atención · clic para ver listado
+                  </p>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* Préstamos recientes */}

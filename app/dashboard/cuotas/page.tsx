@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -34,7 +35,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { DollarSign, CheckCircle, AlertCircle, History, Undo2, Filter } from 'lucide-react'
-import { formatCurrency, formatDate, isDateOverdue } from '@/lib/utils'
+import { effectiveCuotaEstado, formatCurrency, formatDate } from '@/lib/utils'
 import { toastPagoExitoso } from '@/lib/pago-feedback'
 import { format, startOfDay, endOfDay, isSameDay, parseISO } from 'date-fns'
 import { useConfigStore } from '@/lib/config-store'
@@ -55,6 +56,9 @@ import {
   totalPendienteDesdeCuota,
 } from '@/lib/aplicar-pago-cuotas'
 import { CuotaCardMobile } from '@/components/CuotaCardMobile'
+import { useStore, type Cuota as CuotaStore } from '@/lib/store'
+import { shouldBlockListLoader } from '@/lib/should-block-list-loader'
+import { getDashboardSession } from '@/lib/dashboard-session-cache'
 
 interface Pago {
   id: string
@@ -85,10 +89,30 @@ interface CuotaExtended {
 
 type FiltroFecha = 'hoy' | 'anteriores' | 'posteriores' | 'personalizado'
 
+function cuotaStoreToExtendedMinimal(c: CuotaStore): CuotaExtended {
+  return {
+    id: c.id,
+    numero_cuota: c.numero_cuota,
+    monto_cuota: c.monto_cuota,
+    fecha_vencimiento: c.fecha_vencimiento,
+    fecha_pago: c.fecha_pago,
+    estado: effectiveCuotaEstado(c),
+    monto_pagado: c.monto_pagado,
+    prestamo: {
+      id: c.prestamo_id,
+      monto_prestado: 0,
+      cliente: { nombre: '—', dni: '-' },
+    },
+  }
+}
+
 export default function CuotasPage() {
-  const [cuotas, setCuotas] = useState<CuotaExtended[]>([])
+  const { cuotas: storeCuotas, setCuotas: setStoreCuotas } = useStore()
+  const [cuotas, setCuotas] = useState<CuotaExtended[]>(() =>
+    storeCuotas.map(cuotaStoreToExtendedMinimal)
+  )
   const [cuotasFiltradas, setCuotasFiltradas] = useState<CuotaExtended[]>([])
-  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [selectedCuota, setSelectedCuota] = useState<CuotaExtended | null>(null)
   const [pagoDialogOpen, setPagoDialogOpen] = useState(false)
   const [pagosDialogOpen, setPagosDialogOpen] = useState(false)
@@ -108,6 +132,13 @@ export default function CuotasPage() {
   const { toast } = useToast()
   const supabase = createClient()
   const { config } = useConfigStore()
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const [vistaRetrasadas, setVistaRetrasadas] = useState(false)
+
+  useEffect(() => {
+    setVistaRetrasadas(searchParams.get('vista') === 'retrasadas')
+  }, [searchParams])
 
   useEffect(() => {
     loadCuotas()
@@ -115,72 +146,41 @@ export default function CuotasPage() {
 
   useEffect(() => {
     aplicarFiltroFecha()
-  }, [cuotas, filtroFecha, fechaDesde, fechaHasta])
+  }, [cuotas, filtroFecha, fechaDesde, fechaHasta, vistaRetrasadas])
 
   const loadCuotas = async () => {
-    setLoading(true)
-    console.log('[loadCuotas] Iniciando carga de cuotas')
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      console.log('[loadCuotas] No hay usuario autenticado')
-      setLoading(false)
-      return
-    }
-
-    setUserId(user.id)
-
-    // Obtener rol y organización del usuario
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('organization_id, role')
-      .eq('id', user.id)
-      .single()
-
-    if (!profile?.organization_id) {
-      console.log('[loadCuotas] Usuario sin organización')
-      toast({
-        title: 'Error',
-        description: 'Usuario no asociado a una organización',
-        variant: 'destructive',
-      })
-      setLoading(false)
-      return
-    }
-
-    setOrganizationId(profile.organization_id)
-
-    // Obtener rol del usuario
-    const { data: roleData } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('organization_id', profile.organization_id)
-      .maybeSingle()
-
-    let role: 'admin' | 'cobrador' = profile?.role === 'admin' ? 'admin' : 'cobrador'
-    if (roleData?.role === 'admin' || roleData?.role === 'cobrador') {
-      role = roleData.role
-    }
-    setUserRole(role)
-    console.log('[loadCuotas] Rol del usuario:', role)
+    setRefreshing(true)
 
     try {
-      // Usar la función RPC que maneja permisos según rol
-      const cuotasData = await getCuotasSegunRol()
-      console.log(`[loadCuotas] Se cargaron ${cuotasData.length} cuotas`)
+      const session = await getDashboardSession(supabase)
+      if (!session) return
 
-      if (!cuotasData || cuotasData.length === 0) {
-        setCuotas([])
-        setLoading(false)
+      if (!session.organizationId) {
+        toast({
+          title: 'Error',
+          description: 'Usuario no asociado a una organización',
+          variant: 'destructive',
+        })
         return
       }
 
-      // Enriquecer vía RPC (mismo patrón que Prestamos) para evitar N/A por RLS
-      const [prestamosData, clientesData] = await Promise.all([
+      setUserId(session.userId)
+      setOrganizationId(session.organizationId)
+      setUserRole(session.role)
+
+      const [cuotasData, prestamosData, clientesData] = await Promise.all([
+        getCuotasSegunRol(),
         getPrestamosInteligente(),
         getClientesInteligente(),
       ])
+
+      if (!cuotasData || cuotasData.length === 0) {
+        setCuotas([])
+        setStoreCuotas([])
+        return
+      }
+
+      setStoreCuotas(cuotasData as CuotaStore[])
 
       const prestamosMap = new Map(
         (prestamosData || []).map((p: any) => [p.id, p])
@@ -189,13 +189,8 @@ export default function CuotasPage() {
         (clientesData || []).map((c: any) => [c.id, c])
       )
 
-      console.log(
-        `[loadCuotas] Enriqueciendo cuotas con ${prestamosMap.size} préstamos y ${clientesMap.size} clientes`
-      )
-
-      // Si es admin, obtener nombres de cobradores para mostrar en la UI
       let cobradoresMap = new Map<string, string>()
-      if (role === 'admin') {
+      if (session.role === 'admin') {
         const cobradorIds = [
           ...new Set(
             (prestamosData || []).map((p: any) => p.user_id).filter(Boolean)
@@ -215,11 +210,7 @@ export default function CuotasPage() {
         const p = prestamosMap.get(cuota.prestamo_id)
         const cliente = p?.cliente_id ? clientesMap.get(p.cliente_id) : null
 
-        // Actualizar estado de cuotas retrasadas
-        let estado = cuota.estado
-        if (cuota.estado === 'pendiente' && isDateOverdue(cuota.fecha_vencimiento)) {
-          estado = 'retrasada'
-        }
+        const estado = effectiveCuotaEstado(cuota)
 
         // Agregar información del cobrador si es admin
         const cobrador = p?.user_id ? cobradoresMap.get(p.user_id) : null
@@ -247,7 +238,6 @@ export default function CuotasPage() {
       )
       
       if (cuotasRetrasadas.length > 0) {
-        console.log(`[loadCuotas] Actualizando ${cuotasRetrasadas.length} cuotas retrasadas`)
         await Promise.all(
           cuotasRetrasadas.map((cuota: any) =>
             supabase
@@ -265,9 +255,11 @@ export default function CuotasPage() {
         variant: 'destructive',
       })
     } finally {
-      setLoading(false)
+      setRefreshing(false)
     }
   }
+
+  const cuotasCacheCount = cuotas.length || storeCuotas.length
 
   const handleRegistrarPago = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -411,7 +403,19 @@ export default function CuotasPage() {
     }
   }
 
+  const salirVistaRetrasadas = () => {
+    setVistaRetrasadas(false)
+    router.replace('/dashboard/cuotas')
+  }
+
   const aplicarFiltroFecha = () => {
+    if (vistaRetrasadas) {
+      setCuotasFiltradas(
+        cuotas.filter((c) => effectiveCuotaEstado(c) === 'retrasada')
+      )
+      return
+    }
+
     const hoy = new Date()
     hoy.setHours(0, 0, 0, 0)
 
@@ -468,9 +472,25 @@ export default function CuotasPage() {
     setCuotasFiltradas(filtradas)
   }
 
-  const cuotasPendientes = cuotasFiltradas.filter(c => c.estado === 'pendiente' || c.estado === 'retrasada')
-  const cuotasPagadas = cuotasFiltradas.filter(c => c.estado === 'pagada')
-  const cuotasRetrasadas = cuotasFiltradas.filter(c => c.estado === 'retrasada')
+  const cuotasConEstadoEfectivo = cuotas.map((c) => ({
+    ...c,
+    estado: effectiveCuotaEstado(c),
+  }))
+
+  const resumenPendientes = cuotasConEstadoEfectivo.filter(
+    (c) => c.estado === 'pendiente' || c.estado === 'retrasada'
+  )
+  const resumenPagadas = cuotasConEstadoEfectivo.filter((c) => c.estado === 'pagada')
+  const resumenRetrasadas = cuotasConEstadoEfectivo.filter((c) => c.estado === 'retrasada')
+
+  const cuotasPendientes = cuotasFiltradas.filter(
+    (c) => effectiveCuotaEstado(c) === 'pendiente' || effectiveCuotaEstado(c) === 'retrasada'
+  )
+  const cuotasPagadas = cuotasFiltradas.filter((c) => effectiveCuotaEstado(c) === 'pagada')
+  const cuotasRetrasadasLista = cuotasFiltradas.filter(
+    (c) => effectiveCuotaEstado(c) === 'retrasada'
+  )
+  const cuotasEnListado = vistaRetrasadas ? cuotasRetrasadasLista : cuotasPendientes
 
   return (
     <div className="space-y-6">
@@ -489,7 +509,7 @@ export default function CuotasPage() {
             <AlertCircle className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{cuotasPendientes.length}</div>
+            <div className="text-2xl font-bold">{resumenPendientes.length}</div>
             <p className="text-xs text-muted-foreground">
               Por cobrar
             </p>
@@ -505,7 +525,7 @@ export default function CuotasPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
-              {cuotasRetrasadas.length}
+              {resumenRetrasadas.length}
             </div>
             <p className="text-xs text-muted-foreground">
               Requieren atención
@@ -522,7 +542,7 @@ export default function CuotasPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {cuotasPagadas.length}
+              {resumenPagadas.length}
             </div>
             <p className="text-xs text-muted-foreground">
               Completadas
@@ -531,72 +551,94 @@ export default function CuotasPage() {
         </Card>
       </div>
 
+      {vistaRetrasadas && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+          <span>Mostrando todas las cuotas retrasadas (cualquier fecha de vencimiento).</span>
+          <Button type="button" variant="outline" size="sm" onClick={salirVistaRetrasadas}>
+            Ver filtro por fecha
+          </Button>
+        </div>
+      )}
+
       {/* Cuotas Pendientes y Retrasadas */}
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Cuotas Por Cobrar</CardTitle>
-                {filtroFecha !== 'hoy' && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <CardTitle>{vistaRetrasadas ? 'Cuotas Retrasadas' : 'Cuotas Por Cobrar'}</CardTitle>
+                  {refreshing && cuotasCacheCount > 0 && (
+                    <span className="text-xs text-muted-foreground">Actualizando…</span>
+                  )}
+                </div>
+                {!vistaRetrasadas && filtroFecha !== 'hoy' && (
                   <p className="text-sm text-gray-500 mt-1">
-                    Mostrando {cuotasPendientes.length} de {cuotas.filter(c => c.estado === 'pendiente' || c.estado === 'retrasada').length} cuotas
+                    Mostrando {cuotasPendientes.length} de {resumenPendientes.length} cuotas
+                  </p>
+                )}
+                {vistaRetrasadas && (
+                  <p className="text-sm text-gray-500 mt-1">
+                    {cuotasRetrasadasLista.length} cuota(s) en listado
                   </p>
                 )}
               </div>
               <div className="flex items-center gap-4">
                 {/* Filtro de Fecha */}
-                <div className="flex items-center gap-2">
-                  <Filter className="h-4 w-4 text-gray-500" />
-                  <Select value={filtroFecha} onValueChange={(value: FiltroFecha) => {
-                    setFiltroFecha(value)
-                    if (value !== 'personalizado') {
-                      setFechaDesde('')
-                      setFechaHasta('')
-                    }
-                  }}>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Filtrar por fecha" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="hoy">Hoy</SelectItem>
-                      <SelectItem value="anteriores">Días anteriores</SelectItem>
-                      <SelectItem value="posteriores">Días posteriores</SelectItem>
-                      <SelectItem value="personalizado">Personalizado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                {/* Rango de fechas personalizado */}
-                {filtroFecha === 'personalizado' && (
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="date"
-                      value={fechaDesde}
-                      onChange={(e) => setFechaDesde(e.target.value)}
-                      placeholder="Desde"
-                      className="w-[150px]"
-                    />
-                    <span className="text-gray-500">-</span>
-                    <Input
-                      type="date"
-                      value={fechaHasta}
-                      onChange={(e) => setFechaHasta(e.target.value)}
-                      placeholder="Hasta"
-                      className="w-[150px]"
-                    />
-                  </div>
+                {!vistaRetrasadas && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Filter className="h-4 w-4 text-gray-500" />
+                      <Select value={filtroFecha} onValueChange={(value: FiltroFecha) => {
+                        setFiltroFecha(value)
+                        if (value !== 'personalizado') {
+                          setFechaDesde('')
+                          setFechaHasta('')
+                        }
+                      }}>
+                        <SelectTrigger className="w-[180px]">
+                          <SelectValue placeholder="Filtrar por fecha" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="hoy">Hoy</SelectItem>
+                          <SelectItem value="anteriores">Días anteriores</SelectItem>
+                          <SelectItem value="posteriores">Días posteriores</SelectItem>
+                          <SelectItem value="personalizado">Personalizado</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {filtroFecha === 'personalizado' && (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="date"
+                          value={fechaDesde}
+                          onChange={(e) => setFechaDesde(e.target.value)}
+                          placeholder="Desde"
+                          className="w-[150px]"
+                        />
+                        <span className="text-gray-500">-</span>
+                        <Input
+                          type="date"
+                          value={fechaHasta}
+                          onChange={(e) => setFechaHasta(e.target.value)}
+                          placeholder="Hasta"
+                          className="w-[150px]"
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {shouldBlockListLoader(refreshing, cuotasCacheCount) ? (
             <p className="text-center py-8 text-gray-500">Cargando...</p>
-          ) : cuotasPendientes.length === 0 ? (
+          ) : (vistaRetrasadas ? cuotasRetrasadasLista : cuotasPendientes).length === 0 ? (
             <p className="text-center py-8 text-gray-500">
-              No hay cuotas pendientes
+              {vistaRetrasadas ? 'No hay cuotas retrasadas' : 'No hay cuotas pendientes'}
             </p>
           ) : (
             <>
@@ -616,7 +658,7 @@ export default function CuotasPage() {
                   </TableRow>
                 </TableHeader>
               <TableBody>
-                {cuotasPendientes.map((cuota) => {
+                {cuotasEnListado.map((cuota) => {
                   const montoPendiente = cuota.monto_cuota - cuota.monto_pagado
                   return (
                     <TableRow key={cuota.id}>
@@ -681,7 +723,7 @@ export default function CuotasPage() {
 
             {/* Vista Móvil */}
             <div className="md:hidden space-y-3">
-              {cuotasPendientes.map((cuota) => (
+              {cuotasEnListado.map((cuota) => (
                 <CuotaCardMobile
                   key={cuota.id}
                   cuota={cuota}

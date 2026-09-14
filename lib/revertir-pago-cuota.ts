@@ -551,7 +551,7 @@ export async function desmarcarCuotaCompleta(
   const { data: cuotaCheck } = await admin
     .from('cuotas')
     .select(
-      'id, prestamo_id, numero_cuota, monto_cuota, monto_pagado, estado, fecha_vencimiento, fecha_pago'
+      'id, prestamo_id, numero_cuota, monto_cuota, monto_pagado, monto_capital, monto_interes, estado, fecha_vencimiento, fecha_pago'
     )
     .eq('id', cuotaId)
     .maybeSingle()
@@ -692,6 +692,30 @@ export async function desmarcarCuotaCompleta(
       await validarConsistenciaPrestamo(admin, prestamoId)
     } else {
       throw err
+    }
+  }
+
+  const abonoCapitalRevertir = Number(cuotaCheck.monto_capital) || 0
+  if (abonoCapitalRevertir > 0) {
+    const { data: prAbierto } = await admin
+      .from('prestamos')
+      .select('tipo_prestamo, capital_saldo, monto_prestado')
+      .eq('id', prestamoId)
+      .maybeSingle()
+
+    if (prAbierto?.tipo_prestamo === 'abierto') {
+      const saldoActual =
+        prAbierto.capital_saldo != null
+          ? Number(prAbierto.capital_saldo)
+          : Number(prAbierto.monto_prestado)
+      await admin
+        .from('prestamos')
+        .update({
+          capital_saldo: saldoActual + abonoCapitalRevertir,
+          estado: 'activo',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', prestamoId)
     }
   }
 

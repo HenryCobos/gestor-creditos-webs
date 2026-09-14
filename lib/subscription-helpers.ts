@@ -2,6 +2,14 @@
 
 import { createClient } from '@/lib/supabase/client'
 import type { Plan, UserSubscription, UsageLimits } from './subscription-store'
+import {
+  dedupeLimitesFetch,
+  dedupeSubscriptionFetch,
+  getCachedLimitesOrganizacion,
+  getCachedOrganizationSubscription,
+  invalidateOrgDataCache,
+  type EnsureOrganizationContextOptions,
+} from '@/lib/org-data-cache'
 
 // Función para cargar todos los planes disponibles
 export async function loadPlans(): Promise<Plan[]> {
@@ -77,8 +85,7 @@ export function getPlanBenefits(planSlug: string): string[] {
   return benefitsByPlan[planSlug] || benefitsByPlan.free
 }
 
-// NUEVA FUNCIÓN: Cargar suscripción a nivel de organización
-export async function loadOrganizationSubscription(): Promise<UserSubscription | null> {
+async function loadOrganizationSubscriptionFromNetwork(): Promise<UserSubscription | null> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   
@@ -161,6 +168,14 @@ export async function loadOrganizationSubscription(): Promise<UserSubscription |
   }
 }
 
+/** Suscripción de org con cache en memoria + dedupe de requests simultáneos. */
+export async function loadOrganizationSubscription(options?: {
+  force?: boolean
+}): Promise<UserSubscription | null> {
+  if (options?.force) invalidateOrgDataCache()
+  return dedupeSubscriptionFetch(loadOrganizationSubscriptionFromNetwork)
+}
+
 export type { LimitesOrganizacion } from '@/lib/limites-organizacion-shared'
 import {
   mapRpcRowToLimites,
@@ -195,8 +210,12 @@ export function mapLimitesToUsageLimits(limites: LimitesOrganizacion): UsageLimi
   }
 }
 
-/** Límites de la organización (totales compartidos admin + cobrador) */
-export async function fetchLimitesOrganizacion(): Promise<LimitesOrganizacion | null> {
+/**
+ * Límites vía RPC `get_limites_organizacion` (rápido). Fallback: /api/limites-organizacion.
+ * Si el fallback aparece mucho en Network (~2s), ejecutar en Supabase:
+ * supabase/DIAGNOSTICO_LIMITES_ORGANIZACION.sql y supabase/FIX_FUNCION_LIMITES_CORREGIDA.sql
+ */
+async function fetchLimitesOrganizacionFromNetwork(): Promise<LimitesOrganizacion | null> {
   const supabase = createClient()
   const {
     data: { user },
@@ -204,7 +223,6 @@ export async function fetchLimitesOrganizacion(): Promise<LimitesOrganizacion | 
 
   if (!user) return null
 
-  // 1) RPC (rápido, SECURITY DEFINER)
   const { data: rpcData, error: rpcError } = await supabase
     .rpc('get_limites_organizacion')
     .maybeSingle()
@@ -220,7 +238,6 @@ export async function fetchLimitesOrganizacion(): Promise<LimitesOrganizacion | 
     )
   }
 
-  // 2) API con service role (respaldo; timeout para no colgar la UI)
   try {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 12_000)
@@ -248,6 +265,42 @@ export async function fetchLimitesOrganizacion(): Promise<LimitesOrganizacion | 
 
   return null
 }
+
+export async function fetchLimitesOrganizacion(options?: {
+  force?: boolean
+}): Promise<LimitesOrganizacion | null> {
+  if (options?.force) invalidateOrgDataCache()
+  return dedupeLimitesFetch(fetchLimitesOrganizacionFromNetwork)
+}
+
+/** Carga suscripción + límites (cache TTL 90s). `force` tras crear cliente/préstamo/usuario. */
+export async function ensureOrganizationContext(
+  options?: EnsureOrganizationContextOptions
+): Promise<{
+  subscription: UserSubscription | null
+  limites: LimitesOrganizacion | null
+}> {
+  if (options?.force) invalidateOrgDataCache()
+
+  if (options?.skipIfFresh) {
+    const cachedSub = getCachedOrganizationSubscription()
+    const cachedLim = getCachedLimitesOrganizacion()
+    if (cachedSub !== null || cachedLim !== null) {
+      if (cachedSub && cachedLim) {
+        return { subscription: cachedSub, limites: cachedLim }
+      }
+    }
+  }
+
+  const [subscription, limites] = await Promise.all([
+    loadOrganizationSubscription(),
+    fetchLimitesOrganizacion(),
+  ])
+
+  return { subscription, limites }
+}
+
+export { invalidateOrgDataCache } from '@/lib/org-data-cache'
 
 // Cargar límites a nivel de organización (para subscription store)
 export async function loadOrganizationUsageLimits(): Promise<UsageLimits | null> {

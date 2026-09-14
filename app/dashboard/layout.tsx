@@ -23,6 +23,7 @@ import {
 import { CompanyHeader } from '@/components/company-header'
 import { MobileMenu } from '@/components/mobile-menu'
 import { CobradorRutaSelector } from '@/components/cobrador-ruta-selector'
+import { DashboardOrgProvider } from '@/components/dashboard-org-provider'
 
 async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const shell = await getDashboardShell()
@@ -233,7 +234,7 @@ async function DashboardLayout({ children }: { children: React.ReactNode }) {
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto overflow-x-hidden min-w-0">
         <div className="p-4 md:p-8 pt-20 md:pt-8">
-          {children}
+          <DashboardOrgProvider>{children}</DashboardOrgProvider>
         </div>
       </main>
     </div>
