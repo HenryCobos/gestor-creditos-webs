@@ -92,3 +92,30 @@ export function mapCuotasEffectiveEstado<T extends { estado: string; fecha_venci
   }))
 }
 
+export type CuotaMinimaParaRetraso = {
+  prestamo_id: string
+  estado: string
+  fecha_vencimiento: string
+}
+
+export function prestamoTieneCuotasRetrasadas(
+  prestamoId: string,
+  cuotas: CuotaMinimaParaRetraso[]
+): boolean {
+  return cuotas.some(
+    (c) => c.prestamo_id === prestamoId && effectiveCuotaEstado(c) === 'retrasada'
+  )
+}
+
+export function buildPrestamoIdsConCuotasRetrasadas(
+  cuotas: CuotaMinimaParaRetraso[]
+): Set<string> {
+  const ids = new Set<string>()
+  for (const c of cuotas) {
+    if (effectiveCuotaEstado(c) === 'retrasada') {
+      ids.add(c.prestamo_id)
+    }
+  }
+  return ids
+}
+

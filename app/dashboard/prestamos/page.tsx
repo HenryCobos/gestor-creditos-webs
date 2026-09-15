@@ -44,7 +44,15 @@ import {
   invalidateOrgDataCache,
   mapLimitesToUsageLimits,
 } from '@/lib/subscription-helpers'
-import { getClientesInteligente, getPrestamosInteligente } from '@/lib/queries-con-roles'
+import {
+  getClientesInteligente,
+  getCuotasSegunRol,
+  getPrestamosInteligente,
+} from '@/lib/queries-con-roles'
+import {
+  buildPrestamoIdsConCuotasRetrasadas,
+  type CuotaMinimaParaRetraso,
+} from '@/lib/utils'
 import { shouldBlockListLoader } from '@/lib/should-block-list-loader'
 import { getDashboardSession } from '@/lib/dashboard-session-cache'
 import { asegurarClienteEnRutaActiva } from '@/lib/ruta-cobrador-sync'
@@ -99,7 +107,19 @@ export default function PrestamosPage() {
   const [rutasFiltro, setRutasFiltro] = useState<RutaFiltroOption[]>([])
   const { toast } = useToast()
   const supabase = createClient()
-  const { clientes, setClientes, prestamos, setPrestamos, addPrestamo, updatePrestamo, deletePrestamo, productos, setProductos } = useStore()
+  const {
+    clientes,
+    setClientes,
+    prestamos,
+    setPrestamos,
+    addPrestamo,
+    updatePrestamo,
+    deletePrestamo,
+    productos,
+    setProductos,
+    setCuotas,
+  } = useStore()
+  const [cuotasParaFiltro, setCuotasParaFiltro] = useState<CuotaMinimaParaRetraso[]>([])
   const { config } = useConfigStore()
   const { canAddPrestamo, setUserSubscription, setUsageLimits } = useSubscriptionStore()
 
@@ -301,7 +321,7 @@ export default function PrestamosPage() {
 
       setUserRole(session.role)
 
-      const [clientesData, productosRes, prestamosData] = await Promise.all([
+      const [clientesData, productosRes, prestamosData, cuotasData] = await Promise.all([
         getClientesInteligente(),
         supabase
           .from('productos')
@@ -310,6 +330,7 @@ export default function PrestamosPage() {
           .eq('activo', true)
           .order('nombre', { ascending: true }),
         getPrestamosInteligente(),
+        getCuotasSegunRol(),
       ])
 
       if (clientesData) {
@@ -329,6 +350,16 @@ export default function PrestamosPage() {
         setPrestamos(prestamosEnriquecidos)
       } else {
         setPrestamos(prestamosData || [])
+      }
+
+      const cuotasMinimas: CuotaMinimaParaRetraso[] = (cuotasData || []).map((c) => ({
+        prestamo_id: c.prestamo_id,
+        estado: c.estado,
+        fecha_vencimiento: c.fecha_vencimiento,
+      }))
+      setCuotasParaFiltro(cuotasMinimas)
+      if (cuotasData) {
+        setCuotas(cuotasData)
       }
 
       void loadRutasFiltroPrestamos(session)
@@ -1154,6 +1185,14 @@ export default function PrestamosPage() {
     return map
   }, [rutasFiltro])
 
+  const prestamoIdsConCuotaRetrasada = useMemo(
+    () => buildPrestamoIdsConCuotasRetrasadas(cuotasParaFiltro),
+    [cuotasParaFiltro]
+  )
+
+  const estadoFilterUi =
+    estadoFilter === 'retrasado' ? 'con_cuotas_atrasadas' : estadoFilter
+
   const filteredPrestamos = useMemo(
     () =>
       filterPrestamos(prestamos, {
@@ -1161,8 +1200,16 @@ export default function PrestamosPage() {
         estado: estadoFilter,
         rutaId: rutaFilter,
         frecuencia: frecuenciaFilter,
+        prestamoIdsConCuotaRetrasada,
       }),
-    [prestamos, searchTerm, estadoFilter, rutaFilter, frecuenciaFilter]
+    [
+      prestamos,
+      searchTerm,
+      estadoFilter,
+      rutaFilter,
+      frecuenciaFilter,
+      prestamoIdsConCuotaRetrasada,
+    ]
   )
 
   const showRutaFilter =
@@ -2095,7 +2142,7 @@ export default function PrestamosPage() {
           filterType="prestamos"
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
-          estadoFilter={estadoFilter}
+          estadoFilter={estadoFilterUi}
           onEstadoFilterChange={setEstadoFilter}
           frecuenciaFilter={frecuenciaFilter}
           onFrecuenciaFilterChange={setFrecuenciaFilter}

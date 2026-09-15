@@ -41,7 +41,7 @@ const PRESTAMO_ESTADO_CHIPS = [
   { value: 'todos', label: 'Todos' },
   { value: 'activo', label: 'Activos' },
   { value: 'pagado', label: 'Pagados' },
-  { value: 'retrasado', label: 'Retrasados' },
+  { value: 'con_cuotas_atrasadas', label: 'Con cuotas atrasadas' },
 ]
 
 export function SearchFilterBar({
@@ -149,7 +149,7 @@ export function SearchFilterBar({
                     <>
                       <SelectItem value="activo">Activo</SelectItem>
                       <SelectItem value="pagado">Pagado</SelectItem>
-                      <SelectItem value="retrasado">Retrasado</SelectItem>
+                      <SelectItem value="con_cuotas_atrasadas">Con cuotas atrasadas</SelectItem>
                     </>
                   )}
                   {filterType === 'cuotas' && (

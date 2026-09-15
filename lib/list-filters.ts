@@ -7,6 +7,27 @@ export interface PrestamoFilterOptions {
   estado?: string
   rutaId?: RutaFilterValue
   frecuencia?: string
+  /** IDs de préstamos con al menos una cuota retrasada (effectiveCuotaEstado). */
+  prestamoIdsConCuotaRetrasada?: Set<string>
+}
+
+function isEstadoConCuotasAtrasadas(estado: string): boolean {
+  return estado === 'con_cuotas_atrasadas' || estado === 'retrasado'
+}
+
+function prestamoMatchesEstado(
+  prestamo: Prestamo,
+  estado: string,
+  prestamoIdsConCuotaRetrasada?: Set<string>
+): boolean {
+  if (estado === 'todos') return true
+
+  if (isEstadoConCuotasAtrasadas(estado)) {
+    if (prestamo.estado === 'pagado') return false
+    return prestamoIdsConCuotaRetrasada?.has(prestamo.id) ?? false
+  }
+
+  return prestamo.estado === estado
 }
 
 export interface ClienteFilterOptions {
@@ -45,11 +66,17 @@ export function filterPrestamos(
   prestamos: Prestamo[],
   options: PrestamoFilterOptions
 ): Prestamo[] {
-  const { search = '', estado = 'todos', rutaId = 'todos', frecuencia = 'todas' } = options
+  const {
+    search = '',
+    estado = 'todos',
+    rutaId = 'todos',
+    frecuencia = 'todas',
+    prestamoIdsConCuotaRetrasada,
+  } = options
 
   return prestamos.filter((prestamo) => {
     if (!prestamoMatchesSearch(prestamo, search)) return false
-    if (estado !== 'todos' && prestamo.estado !== estado) return false
+    if (!prestamoMatchesEstado(prestamo, estado, prestamoIdsConCuotaRetrasada)) return false
     if (frecuencia !== 'todas' && prestamo.frecuencia_pago !== frecuencia) return false
     if (!prestamoMatchesRuta(prestamo, rutaId)) return false
     return true
