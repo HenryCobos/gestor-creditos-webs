@@ -155,7 +155,7 @@ export function periodoPorNumero(
   const desde =
     numeroPeriodo === 1
       ? startOfDay(fechaInicio)
-      : addDays(vencimientoPeriodoN(fechaInicio, numeroPeriodo - 1, config), 1)
+      : startOfDay(vencimientoPeriodoN(fechaInicio, numeroPeriodo - 1, config))
   const hasta = addDays(vencimiento, -1)
   return {
     numero: numeroPeriodo,
@@ -231,11 +231,109 @@ export interface SyncPeriodosResult {
 }
 
 type CuotaRow = {
+  id?: string
   numero_cuota: number
   estado: string
   periodo_desde?: string | null
   periodo_hasta?: string | null
   fecha_pago?: string | null
+  monto_pagado?: number | null
+}
+
+export interface RepararCuotasPendientesResult {
+  actualizadas: number
+  omitidas: number
+}
+
+/** Corrige rangos/montos de cuotas pendientes sin pago (préstamo abierto). No toca pagadas ni crea pagos. */
+export async function repararCuotasPendientesAbiertas(
+  supabase: SupabaseClient,
+  prestamoId: string,
+  prestamo: Prestamo,
+  interesArrastre: number = 0
+): Promise<RepararCuotasPendientesResult> {
+  if (prestamo.tipo_prestamo !== 'abierto' || prestamo.estado === 'pagado') {
+    return { actualizadas: 0, omitidas: 0 }
+  }
+
+  const config = getConfigAbierto(prestamo)
+  const fechaInicio = parseDateOnly(prestamo.fecha_inicio)
+  const capitalSaldo = prestamo.capital_saldo ?? prestamo.monto_prestado
+
+  const { data: cuotasDb, error } = await supabase
+    .from('cuotas')
+    .select(
+      'id, numero_cuota, estado, periodo_desde, periodo_hasta, monto_pagado, monto_cuota, monto_interes, fecha_vencimiento'
+    )
+    .eq('prestamo_id', prestamoId)
+    .in('estado', ['pendiente', 'retrasada'])
+    .order('numero_cuota', { ascending: true })
+
+  if (error || !cuotasDb?.length) {
+    if (error) console.error('[repararCuotasPendientesAbiertas]', error)
+    return { actualizadas: 0, omitidas: 0 }
+  }
+
+  let actualizadas = 0
+  let omitidas = 0
+  let arrastreAplicado = false
+
+  for (const c of cuotasDb) {
+    const pagado = Number(c.monto_pagado ?? 0)
+    if (pagado > 0) {
+      omitidas++
+      continue
+    }
+
+    const p = periodoPorNumero(fechaInicio, c.numero_cuota, config)
+    const keyDesde = fechaToIsoDate(p.desde)
+    const keyHasta = fechaToIsoDate(p.hasta)
+    const interesEst = calcularInteresAbiertoPeriodo(
+      capitalSaldo,
+      p.desde,
+      p.hasta,
+      config
+    )
+    const extraArrastre = !arrastreAplicado ? interesArrastre : 0
+    arrastreAplicado = true
+    const montoCuota = Number((interesEst + extraArrastre).toFixed(2))
+    const vencIso = `${fechaToIsoDate(p.vencimiento)}T12:00:00`
+    const nuevoEstado = isDateOverdue(vencIso) ? 'retrasada' : 'pendiente'
+
+    const sinCambio =
+      c.periodo_desde === keyDesde &&
+      c.periodo_hasta === keyHasta &&
+      Number(c.monto_cuota) === montoCuota &&
+      c.estado === nuevoEstado
+
+    if (sinCambio) {
+      omitidas++
+      continue
+    }
+
+    const { error: upErr } = await supabase
+      .from('cuotas')
+      .update({
+        periodo_desde: keyDesde,
+        periodo_hasta: keyHasta,
+        monto_cuota: montoCuota,
+        monto_interes: montoCuota,
+        monto_capital: 0,
+        fecha_vencimiento: vencIso,
+        estado: nuevoEstado,
+      })
+      .eq('id', c.id)
+      .eq('prestamo_id', prestamoId)
+
+    if (upErr) {
+      console.error('[repararCuotasPendientesAbiertas] update', upErr)
+      omitidas++
+    } else {
+      actualizadas++
+    }
+  }
+
+  return { actualizadas, omitidas }
 }
 
 function periodoYaCubierto(
@@ -303,7 +401,9 @@ export async function syncPeriodosAbiertos(
 
   const { data: cuotasExistentes, error: loadErr } = await supabase
     .from('cuotas')
-    .select('numero_cuota, estado, periodo_desde, periodo_hasta, fecha_pago')
+    .select(
+      'id, numero_cuota, estado, periodo_desde, periodo_hasta, fecha_pago, monto_pagado'
+    )
     .eq('prestamo_id', prestamoId)
     .order('numero_cuota', { ascending: true })
 
@@ -314,7 +414,22 @@ export async function syncPeriodosAbiertos(
 
   const cuotas: CuotaRow[] = cuotasExistentes ?? []
 
-  const pendientes = cuotas.filter(
+  await repararCuotasPendientesAbiertas(
+    supabase,
+    prestamoId,
+    prestamoEfectivo,
+    interesArrastre
+  )
+
+  const { data: cuotasTrasReparo } = await supabase
+    .from('cuotas')
+    .select('numero_cuota, estado, periodo_desde, periodo_hasta, fecha_pago, monto_pagado')
+    .eq('prestamo_id', prestamoId)
+    .order('numero_cuota', { ascending: true })
+
+  const cuotasActualizadas: CuotaRow[] = cuotasTrasReparo ?? cuotas
+
+  const pendientes = cuotasActualizadas.filter(
     (c) => c.estado === 'pendiente' || c.estado === 'retrasada'
   )
   if (pendientes.length > 0) {
@@ -324,14 +439,15 @@ export async function syncPeriodosAbiertos(
   let periodos: PeriodoAbierto[] = []
 
   if (modo === 'nuevo') {
-    const desdeN = cuotas.length === 0 ? 1 : siguienteNumeroCuota(cuotas)
+    const desdeN =
+      cuotasActualizadas.length === 0 ? 1 : siguienteNumeroCuota(cuotasActualizadas)
     periodos = listarPeriodosHasta(fechaInicio, config, hoy, desdeN)
   } else {
-    const pagadas = cuotas.filter((c) => c.estado === 'pagada')
+    const pagadas = cuotasActualizadas.filter((c) => c.estado === 'pagada')
     const conRango = pagadas.filter((c) => c.periodo_hasta)
 
     if (pagadas.length > 0 && conRango.length === 0) {
-      const n = siguienteNumeroCuota(cuotas)
+      const n = siguienteNumeroCuota(cuotasActualizadas)
       periodos = [periodoPorNumero(fechaInicio, n, config)]
     } else if (pagadas.length > 0 && conRango.length > 0) {
       const ult = conRango.sort((a, b) => b.numero_cuota - a.numero_cuota)[0]
@@ -354,7 +470,7 @@ export async function syncPeriodosAbiertos(
     capitalSaldo,
     interesArrastre,
     config,
-    cuotas
+    cuotasActualizadas
   )
 }
 
