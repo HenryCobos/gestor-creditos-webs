@@ -465,6 +465,8 @@ export interface ReporteGeneralDesgloseCliente {
   cuotas_pendientes: number
 }
 
+export type { ReporteGeneralDesglosePrestamo } from './reporte-general-desglose'
+
 interface ReporteGeneralInfo {
   totalPrestado: number
   totalRecuperado: number
@@ -478,6 +480,7 @@ interface ReporteGeneralInfo {
   fecha: string
   periodoLabel?: string
   desgloseClientes?: ReporteGeneralDesgloseCliente[]
+  desglosePrestamos?: import('./reporte-general-desglose').ReporteGeneralDesglosePrestamo[]
 }
 
 export function generarReporteGeneral(
@@ -608,38 +611,83 @@ export function generarReporteGeneral(
     },
   })
 
-  if (reporte.desgloseClientes !== undefined) {
+  const formatDateDesglose = (dateString: string) => {
+    if (!dateString) return ''
+    try {
+      if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        const [year, month, day] = dateString.split('-')
+        return `${day}/${month}/${year}`
+      }
+      if (dateString.includes('T') || dateString.includes(' ')) {
+        return format(parseISO(dateString), 'dd/MM/yyyy')
+      }
+      const [year, month, day] = dateString.split('-').map(Number)
+      return format(new Date(year, month - 1, day), 'dd/MM/yyyy')
+    } catch {
+      return format(new Date(dateString), 'dd/MM/yyyy')
+    }
+  }
+
+  const desgloseRows =
+    reporte.desglosePrestamos ?? reporte.desgloseClientes
+  const desglosePorPrestamo = reporte.desglosePrestamos !== undefined
+
+  if (desgloseRows !== undefined) {
     yPos = (doc as any).lastAutoTable.finalY + 15
     doc.setFontSize(14)
     doc.setFont('helvetica', 'bold')
-    doc.text('Desglose por Cliente', 20, yPos)
+    doc.text(
+      desglosePorPrestamo ? 'Desglose por Cliente y Crédito' : 'Desglose por Cliente',
+      20,
+      yPos
+    )
     yPos += 6
 
     const clientBody =
-      reporte.desgloseClientes.length > 0
-        ? reporte.desgloseClientes.map((c) => [
-            c.nombre,
-            c.dni,
-            formatCurrency(c.total_prestado),
-            formatCurrency(c.total_pagado),
-            formatCurrency(c.total_pendiente),
-            String(c.prestamos_activos),
-            String(c.cuotas_pendientes),
-          ])
+      desgloseRows.length > 0
+        ? desglosePorPrestamo
+          ? (reporte.desglosePrestamos ?? []).map((c) => [
+              c.nombre,
+              c.dni,
+              formatCurrency(c.total_prestado),
+              formatCurrency(c.total_pagado),
+              formatCurrency(c.total_pendiente),
+              c.fecha_pago_cuota ? formatDateDesglose(c.fecha_pago_cuota) : '—',
+              String(c.cuotas_pendientes),
+            ])
+          : (reporte.desgloseClientes ?? []).map((c) => [
+              c.nombre,
+              c.dni,
+              formatCurrency(c.total_prestado),
+              formatCurrency(c.total_pagado),
+              formatCurrency(c.total_pendiente),
+              String(c.prestamos_activos),
+              String(c.cuotas_pendientes),
+            ])
         : [['Sin datos en el periodo seleccionado', '', '', '', '', '', '']]
 
     autoTable(doc, {
       startY: yPos,
       head: [
-        [
-          'Cliente',
-          'DNI',
-          'Prestado',
-          'Pagado',
-          'Pendiente',
-          'Prést. act.',
-          'Cuotas pend.',
-        ],
+        desglosePorPrestamo
+          ? [
+              'Cliente',
+              'DNI',
+              'Prestado',
+              'Pagado',
+              'Pendiente',
+              'Fecha pago cuota',
+              'Cuotas pend.',
+            ]
+          : [
+              'Cliente',
+              'DNI',
+              'Prestado',
+              'Pagado',
+              'Pendiente',
+              'Prést. act.',
+              'Cuotas pend.',
+            ],
       ],
       body: clientBody,
       theme: 'grid',

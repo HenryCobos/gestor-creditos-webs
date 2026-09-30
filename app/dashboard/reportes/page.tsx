@@ -32,6 +32,8 @@ import { useSubscriptionStore } from '@/lib/subscription-store'
 import { FeatureGateDialog } from '@/components/feature-gate-dialog'
 import { shouldBlockListLoader } from '@/lib/should-block-list-loader'
 import { getPageSessionCache, setPageSessionCache } from '@/lib/page-session-cache'
+import { buildDesglosePrestamosParaPdf } from '@/lib/reporte-general-desglose'
+import type { Cuota, Prestamo } from '@/lib/store'
 
 interface ReporteGeneral {
   totalPrestado: number
@@ -66,6 +68,8 @@ type ReportesCachePayload = {
   reporteGeneral: ReporteGeneral
   reportesClientes: ReporteCliente[]
   clientes: ClienteDetalle[]
+  prestamosFiltrados: Prestamo[]
+  cuotasFiltradas: Cuota[]
 }
 
 function reportesCacheKey(rango: string, desde: string, hasta: string) {
@@ -76,6 +80,8 @@ export default function ReportesPage() {
   const [reporteGeneral, setReporteGeneral] = useState<ReporteGeneral | null>(null)
   const [reportesClientes, setReportesClientes] = useState<ReporteCliente[]>([])
   const [clientes, setClientes] = useState<ClienteDetalle[]>([])
+  const [prestamosFiltrados, setPrestamosFiltrados] = useState<Prestamo[]>([])
+  const [cuotasFiltradasExport, setCuotasFiltradasExport] = useState<Cuota[]>([])
   const [clienteSeleccionado, setClienteSeleccionado] = useState<string>('')
   const [refreshing, setRefreshing] = useState(false)
   const [activeTab, setActiveTab] = useState('general')
@@ -158,6 +164,8 @@ export default function ReportesPage() {
       setReporteGeneral(cached.reporteGeneral)
       setReportesClientes(cached.reportesClientes)
       setClientes(cached.clientes)
+      setPrestamosFiltrados(cached.prestamosFiltrados ?? [])
+      setCuotasFiltradasExport(cached.cuotasFiltradas ?? [])
     }
     setRefreshing(true)
     try {
@@ -252,6 +260,9 @@ export default function ReportesPage() {
       const cuotasPendientes = cuotasFiltradas.filter(c => c.estado === 'pendiente').length
       const cuotasRetrasadas = cuotasFiltradas.filter(c => c.estado === 'retrasada').length
 
+      setPrestamosFiltrados(prestamos)
+      setCuotasFiltradasExport(cuotasFiltradas)
+
       setReporteGeneral({
         totalPrestado,
         totalRecuperado,
@@ -335,6 +346,8 @@ export default function ReportesPage() {
         reporteGeneral: generalSnapshot,
         reportesClientes: reportesArray,
         clientes: clientesData || [],
+        prestamosFiltrados: prestamos,
+        cuotasFiltradas: cuotasFiltradas,
       })
     }
     } finally {
@@ -351,24 +364,18 @@ export default function ReportesPage() {
     try {
       if (activeTab === 'general' && reporteGeneral) {
         // Exportar Reporte General
-        const desgloseClientes = [...reportesClientes]
-          .sort((a, b) => b.total_pendiente - a.total_pendiente)
-          .map((r) => ({
-            nombre: r.cliente_nombre,
-            dni: r.cliente_dni,
-            total_prestado: r.total_prestado,
-            total_pagado: r.total_pagado,
-            total_pendiente: r.total_pendiente,
-            prestamos_activos: r.prestamos_activos,
-            cuotas_pendientes: r.cuotas_pendientes,
-          }))
+        const desglosePrestamos = buildDesglosePrestamosParaPdf(
+          prestamosFiltrados,
+          cuotasFiltradasExport,
+          clientes.map((c) => ({ id: c.id, nombre: c.nombre, dni: c.dni }))
+        )
 
         generarReporteGeneral(
           {
             ...reporteGeneral,
             fecha: format(new Date(), 'dd/MM/yyyy'),
             periodoLabel: getPeriodoLabel(),
-            desgloseClientes,
+            desglosePrestamos,
           },
           config.companyName,
           config.currency
