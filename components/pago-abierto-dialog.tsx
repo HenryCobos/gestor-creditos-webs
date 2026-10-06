@@ -30,6 +30,11 @@ import {
   syncPeriodosAbiertos,
 } from '@/lib/open-loan-periods'
 import { getNombrePeriodoTasa } from '@/lib/loan-calculations'
+import {
+  aplicarPagoCuotaAbierta,
+  calcularInteresDebido,
+  totalInteresObligacionPeriodo,
+} from '@/lib/open-loan-pago-parcial'
 import type { Cuota, Prestamo } from '@/lib/store'
 import { format, parseISO } from 'date-fns'
 
@@ -116,9 +121,34 @@ export function PagoAbiertoDialog({
     )
   }, [capitalSaldo, periodoDesde, periodoHasta, configAbierto])
 
+  const cuotaSeleccionada = useMemo(
+    () =>
+      cuotaSeleccionadaId !== 'manual'
+        ? cuotasPendientes.find((c) => c.id === cuotaSeleccionadaId) ?? null
+        : null,
+    [cuotaSeleccionadaId, cuotasPendientes]
+  )
+
   const interesDebido = useMemo(
-    () => Number((interesCalculado + interesArrastre).toFixed(2)),
-    [interesCalculado, interesArrastre]
+    () =>
+      calcularInteresDebido({
+        interesCalculadoPeriodo: interesCalculado,
+        interesArrastrePrestamo: interesArrastre,
+        cuotaExistente: cuotaSeleccionada,
+        esCuotaManual: cuotaSeleccionadaId === 'manual',
+      }),
+    [interesCalculado, interesArrastre, cuotaSeleccionada, cuotaSeleccionadaId]
+  )
+
+  const totalInteresPeriodo = useMemo(
+    () =>
+      totalInteresObligacionPeriodo({
+        interesCalculadoPeriodo: interesCalculado,
+        interesArrastrePrestamo: interesArrastre,
+        cuotaExistente: cuotaSeleccionada,
+        esCuotaManual: cuotaSeleccionadaId === 'manual',
+      }),
+    [interesCalculado, interesArrastre, cuotaSeleccionada, cuotaSeleccionadaId]
   )
 
   useEffect(() => {
@@ -171,10 +201,24 @@ export function PagoAbiertoDialog({
     }
 
     const fechaPago = format(new Date(), 'yyyy-MM-dd')
-    const cuotaExistente =
-      cuotaSeleccionadaId !== 'manual'
-        ? cuotasPendientes.find((c) => c.id === cuotaSeleccionadaId)
-        : null
+    const cuotaExistente = cuotaSeleccionada
+
+    const pagoCalc = aplicarPagoCuotaAbierta({
+      interesCalculadoPeriodo: interesCalculado,
+      interesArrastrePrestamo: interesArrastre,
+      cuotaExistente: cuotaExistente
+        ? {
+            monto_cuota: Number(cuotaExistente.monto_cuota),
+            monto_pagado: Number(cuotaExistente.monto_pagado),
+            monto_capital: cuotaExistente.monto_capital,
+          }
+        : null,
+      pagadoInteresEstePago: pagadoInteres,
+      abonoCapital: abono,
+    })
+
+    const nuevoArrastreCalc = pagoCalc.interesPendientePrestamo
+    const estadoCuota = pagoCalc.cuotaPagada ? 'pagada' : 'pendiente'
 
     let cuotaId = cuotaExistente?.id
 
@@ -182,12 +226,12 @@ export function PagoAbiertoDialog({
       const { error: upErr } = await supabase
         .from('cuotas')
         .update({
-          monto_cuota: Number((interesDebido + abono).toFixed(2)),
-          monto_interes: pagadoInteres,
-          monto_capital: abono,
-          monto_pagado: totalPago,
+          monto_cuota: pagoCalc.montoCuota,
+          monto_interes: pagoCalc.montoInteresAcumulado,
+          monto_capital: pagoCalc.montoCapital,
+          monto_pagado: pagoCalc.montoPagadoNuevo,
           fecha_pago: fechaPago,
-          estado: pagadoInteres >= interesDebido - 0.001 ? 'pagada' : 'pendiente',
+          estado: estadoCuota,
           periodo_desde: periodoDesde,
           periodo_hasta: periodoHasta,
           fecha_vencimiento: `${periodoHasta}T12:00:00`,
@@ -220,15 +264,15 @@ export function PagoAbiertoDialog({
             user_id: user.id,
             prestamo_id: prestamo.id,
             numero_cuota: siguienteNumero,
-            monto_cuota: totalPago,
-            monto_interes: pagadoInteres,
-            monto_capital: abono,
-            monto_pagado: totalPago,
+            monto_cuota: pagoCalc.montoCuota,
+            monto_interes: pagoCalc.montoInteresAcumulado,
+            monto_capital: pagoCalc.montoCapital,
+            monto_pagado: pagoCalc.montoPagadoNuevo,
             fecha_vencimiento: `${periodoHasta}T12:00:00`,
             periodo_desde: periodoDesde,
             periodo_hasta: periodoHasta,
             fecha_pago: fechaPago,
-            estado: pagadoInteres >= interesDebido - 0.001 ? 'pagada' : 'pendiente',
+            estado: estadoCuota,
           },
         ])
         .select()
@@ -266,7 +310,7 @@ export function PagoAbiertoDialog({
     const prestamoActualizado = {
       ...prestamo,
       capital_saldo: Math.max(0, nuevoSaldo),
-      interes_pendiente: nuevoArrastre,
+      interes_pendiente: nuevoArrastreCalc,
       numero_cuotas: Math.max(prestamo.numero_cuotas, cuotaExistente?.numero_cuota ?? 0),
       estado: nuevoSaldo <= 0.01 ? ('pagado' as const) : ('activo' as const),
     }
@@ -276,7 +320,7 @@ export function PagoAbiertoDialog({
       .from('prestamos')
       .update({
         capital_saldo: Math.max(0, nuevoSaldo),
-        interes_pendiente: nuevoArrastre,
+        interes_pendiente: nuevoArrastreCalc,
         estado: nuevoSaldo <= 0.01 ? 'pagado' : 'activo',
         updated_at: new Date().toISOString(),
       })
@@ -300,7 +344,7 @@ export function PagoAbiertoDialog({
         })
       } else {
         prestamoDbOk = true
-        if (nuevoArrastre > 0) {
+        if (nuevoArrastreCalc > 0) {
           toast({
             title: 'Nota',
             description:
@@ -326,8 +370,8 @@ export function PagoAbiertoDialog({
       toast({
         title: 'Pago registrado',
         description:
-          nuevoArrastre > 0
-            ? `Interés pendiente arrastrado: ${formatCurrency(nuevoArrastre, config.currency)}`
+          nuevoArrastreCalc > 0
+            ? `Interés pendiente arrastrado: ${formatCurrency(nuevoArrastreCalc, config.currency)}`
             : nuevoSaldo <= 0.01
               ? 'Préstamo pagado completamente'
               : `Nuevo saldo de capital: ${formatCurrency(Math.max(0, nuevoSaldo), config.currency)}`,
@@ -437,7 +481,8 @@ export function PagoAbiertoDialog({
                 {formatCurrency(interesCalculado, config.currency)}
               </span>
             </div>
-            {interesArrastre > 0 && (
+            {interesArrastre > 0 &&
+              !(cuotaSeleccionada && (cuotaSeleccionada.monto_pagado ?? 0) > 0) && (
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">+ Arrastre</span>
                 <span>{formatCurrency(interesArrastre, config.currency)}</span>
@@ -447,6 +492,13 @@ export function PagoAbiertoDialog({
               <span>Total interés debido</span>
               <span>{formatCurrency(interesDebido, config.currency)}</span>
             </div>
+            {cuotaSeleccionada && (cuotaSeleccionada.monto_pagado ?? 0) > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Obligación del período: {formatCurrency(totalInteresPeriodo, config.currency)} (
+                ya pagado{' '}
+                {formatCurrency(Number(cuotaSeleccionada.monto_pagado), config.currency)})
+              </p>
+            )}
           </div>
 
           <div className="space-y-1">
