@@ -2,10 +2,84 @@
  * Lógica de pagos parciales al interés en préstamos abiertos (misma cuota / período).
  */
 
+import {
+  calcularInteresAbiertoPeriodo,
+  type ConfigAbierto,
+} from './open-loan-periods'
+
 export interface CuotaAbiertaSnapshot {
   monto_cuota: number
   monto_pagado: number
   monto_capital?: number | null
+  monto_interes?: number | null
+}
+
+export interface ResolverInteresPeriodoAbiertoInput {
+  capitalSaldo: number
+  periodoDesde: Date
+  periodoHasta: Date
+  config: ConfigAbierto
+  interesArrastrePrestamo: number
+  cuotaExistente: CuotaAbiertaSnapshot | null
+  esCuotaManual: boolean
+}
+
+export interface ResolverInteresPeriodoAbiertoResult {
+  interesCalculadoPeriodo: number
+  interesArrastrePrestamo: number
+}
+
+/** Interés del período para UI/pago: respeta monto en cuota pendiente; dinámico si manual o pago parcial. */
+export function resolverInteresCalculadoPeriodoAbierto(
+  input: ResolverInteresPeriodoAbiertoInput
+): ResolverInteresPeriodoAbiertoResult {
+  const {
+    capitalSaldo,
+    periodoDesde,
+    periodoHasta,
+    config,
+    interesArrastrePrestamo,
+    cuotaExistente,
+    esCuotaManual,
+  } = input
+
+  const calcDinamico = (): ResolverInteresPeriodoAbiertoResult => ({
+    interesCalculadoPeriodo: calcularInteresAbiertoPeriodo(
+      capitalSaldo,
+      periodoDesde,
+      periodoHasta,
+      config
+    ),
+    interesArrastrePrestamo,
+  })
+
+  if (esCuotaManual || !cuotaExistente) {
+    return calcDinamico()
+  }
+
+  const pagadoPrevio = toNum(cuotaExistente.monto_pagado)
+  if (pagadoPrevio > 0) {
+    return calcDinamico()
+  }
+
+  const capitalEnCuota = toNum(cuotaExistente.monto_capital)
+  const montoInteresRaw = cuotaExistente.monto_interes
+  const montoInteres =
+    montoInteresRaw != null ? toNum(montoInteresRaw) : null
+  const obligacion = round2(
+    montoInteres != null && montoInteres > 0
+      ? montoInteres
+      : toNum(cuotaExistente.monto_cuota) - capitalEnCuota
+  )
+
+  if (obligacion > 0) {
+    return {
+      interesCalculadoPeriodo: obligacion,
+      interesArrastrePrestamo: 0,
+    }
+  }
+
+  return calcDinamico()
 }
 
 export interface CalcularInteresDebidoInput {

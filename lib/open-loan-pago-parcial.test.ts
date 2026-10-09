@@ -1,11 +1,24 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
+import { parseISO } from 'date-fns'
 import {
   aplicarPagoCuotaAbierta,
   calcularInteresDebido,
+  resolverInteresCalculadoPeriodoAbierto,
   simularPagosParcialesInteres,
   totalInteresObligacionPeriodo,
 } from './open-loan-pago-parcial.ts'
+import type { ConfigAbierto } from './open-loan-periods.ts'
+
+const configMensual10: ConfigAbierto = {
+  frecuenciaPago: 'mensual',
+  frecuenciaCobroDias: null,
+  periodoTasa: 'mensual',
+  periodoTasaDias: null,
+  interesPorcentaje: 10,
+  excluirDomingos: false,
+  excluirFinesSemana: false,
+}
 
 describe('calcularInteresDebido', () => {
   it('nueva cuota: interés período + arrastre', () => {
@@ -67,6 +80,51 @@ describe('simularPagosParcialesInteres (caso jhordy 1000 al 15%)', () => {
     assert.equal(r.montoPagadoNuevo, 350)
     assert.equal(r.montoCapital, 200)
     assert.equal(r.interesPendientePrestamo, 0)
+  })
+})
+
+describe('resolverInteresCalculadoPeriodoAbierto (cuota preservada vs capital vigente)', () => {
+  const desde = parseISO('2026-10-07')
+  const hasta = parseISO('2026-11-06')
+
+  it('cuota pendiente 100 con capital 800 → interés 100, sin arrastre extra', () => {
+    const r = resolverInteresCalculadoPeriodoAbierto({
+      capitalSaldo: 800,
+      periodoDesde: desde,
+      periodoHasta: hasta,
+      config: configMensual10,
+      interesArrastrePrestamo: 50,
+      cuotaExistente: {
+        monto_cuota: 100,
+        monto_interes: 100,
+        monto_pagado: 0,
+        monto_capital: 0,
+      },
+      esCuotaManual: false,
+    })
+    assert.equal(r.interesCalculadoPeriodo, 100)
+    assert.equal(r.interesArrastrePrestamo, 0)
+    const debido = calcularInteresDebido({
+      interesCalculadoPeriodo: r.interesCalculadoPeriodo,
+      interesArrastrePrestamo: r.interesArrastrePrestamo,
+      cuotaExistente: { monto_cuota: 100, monto_pagado: 0, monto_capital: 0 },
+      esCuotaManual: false,
+    })
+    assert.equal(debido, 100)
+  })
+
+  it('período manual: capital 800 → interés 80 + arrastre', () => {
+    const r = resolverInteresCalculadoPeriodoAbierto({
+      capitalSaldo: 800,
+      periodoDesde: desde,
+      periodoHasta: hasta,
+      config: configMensual10,
+      interesArrastrePrestamo: 20,
+      cuotaExistente: null,
+      esCuotaManual: true,
+    })
+    assert.equal(r.interesCalculadoPeriodo, 80)
+    assert.equal(r.interesArrastrePrestamo, 20)
   })
 })
 

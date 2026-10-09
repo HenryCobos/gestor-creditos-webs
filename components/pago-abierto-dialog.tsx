@@ -23,7 +23,6 @@ import { useToast } from '@/components/ui/use-toast'
 import { formatCurrency } from '@/lib/utils'
 import { useConfigStore } from '@/lib/config-store'
 import {
-  calcularInteresAbiertoPeriodo,
   formatRangoPeriodo,
   getConfigAbierto,
   sugerirRangoProximoPeriodo,
@@ -33,6 +32,7 @@ import { getNombrePeriodoTasa } from '@/lib/loan-calculations'
 import {
   aplicarPagoCuotaAbierta,
   calcularInteresDebido,
+  resolverInteresCalculadoPeriodoAbierto,
   totalInteresObligacionPeriodo,
 } from '@/lib/open-loan-pago-parcial'
 import type { Cuota, Prestamo } from '@/lib/store'
@@ -109,18 +109,6 @@ export function PagoAbiertoDialog({
     void load()
   }, [open, prestamo.id, prestamo, supabase])
 
-  const interesCalculado = useMemo(() => {
-    if (!periodoDesde || !periodoHasta) return 0
-    const desde = parseISO(periodoDesde)
-    const hasta = parseISO(periodoHasta)
-    return calcularInteresAbiertoPeriodo(
-      capitalSaldo,
-      desde,
-      hasta,
-      configAbierto
-    )
-  }, [capitalSaldo, periodoDesde, periodoHasta, configAbierto])
-
   const cuotaSeleccionada = useMemo(
     () =>
       cuotaSeleccionadaId !== 'manual'
@@ -129,26 +117,70 @@ export function PagoAbiertoDialog({
     [cuotaSeleccionadaId, cuotasPendientes]
   )
 
+  const interesResuelto = useMemo(() => {
+    if (!periodoDesde || !periodoHasta) {
+      return { interesCalculadoPeriodo: 0, interesArrastrePrestamo: interesArrastre }
+    }
+    const cuotaSnap = cuotaSeleccionada
+      ? {
+          monto_cuota: Number(cuotaSeleccionada.monto_cuota),
+          monto_pagado: Number(cuotaSeleccionada.monto_pagado ?? 0),
+          monto_capital: cuotaSeleccionada.monto_capital,
+          monto_interes: cuotaSeleccionada.monto_interes,
+        }
+      : null
+    return resolverInteresCalculadoPeriodoAbierto({
+      capitalSaldo,
+      periodoDesde: parseISO(periodoDesde),
+      periodoHasta: parseISO(periodoHasta),
+      config: configAbierto,
+      interesArrastrePrestamo: interesArrastre,
+      cuotaExistente: cuotaSnap,
+      esCuotaManual: cuotaSeleccionadaId === 'manual',
+    })
+  }, [
+    capitalSaldo,
+    periodoDesde,
+    periodoHasta,
+    configAbierto,
+    interesArrastre,
+    cuotaSeleccionada,
+    cuotaSeleccionadaId,
+  ])
+
+  const interesCalculado = interesResuelto.interesCalculadoPeriodo
+  const interesArrastreEfectivo = interesResuelto.interesArrastrePrestamo
+
   const interesDebido = useMemo(
     () =>
       calcularInteresDebido({
         interesCalculadoPeriodo: interesCalculado,
-        interesArrastrePrestamo: interesArrastre,
+        interesArrastrePrestamo: interesArrastreEfectivo,
         cuotaExistente: cuotaSeleccionada,
         esCuotaManual: cuotaSeleccionadaId === 'manual',
       }),
-    [interesCalculado, interesArrastre, cuotaSeleccionada, cuotaSeleccionadaId]
+    [
+      interesCalculado,
+      interesArrastreEfectivo,
+      cuotaSeleccionada,
+      cuotaSeleccionadaId,
+    ]
   )
 
   const totalInteresPeriodo = useMemo(
     () =>
       totalInteresObligacionPeriodo({
         interesCalculadoPeriodo: interesCalculado,
-        interesArrastrePrestamo: interesArrastre,
+        interesArrastrePrestamo: interesArrastreEfectivo,
         cuotaExistente: cuotaSeleccionada,
         esCuotaManual: cuotaSeleccionadaId === 'manual',
       }),
-    [interesCalculado, interesArrastre, cuotaSeleccionada, cuotaSeleccionadaId]
+    [
+      interesCalculado,
+      interesArrastreEfectivo,
+      cuotaSeleccionada,
+      cuotaSeleccionadaId,
+    ]
   )
 
   useEffect(() => {
@@ -205,7 +237,7 @@ export function PagoAbiertoDialog({
 
     const pagoCalc = aplicarPagoCuotaAbierta({
       interesCalculadoPeriodo: interesCalculado,
-      interesArrastrePrestamo: interesArrastre,
+      interesArrastrePrestamo: interesArrastreEfectivo,
       cuotaExistente: cuotaExistente
         ? {
             monto_cuota: Number(cuotaExistente.monto_cuota),
@@ -481,11 +513,11 @@ export function PagoAbiertoDialog({
                 {formatCurrency(interesCalculado, config.currency)}
               </span>
             </div>
-            {interesArrastre > 0 &&
+            {interesArrastreEfectivo > 0 &&
               !(cuotaSeleccionada && (cuotaSeleccionada.monto_pagado ?? 0) > 0) && (
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">+ Arrastre</span>
-                <span>{formatCurrency(interesArrastre, config.currency)}</span>
+                <span>{formatCurrency(interesArrastreEfectivo, config.currency)}</span>
               </div>
             )}
             <div className="flex justify-between text-sm font-semibold border-t border-blue-200 dark:border-blue-800 pt-1">
