@@ -245,12 +245,18 @@ export interface RepararCuotasPendientesResult {
   omitidas: number
 }
 
+export interface RepararCuotasOpciones {
+  /** ISO date: cuotas con periodo_desde <= esta fecha conservan su interés (abono a capital). */
+  fechaCortePreservarInteres?: string
+}
+
 /** Corrige rangos/montos de cuotas pendientes sin pago (préstamo abierto). No toca pagadas ni crea pagos. */
 export async function repararCuotasPendientesAbiertas(
   supabase: SupabaseClient,
   prestamoId: string,
   prestamo: Prestamo,
-  interesArrastre: number = 0
+  interesArrastre: number = 0,
+  opciones?: RepararCuotasOpciones
 ): Promise<RepararCuotasPendientesResult> {
   if (prestamo.tipo_prestamo !== 'abierto' || prestamo.estado === 'pagado') {
     return { actualizadas: 0, omitidas: 0 }
@@ -281,6 +287,21 @@ export async function repararCuotasPendientesAbiertas(
   for (const c of cuotasDb) {
     const pagado = Number(c.monto_pagado ?? 0)
     if (pagado > 0) {
+      omitidas++
+      continue
+    }
+
+    const periodoDesdeCuota =
+      c.periodo_desde != null && c.periodo_desde !== ''
+        ? c.periodo_desde.includes('T')
+          ? c.periodo_desde.split('T')[0]
+          : c.periodo_desde
+        : null
+    if (
+      opciones?.fechaCortePreservarInteres &&
+      periodoDesdeCuota &&
+      periodoDesdeCuota <= opciones.fechaCortePreservarInteres.split('T')[0]
+    ) {
       omitidas++
       continue
     }
@@ -359,7 +380,8 @@ export async function syncPeriodosAbiertos(
   prestamoId: string,
   prestamo: Prestamo,
   userId: string,
-  modo: SyncModoAbierto
+  modo: SyncModoAbierto,
+  opcionesReparar?: RepararCuotasOpciones
 ): Promise<SyncPeriodosResult> {
   if (prestamo.tipo_prestamo !== 'abierto' || prestamo.estado === 'pagado') {
     return { insertadas: 0, omitidas: 0 }
@@ -418,7 +440,8 @@ export async function syncPeriodosAbiertos(
     supabase,
     prestamoId,
     prestamoEfectivo,
-    interesArrastre
+    interesArrastre,
+    opcionesReparar
   )
 
   const { data: cuotasTrasReparo } = await supabase

@@ -46,6 +46,7 @@ import { generarContratoPrestamo, generarReciboPagoConEvolucion } from '@/lib/pd
 import { generarReciboImagenSimple } from '@/lib/receipt-image-generator'
 import { Checkbox } from '@/components/ui/checkbox'
 import { AbonoCapitalDialog } from '@/components/abono-capital-dialog'
+import { AbonoCapitalAbiertoDialog } from '@/components/abono-capital-abierto-dialog'
 import { RenovarEmpenoDialog } from '@/components/renovar-empeno-dialog'
 import { PagoAbiertoDialog } from '@/components/pago-abierto-dialog'
 import { getCuotasSegunRol } from '@/lib/queries-con-roles'
@@ -100,6 +101,7 @@ export function PrestamoDetailDialog({
   const [abonoCapitalDialogOpen, setAbonoCapitalDialogOpen] = useState(false)
   const [renovarEmpenoDialogOpen, setRenovarEmpenoDialogOpen] = useState(false)
   const [pagoAbiertoDialogOpen, setPagoAbiertoDialogOpen] = useState(false)
+  const [abonoCapitalAbiertoDialogOpen, setAbonoCapitalAbiertoDialogOpen] = useState(false)
   const [prestamoVigente, setPrestamoVigente] = useState<Prestamo | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const { toast } = useToast()
@@ -155,6 +157,9 @@ export function PrestamoDetailDialog({
       loadUserRole()
       if (prestamo.tipo_prestamo === 'empeño' || prestamo.tipo_prestamo === 'solo_intereses') {
         loadGarantias()
+        loadAbonosCapital()
+      }
+      if (prestamo.tipo_prestamo === 'abierto') {
         loadAbonosCapital()
       }
     }
@@ -526,8 +531,9 @@ export function PrestamoDetailDialog({
     }
   }
 
-  const handleAbonoSuccess = () => {
-    loadCuotas()
+  const handleAbonoSuccess = async () => {
+    await reloadPrestamoFromDb()
+    await loadCuotas()
     loadAbonosCapital()
     if (prestamo && prestamo.tipo_prestamo === 'empeño') {
       loadGarantias()
@@ -588,15 +594,26 @@ export function PrestamoDetailDialog({
             )}
             {/* Registrar Pago del Período (solo para préstamos abiertos activos) */}
             {prestamo.tipo_prestamo === 'abierto' && prestamo.estado === 'activo' && (
-              <Button
-                variant="outline"
-                onClick={() => setPagoAbiertoDialogOpen(true)}
-                className="gap-2 text-amber-700 border-amber-300 hover:bg-amber-50 dark:text-amber-200 dark:border-amber-700 dark:hover:bg-amber-950/40"
-              >
-                <Unlock className="h-4 w-4" />
-                <span className="hidden sm:inline">Registrar Pago del Período</span>
-                <span className="sm:hidden">Pagar</span>
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setAbonoCapitalAbiertoDialogOpen(true)}
+                  className="gap-2 text-green-700 border-green-300 hover:bg-green-50 dark:text-green-200 dark:border-green-700 dark:hover:bg-green-950/40"
+                >
+                  <TrendingDown className="h-4 w-4" />
+                  <span className="hidden sm:inline">Abono a capital</span>
+                  <span className="sm:hidden">Abono</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setPagoAbiertoDialogOpen(true)}
+                  className="gap-2 text-amber-700 border-amber-300 hover:bg-amber-50 dark:text-amber-200 dark:border-amber-700 dark:hover:bg-amber-950/40"
+                >
+                  <Unlock className="h-4 w-4" />
+                  <span className="hidden sm:inline">Registrar Pago del Período</span>
+                  <span className="sm:hidden">Pagar</span>
+                </Button>
+              </>
             )}
             {/* Generar Contrato PDF — siempre visible */}
             <Button
@@ -742,6 +759,39 @@ export function PrestamoDetailDialog({
                     </div>
                   )}
                 </div>
+                {abonosCapital.length > 0 && (
+                  <div className="pt-2 border-t border-amber-200 dark:border-amber-800/50">
+                    <p className="text-sm font-medium text-amber-900 dark:text-amber-100 mb-2">
+                      Abonos a capital registrados
+                    </p>
+                    <div className="rounded-md border border-amber-200/80 dark:border-amber-800/50 overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-xs">Fecha</TableHead>
+                            <TableHead className="text-xs text-right">Abono</TableHead>
+                            <TableHead className="text-xs text-right">Saldo después</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {abonosCapital.map((abono) => (
+                            <TableRow key={abono.id}>
+                              <TableCell className="text-xs py-2">
+                                {formatDate(abono.fecha_abono ?? abono.created_at)}
+                              </TableCell>
+                              <TableCell className="text-xs py-2 text-right font-medium text-green-700 dark:text-green-300">
+                                {formatCurrency(Number(abono.monto_abonado), config.currency)}
+                              </TableCell>
+                              <TableCell className="text-xs py-2 text-right">
+                                {formatCurrency(Number(abono.saldo_nuevo), config.currency)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1150,16 +1200,24 @@ export function PrestamoDetailDialog({
 
       {/* Dialog para pagos de período en préstamos abiertos */}
       {prestamo.tipo_prestamo === 'abierto' && (
-        <PagoAbiertoDialog
-          prestamo={prestamoActivo}
-          open={pagoAbiertoDialogOpen}
-          onOpenChange={setPagoAbiertoDialogOpen}
-          onSuccess={async () => {
-            await reloadPrestamoFromDb()
-            await loadCuotas()
-            if (onUpdate) onUpdate()
-          }}
-        />
+        <>
+          <AbonoCapitalAbiertoDialog
+            prestamo={prestamoActivo}
+            open={abonoCapitalAbiertoDialogOpen}
+            onOpenChange={setAbonoCapitalAbiertoDialogOpen}
+            onSuccess={handleAbonoSuccess}
+          />
+          <PagoAbiertoDialog
+            prestamo={prestamoActivo}
+            open={pagoAbiertoDialogOpen}
+            onOpenChange={setPagoAbiertoDialogOpen}
+            onSuccess={async () => {
+              await reloadPrestamoFromDb()
+              await loadCuotas()
+              if (onUpdate) onUpdate()
+            }}
+          />
+        </>
       )}
     </>
   )
