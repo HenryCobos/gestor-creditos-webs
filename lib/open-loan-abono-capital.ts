@@ -1,6 +1,7 @@
 import { format, parseISO, startOfDay } from 'date-fns'
 import {
   calcularInteresAbiertoPeriodo,
+  debeOmitirRecalculoInteresCuota,
   getConfigAbierto,
   periodoPorNumero,
 } from './open-loan-periods'
@@ -68,8 +69,7 @@ export function debePreservarInteresCuotaPorAbono(
   periodoDesde: string | null | undefined,
   fechaCortePreservarInteres: string
 ): boolean {
-  if (!periodoDesde) return false
-  return isoDateOnly(periodoDesde) <= isoDateOnly(fechaCortePreservarInteres)
+  return debeOmitirRecalculoInteresCuota(periodoDesde, fechaCortePreservarInteres)
 }
 
 export interface CuotaPeriodoRef {

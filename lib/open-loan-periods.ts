@@ -246,8 +246,21 @@ export interface RepararCuotasPendientesResult {
 }
 
 export interface RepararCuotasOpciones {
-  /** ISO date: cuotas con periodo_desde <= esta fecha conservan su interés (abono a capital). */
+  /** ISO date: cuotas con periodo_desde <= esta fecha conservan su interés (abono a capital). Si no se pasa, se usa hoy. */
   fechaCortePreservarInteres?: string
+}
+
+export function isoDateOnlyCuota(value: string): string {
+  return value.includes('T') ? value.split('T')[0]! : value
+}
+
+/** true = no recalcular interés (período ya iniciado respecto al corte). */
+export function debeOmitirRecalculoInteresCuota(
+  periodoDesde: string | null | undefined,
+  fechaCorteEfectiva: string
+): boolean {
+  if (!periodoDesde) return false
+  return isoDateOnlyCuota(periodoDesde) <= isoDateOnlyCuota(fechaCorteEfectiva)
 }
 
 /** Corrige rangos/montos de cuotas pendientes sin pago (préstamo abierto). No toca pagadas ni crea pagos. */
@@ -283,6 +296,11 @@ export async function repararCuotasPendientesAbiertas(
   let actualizadas = 0
   let omitidas = 0
   let arrastreAplicado = false
+  const fechaCorteEfectiva =
+    opciones?.fechaCortePreservarInteres != null &&
+    opciones.fechaCortePreservarInteres !== ''
+      ? isoDateOnlyCuota(opciones.fechaCortePreservarInteres)
+      : format(startOfDay(new Date()), 'yyyy-MM-dd')
 
   for (const c of cuotasDb) {
     const pagado = Number(c.monto_pagado ?? 0)
@@ -291,23 +309,17 @@ export async function repararCuotasPendientesAbiertas(
       continue
     }
 
+    const p = periodoPorNumero(fechaInicio, c.numero_cuota, config)
+    const keyDesde = fechaToIsoDate(p.desde)
     const periodoDesdeCuota =
       c.periodo_desde != null && c.periodo_desde !== ''
-        ? c.periodo_desde.includes('T')
-          ? c.periodo_desde.split('T')[0]
-          : c.periodo_desde
+        ? isoDateOnlyCuota(c.periodo_desde)
         : null
-    if (
-      opciones?.fechaCortePreservarInteres &&
-      periodoDesdeCuota &&
-      periodoDesdeCuota <= opciones.fechaCortePreservarInteres.split('T')[0]
-    ) {
+    const desdeParaPreservar = periodoDesdeCuota ?? keyDesde
+    if (debeOmitirRecalculoInteresCuota(desdeParaPreservar, fechaCorteEfectiva)) {
       omitidas++
       continue
     }
-
-    const p = periodoPorNumero(fechaInicio, c.numero_cuota, config)
-    const keyDesde = fechaToIsoDate(p.desde)
     const keyHasta = fechaToIsoDate(p.hasta)
     const interesEst = calcularInteresAbiertoPeriodo(
       capitalSaldo,

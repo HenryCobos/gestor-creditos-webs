@@ -7,6 +7,7 @@ import {
   previewInteresProximoPeriodoFuturo,
   validarAbonoCapitalAbierto,
 } from './open-loan-abono-capital.ts'
+import { debeOmitirRecalculoInteresCuota } from './open-loan-periods.ts'
 import type { Prestamo } from './store.ts'
 
 const prestamoBase: Pick<
@@ -58,6 +59,22 @@ describe('calcularAbonoCapitalAbierto', () => {
     const r = calcularAbonoCapitalAbierto(300, 300)
     assert.equal(r.saldoNuevo, 0)
     assert.equal(r.prestamoPagado, true)
+  })
+})
+
+describe('debeOmitirRecalculoInteresCuota (caso abono en período en curso)', () => {
+  it('cuota 3 Sep14–Oct13: abono Oct9 preserva interés (50, no 40)', () => {
+    assert.equal(
+      debeOmitirRecalculoInteresCuota('2026-09-14', '2026-10-09'),
+      true
+    )
+  })
+
+  it('período futuro Oct14+: permite recalcular tras abono Oct9', () => {
+    assert.equal(
+      debeOmitirRecalculoInteresCuota('2026-10-14', '2026-10-09'),
+      false
+    )
   })
 })
 
