@@ -274,7 +274,7 @@ export function LimitesOrganizacionCard({
           </div>
           {urgenciaPrestamos === 'low' && pctPrestamos >= 50 && upgradeOffer && planSlug !== 'enterprise' && (
             <p className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
-              {upgradeOffer.label} incluye más préstamos activos simultáneos.
+              {upgradeOffer.label} incluye mayor cupo de préstamos totales.
             </p>
           )}
         </div>

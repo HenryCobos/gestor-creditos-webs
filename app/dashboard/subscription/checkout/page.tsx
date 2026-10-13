@@ -173,7 +173,7 @@ function CheckoutContent() {
                     <>
                       <li className="flex items-start gap-2 text-sm text-gray-600">
                         <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
-                        <span>50 clientes y 50 préstamos activos</span>
+                        <span>50 clientes y 50 préstamos totales</span>
                       </li>
                       <li className="flex items-start gap-2 text-sm text-gray-600">
                         <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
@@ -204,7 +204,7 @@ function CheckoutContent() {
                       </li>
                       <li className="flex items-start gap-2 text-sm text-gray-600">
                         <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
-                        <span>API de integración incluida</span>
+                        <span>Recordatorios por email y WhatsApp</span>
                       </li>
                     </>
                   )}

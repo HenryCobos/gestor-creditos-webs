@@ -65,7 +65,7 @@ function getUpgradeTarget(planSlug: string): UpgradeTarget {
         beneficios: [
           'Usuarios ilimitados',
           'Clientes y préstamos ilimitados',
-          'Marca blanca y API completa',
+          'Capacitación personalizada y funciones a medida',
           'Soporte dedicado 24/7',
         ],
       }

@@ -47,7 +47,7 @@ const FEATURE_CONFIG: Record<
       'Contratos PDF sin marca de agua',
       'Comprobantes de pago profesionales',
       'Reportes exportables para contabilidad',
-      '50 clientes y 50 préstamos activos',
+      '50 clientes y 50 préstamos totales',
     ],
     plan: 'Pro',
     price: '$19/mes',
@@ -72,14 +72,14 @@ const FEATURE_CONFIG: Record<
   },
   api: {
     icon: '⚡',
-    title: 'API de integración — Plan Enterprise',
+    title: 'Plan Enterprise — capacidad ilimitada',
     description:
-      'Conecta el gestor de créditos con tus otros sistemas mediante API. Disponible en el Plan Enterprise.',
+      'Escala tu operación con clientes, préstamos y usuarios ilimitados, soporte premium y acompañamiento personalizado.',
     benefits: [
-      'Acceso completo a la API REST',
       'Clientes y préstamos ilimitados',
-      'Soporte dedicado 24/7',
-      'Marca blanca disponible',
+      'Usuarios ilimitados en tu equipo',
+      'Soporte premium 24/7',
+      'Capacitación personalizada',
     ],
     plan: 'Enterprise',
     price: '$179/mes',

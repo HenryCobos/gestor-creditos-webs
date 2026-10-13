@@ -41,7 +41,7 @@ export function LimiteAlcanzadoDialog({
     },
     prestamos: {
       titulo: 'Límite de Préstamos Alcanzado',
-      descripcion: 'Has llegado al máximo de préstamos activos de tu plan actual.',
+      descripcion: 'Has llegado al máximo de préstamos totales de tu plan actual.',
       icono: '📋',
       planPro: '50 préstamos',
       valor: 'Cada préstamo adicional genera retorno inmediato',
@@ -106,7 +106,7 @@ export function LimiteAlcanzadoDialog({
 
           <div className="space-y-1.5">
             {[
-              '50 clientes y 50 préstamos activos',
+              '50 clientes y 50 préstamos totales',
               'PDFs sin marca de agua',
               'Soporte prioritario por email',
               'Reportes avanzados e historial 90 días',

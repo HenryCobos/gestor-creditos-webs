@@ -131,11 +131,11 @@ export default function BienvenidaPage() {
             <ul className="space-y-2">
               <li className="flex items-center gap-2 text-green-800">
                 <CheckCircle2 className="w-5 h-5 text-green-600" />
-                <span>Hasta 5 clientes</span>
+                <span>Hasta 5 clientes totales</span>
               </li>
               <li className="flex items-center gap-2 text-green-800">
                 <CheckCircle2 className="w-5 h-5 text-green-600" />
-                <span>Hasta 5 préstamos activos</span>
+                <span>Hasta 5 préstamos totales</span>
               </li>
               <li className="flex items-center gap-2 text-green-800">
                 <CheckCircle2 className="w-5 h-5 text-green-600" />
