@@ -118,12 +118,13 @@ export async function POST(req: Request) {
     
     // Si no tenemos el ID aún, buscar por email
     if (!targetUserId && userEmail) {
-      console.log('🔍 Buscando usuario por email:', userEmail)
+      const normalizedEmail = userEmail.trim().toLowerCase()
+      console.log('🔍 Buscando usuario por email:', normalizedEmail)
       const { data: userData, error: userError } = await supabase
         .from('profiles')
         .select('id, email')
-        .eq('email', userEmail)
-        .single()
+        .ilike('email', normalizedEmail)
+        .maybeSingle()
       
       if (userError) {
         console.error('❌ Error buscando usuario por email:', userError)
@@ -196,6 +197,15 @@ export async function POST(req: Request) {
           // $179 = Plan Enterprise normal
           planInfo = { slug: 'enterprise', period: 'monthly' }
           console.log('✅ Plan identificado por monto: Enterprise')
+        } else if (amount >= 180 && amount <= 200) {
+          planInfo = { slug: 'pro', period: 'yearly' }
+          console.log('✅ Plan identificado por monto: Profesional anual')
+        } else if (amount >= 470 && amount <= 510) {
+          planInfo = { slug: 'business', period: 'yearly' }
+          console.log('✅ Plan identificado por monto: Business anual')
+        } else if (amount >= 1750 && amount <= 1820) {
+          planInfo = { slug: 'enterprise', period: 'yearly' }
+          console.log('✅ Plan identificado por monto: Enterprise anual')
         }
       }
 
@@ -251,6 +261,43 @@ export async function POST(req: Request) {
       }
       
       console.log(`✅ Usuario ${targetUserId} actualizado a plan ${planInfo.slug} (${planInfo.period})`)
+
+      const { data: profileOrg } = await supabase
+        .from('profiles')
+        .select('organization_id')
+        .eq('id', targetUserId)
+        .single()
+
+      const orgIds = new Set<string>()
+      if (profileOrg?.organization_id) {
+        orgIds.add(profileOrg.organization_id)
+      }
+      const { data: ownedOrgs } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('owner_id', targetUserId)
+      for (const row of ownedOrgs ?? []) {
+        orgIds.add(row.id)
+      }
+
+      for (const orgId of orgIds) {
+        const { error: orgUpdateError } = await supabase
+          .from('organizations')
+          .update({
+            plan_id: planDb.id,
+            subscription_status: 'active',
+            subscription_start_date: startDate.toISOString(),
+            subscription_end_date: endDate.toISOString(),
+            updated_at: startDate.toISOString(),
+          })
+          .eq('id', orgId)
+
+        if (orgUpdateError) {
+          console.error(`🔴 Error actualizando organización ${orgId}:`, orgUpdateError)
+        } else {
+          console.log(`✅ Organización ${orgId} actualizada a plan ${planInfo.slug}`)
+        }
+      }
       
       // Registrar el pago en el historial
       const amount = data.purchase?.price?.value || data.purchase?.original_offer_price?.value || 0
@@ -309,14 +356,45 @@ export async function POST(req: Request) {
         .single()
 
       if (freePlan) {
+        const cancelledAt = new Date().toISOString()
         await supabase
           .from('profiles')
           .update({
             plan_id: freePlan.id,
             subscription_status: 'cancelled',
-            subscription_end_date: new Date().toISOString()
+            subscription_end_date: cancelledAt
           })
           .eq('id', targetUserId)
+
+        const { data: profileOrg } = await supabase
+          .from('profiles')
+          .select('organization_id')
+          .eq('id', targetUserId)
+          .single()
+
+        const orgIds = new Set<string>()
+        if (profileOrg?.organization_id) {
+          orgIds.add(profileOrg.organization_id)
+        }
+        const { data: ownedOrgs } = await supabase
+          .from('organizations')
+          .select('id')
+          .eq('owner_id', targetUserId)
+        for (const row of ownedOrgs ?? []) {
+          orgIds.add(row.id)
+        }
+
+        for (const orgId of orgIds) {
+          await supabase
+            .from('organizations')
+            .update({
+              plan_id: freePlan.id,
+              subscription_status: 'cancelled',
+              subscription_end_date: cancelledAt,
+              updated_at: cancelledAt,
+            })
+            .eq('id', orgId)
+        }
           
         console.log(`🚫 Usuario ${targetUserId} devuelto a plan FREE por cancelación/reembolso`)
       }
