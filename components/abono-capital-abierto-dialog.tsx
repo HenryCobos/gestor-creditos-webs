@@ -33,6 +33,7 @@ import {
   validarAbonoCapitalAbierto,
   type CuotaPeriodoRef,
 } from '@/lib/open-loan-abono-capital'
+import { resolverEstadoPrestamoAbierto } from '@/lib/open-loan-estado'
 import type { Prestamo } from '@/lib/store'
 
 interface AbonoCapitalAbiertoDialogProps {
@@ -149,11 +150,24 @@ export function AbonoCapitalAbiertoDialog({
 
       if (abonoError) throw abonoError
 
+      const { data: cuotasEstado, error: cuotasErr } = await supabase
+        .from('cuotas')
+        .select('estado')
+        .eq('prestamo_id', prestamo.id)
+
+      if (cuotasErr) throw cuotasErr
+
+      const nuevoEstado = resolverEstadoPrestamoAbierto({
+        capitalSaldo: saldoNuevo,
+        interesPendiente: prestamo.interes_pendiente,
+        cuotas: cuotasEstado ?? [],
+      })
+
       const { error: prestamoError } = await supabase
         .from('prestamos')
         .update({
           capital_saldo: saldoNuevo,
-          estado: prestamoPagado ? 'pagado' : 'activo',
+          estado: nuevoEstado,
           updated_at: new Date().toISOString(),
         })
         .eq('id', prestamo.id)
@@ -163,10 +177,10 @@ export function AbonoCapitalAbiertoDialog({
       const prestamoActualizado: Prestamo = {
         ...prestamo,
         capital_saldo: saldoNuevo,
-        estado: prestamoPagado ? 'pagado' : 'activo',
+        estado: nuevoEstado,
       }
 
-      if (!prestamoPagado) {
+      if (nuevoEstado === 'activo') {
         const modo = prestamo.periodo_tasa != null ? 'nuevo' : 'legacy_forward'
         await syncPeriodosAbiertos(
           supabase,
@@ -180,9 +194,12 @@ export function AbonoCapitalAbiertoDialog({
 
       toast({
         title: 'Abono registrado',
-        description: prestamoPagado
-          ? `Capital liquidado. Préstamo marcado como pagado.`
-          : `Nuevo saldo de capital: ${formatCurrency(saldoNuevo, config.currency)}`,
+        description:
+          nuevoEstado === 'pagado'
+            ? 'Préstamo pagado completamente.'
+            : prestamoPagado
+              ? 'Capital liquidado. Quedan cuotas de interés por cobrar.'
+              : `Nuevo saldo de capital: ${formatCurrency(saldoNuevo, config.currency)}`,
       })
 
       onSuccess()

@@ -5,6 +5,7 @@ import {
   parseCascadaDesdeNotas,
   roundMoney,
 } from '@/lib/aplicar-pago-cuotas'
+import { resolverEstadoPrestamoAbierto } from '@/lib/open-loan-estado'
 import { isDateOverdue } from '@/lib/utils'
 
 export class RevertirPagoError extends Error {
@@ -155,20 +156,41 @@ export async function sincronizarEstadoPrestamo(
   admin: SupabaseClient,
   prestamoId: string
 ): Promise<string> {
-  const { data: cuotas, error: cuotasErr } = await admin
-    .from('cuotas')
-    .select('estado')
-    .eq('prestamo_id', prestamoId)
+  const [{ data: cuotas, error: cuotasErr }, { data: prestamo, error: prestamoErr }] =
+    await Promise.all([
+      admin.from('cuotas').select('estado').eq('prestamo_id', prestamoId),
+      admin
+        .from('prestamos')
+        .select('tipo_prestamo, capital_saldo, monto_prestado, interes_pendiente')
+        .eq('id', prestamoId)
+        .maybeSingle(),
+    ])
 
   if (cuotasErr) {
     throw new RevertirPagoError('No se pudo verificar el estado del préstamo', 500)
   }
+  if (prestamoErr || !prestamo) {
+    throw new RevertirPagoError('No se pudo cargar el préstamo', 500)
+  }
 
-  const todasPagadas =
-    (cuotas?.length ?? 0) > 0 &&
-    (cuotas || []).every((c) => c.estado === 'pagada')
+  let nuevoEstado: string
 
-  const nuevoEstado = todasPagadas ? 'pagado' : 'activo'
+  if (prestamo.tipo_prestamo === 'abierto') {
+    const capitalSaldo =
+      prestamo.capital_saldo != null
+        ? Number(prestamo.capital_saldo)
+        : Number(prestamo.monto_prestado)
+    nuevoEstado = resolverEstadoPrestamoAbierto({
+      capitalSaldo,
+      interesPendiente: prestamo.interes_pendiente,
+      cuotas: cuotas ?? [],
+    })
+  } else {
+    const todasPagadas =
+      (cuotas?.length ?? 0) > 0 &&
+      (cuotas || []).every((c) => c.estado === 'pagada')
+    nuevoEstado = todasPagadas ? 'pagado' : 'activo'
+  }
 
   const { error } = await admin
     .from('prestamos')

@@ -49,6 +49,7 @@ export function validarAbonoCapitalAbierto(
 export interface CalcularAbonoCapitalAbiertoResult {
   saldoAnterior: number
   saldoNuevo: number
+  /** Capital saldado (≤ umbral). No implica cierre del préstamo si quedan cuotas de interés. */
   prestamoPagado: boolean
 }
 

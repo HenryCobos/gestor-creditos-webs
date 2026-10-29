@@ -35,6 +35,7 @@ import {
   resolverInteresCalculadoPeriodoAbierto,
   totalInteresObligacionPeriodo,
 } from '@/lib/open-loan-pago-parcial'
+import { resolverEstadoPrestamoAbierto } from '@/lib/open-loan-estado'
 import type { Cuota, Prestamo } from '@/lib/store'
 import { format, parseISO } from 'date-fns'
 
@@ -339,21 +340,33 @@ export function PagoAbiertoDialog({
       },
     ])
 
+    const capitalSaldoNuevo = Math.max(0, nuevoSaldo)
+    const { data: cuotasEstado } = await supabase
+      .from('cuotas')
+      .select('estado')
+      .eq('prestamo_id', prestamo.id)
+
+    const nuevoEstado = resolverEstadoPrestamoAbierto({
+      capitalSaldo: capitalSaldoNuevo,
+      interesPendiente: nuevoArrastreCalc,
+      cuotas: cuotasEstado ?? [],
+    })
+
     const prestamoActualizado = {
       ...prestamo,
-      capital_saldo: Math.max(0, nuevoSaldo),
+      capital_saldo: capitalSaldoNuevo,
       interes_pendiente: nuevoArrastreCalc,
       numero_cuotas: Math.max(prestamo.numero_cuotas, cuotaExistente?.numero_cuota ?? 0),
-      estado: nuevoSaldo <= 0.01 ? ('pagado' as const) : ('activo' as const),
+      estado: nuevoEstado,
     }
 
     let prestamoDbOk = false
     const { error: updateError } = await supabase
       .from('prestamos')
       .update({
-        capital_saldo: Math.max(0, nuevoSaldo),
+        capital_saldo: capitalSaldoNuevo,
         interes_pendiente: nuevoArrastreCalc,
-        estado: nuevoSaldo <= 0.01 ? 'pagado' : 'activo',
+        estado: nuevoEstado,
         updated_at: new Date().toISOString(),
       })
       .eq('id', prestamo.id)
@@ -362,8 +375,8 @@ export function PagoAbiertoDialog({
       const { error: fallbackError } = await supabase
         .from('prestamos')
         .update({
-          capital_saldo: Math.max(0, nuevoSaldo),
-          estado: nuevoSaldo <= 0.01 ? 'pagado' : 'activo',
+          capital_saldo: capitalSaldoNuevo,
+          estado: nuevoEstado,
           updated_at: new Date().toISOString(),
         })
         .eq('id', prestamo.id)
@@ -402,11 +415,11 @@ export function PagoAbiertoDialog({
       toast({
         title: 'Pago registrado',
         description:
-          nuevoArrastreCalc > 0
-            ? `Interés pendiente arrastrado: ${formatCurrency(nuevoArrastreCalc, config.currency)}`
-            : nuevoSaldo <= 0.01
-              ? 'Préstamo pagado completamente'
-              : `Nuevo saldo de capital: ${formatCurrency(Math.max(0, nuevoSaldo), config.currency)}`,
+          nuevoEstado === 'pagado'
+            ? 'Préstamo pagado completamente'
+            : nuevoArrastreCalc > 0
+              ? `Interés pendiente arrastrado: ${formatCurrency(nuevoArrastreCalc, config.currency)}`
+              : `Nuevo saldo de capital: ${formatCurrency(capitalSaldoNuevo, config.currency)}`,
       })
     }
 

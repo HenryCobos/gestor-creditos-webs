@@ -55,7 +55,7 @@ describe('calcularAbonoCapitalAbierto', () => {
     assert.equal(r.prestamoPagado, false)
   })
 
-  it('liquida préstamo', () => {
+  it('liquida capital (prestamoPagado = capital a cero)', () => {
     const r = calcularAbonoCapitalAbierto(300, 300)
     assert.equal(r.saldoNuevo, 0)
     assert.equal(r.prestamoPagado, true)
