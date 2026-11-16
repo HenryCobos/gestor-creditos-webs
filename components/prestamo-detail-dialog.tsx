@@ -552,6 +552,8 @@ export function PrestamoDetailDialog({
   const prestamoActivo = prestamoVigente ?? prestamo
 
   const cuotasPagadas = cuotas.filter(c => c.estado === 'pagada').length
+  const totalCuotasPactadas =
+    prestamoActivo.numero_cuotas > 0 ? prestamoActivo.numero_cuotas : cuotas.length
   const cuotasPendientes = cuotas.filter(c => c.estado === 'pendiente' || c.estado === 'retrasada').length
   const totalPagado = cuotas.reduce((sum, c) => sum + c.monto_pagado, 0)
 
@@ -679,7 +681,7 @@ export function PrestamoDetailDialog({
                 <div>
                   <p className="text-sm text-muted-foreground">Progreso</p>
                   <p className="font-semibold text-foreground">
-                    {cuotasPagadas} / {cuotas.length} cuotas pagadas
+                    {cuotasPagadas} / {totalCuotasPactadas} cuotas pagadas
                   </p>
                 </div>
                 {prestamo.tipo_prestamo && (

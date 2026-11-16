@@ -7,6 +7,7 @@ import {
   mensajePagoCascada,
   roundMoney,
 } from '@/lib/aplicar-pago-cuotas'
+import { resolverEstadoPrestamoDesdeCuotas } from '@/lib/prestamo-cuotas-estado'
 import { isDateOverdue } from '@/lib/utils'
 
 const UUID_RE =
@@ -57,7 +58,9 @@ export async function POST(request: Request) {
         .maybeSingle(),
       supabaseAdmin
         .from('prestamos')
-        .select('id, user_id, ruta_id, cliente_id, monto_prestado, estado')
+        .select(
+          'id, user_id, ruta_id, cliente_id, monto_prestado, estado, tipo_prestamo, numero_cuotas, monto_total, capital_saldo, interes_pendiente'
+        )
         .eq('id', prestamo_id)
         .maybeSingle(),
       supabaseAdmin
@@ -321,30 +324,36 @@ export async function POST(request: Request) {
       }
     }
 
-    const { data: cuotaPendiente } = await supabaseAdmin
+    const { data: cuotasEstado, error: cuotasEstadoErr } = await supabaseAdmin
       .from('cuotas')
-      .select('id')
+      .select('estado')
       .eq('prestamo_id', prestamo_id)
-      .neq('estado', 'pagada')
-      .limit(1)
+
+    if (cuotasEstadoErr) {
+      await supabaseAdmin.from('pagos').delete().eq('id', pagoInsertado.id)
+      return NextResponse.json(
+        { error: 'No se pudo verificar el estado del préstamo', details: cuotasEstadoErr.message },
+        { status: 500 }
+      )
+    }
+
+    const nuevoEstado = resolverEstadoPrestamoDesdeCuotas({
+      tipoPrestamo: prestamo.tipo_prestamo,
+      numeroCuotas: prestamo.numero_cuotas ?? 0,
+      capitalSaldo: prestamo.capital_saldo,
+      montoPrestado: prestamo.monto_prestado,
+      interesPendiente: prestamo.interes_pendiente,
+      cuotas: cuotasEstado ?? [],
+    })
 
     const prestamoEraActivo =
       prestamo.estado === 'activo' || prestamo.estado === 'pendiente'
-    let prestamoLiquidado = false
+    const prestamoLiquidado = prestamoEraActivo && nuevoEstado === 'pagado'
 
-    if (!cuotaPendiente?.length) {
-      await supabaseAdmin
-        .from('prestamos')
-        .update({ estado: 'pagado' })
-        .eq('id', prestamo_id)
-      prestamoLiquidado = prestamoEraActivo
-    } else {
-      await supabaseAdmin
-        .from('prestamos')
-        .update({ estado: 'activo' })
-        .eq('id', prestamo_id)
-        .eq('estado', 'pagado')
-    }
+    await supabaseAdmin
+      .from('prestamos')
+      .update({ estado: nuevoEstado, updated_at: new Date().toISOString() })
+      .eq('id', prestamo_id)
 
     const esPagoCompletoCuotaInicio = aplicaciones.some(
       (a) => a.cuota_id === cuota_id && a.queda_pagada

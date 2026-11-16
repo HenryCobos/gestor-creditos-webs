@@ -5,7 +5,7 @@ import {
   parseCascadaDesdeNotas,
   roundMoney,
 } from '@/lib/aplicar-pago-cuotas'
-import { resolverEstadoPrestamoAbierto } from '@/lib/open-loan-estado'
+import { resolverEstadoPrestamoDesdeCuotas } from '@/lib/prestamo-cuotas-estado'
 import { isDateOverdue } from '@/lib/utils'
 
 export class RevertirPagoError extends Error {
@@ -161,7 +161,7 @@ export async function sincronizarEstadoPrestamo(
       admin.from('cuotas').select('estado').eq('prestamo_id', prestamoId),
       admin
         .from('prestamos')
-        .select('tipo_prestamo, capital_saldo, monto_prestado, interes_pendiente')
+        .select('tipo_prestamo, numero_cuotas, capital_saldo, monto_prestado, interes_pendiente')
         .eq('id', prestamoId)
         .maybeSingle(),
     ])
@@ -173,24 +173,14 @@ export async function sincronizarEstadoPrestamo(
     throw new RevertirPagoError('No se pudo cargar el préstamo', 500)
   }
 
-  let nuevoEstado: string
-
-  if (prestamo.tipo_prestamo === 'abierto') {
-    const capitalSaldo =
-      prestamo.capital_saldo != null
-        ? Number(prestamo.capital_saldo)
-        : Number(prestamo.monto_prestado)
-    nuevoEstado = resolverEstadoPrestamoAbierto({
-      capitalSaldo,
-      interesPendiente: prestamo.interes_pendiente,
-      cuotas: cuotas ?? [],
-    })
-  } else {
-    const todasPagadas =
-      (cuotas?.length ?? 0) > 0 &&
-      (cuotas || []).every((c) => c.estado === 'pagada')
-    nuevoEstado = todasPagadas ? 'pagado' : 'activo'
-  }
+  const nuevoEstado = resolverEstadoPrestamoDesdeCuotas({
+    tipoPrestamo: prestamo.tipo_prestamo,
+    numeroCuotas: prestamo.numero_cuotas ?? 0,
+    capitalSaldo: prestamo.capital_saldo,
+    montoPrestado: prestamo.monto_prestado,
+    interesPendiente: prestamo.interes_pendiente,
+    cuotas: cuotas ?? [],
+  })
 
   const { error } = await admin
     .from('prestamos')
